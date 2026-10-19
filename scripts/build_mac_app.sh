@@ -67,6 +67,7 @@ echo "=== [4/5] 執行 macOS 本地 Ad-hoc 程式碼簽名 ==="
 codesign -s - --force --deep "$APP_BUNDLE"
 
 echo "=== [5/5] 同步部署至系統 /Applications 與桌面 ==="
+rm -rf "/Applications/$APP_NAME" "$HOME/Desktop/$APP_NAME"
 cp -R "$APP_BUNDLE" "/Applications/$APP_NAME"
 cp -R "$APP_BUNDLE" "$HOME/Desktop/$APP_NAME"
 
