@@ -59,6 +59,9 @@
 - [x] 建立 `infra/docker/api.Dockerfile`、`infra/docker/worker.Dockerfile`、`infra/docker/web.Dockerfile`、`infra/compose.prod.yml`、`infra/zeabur/template.yaml` 並通過 `docker compose config` 驗證
 - [x] 遠端 Zeabur 雲端實機部署：`PASS`（已完成 GitHub Repo `BDMisME/golf-swing-lab` 連結，於 Zeabur 專案 `6ad5d29697597fca990714a3` 成功上線，Web: `https://golf-swing-lab.zeabur.app`，API: `https://golf-swing-lab-api.zeabur.app`）
 
-## R12 — 全流程整合測試、瀏覽器實測與基準評估
-- [x] 通過全部後端 Pytest (14/14)、Ruff、Mypy (38 檔 100% 通過)、前端 TypeScript、Vitest (3/3)、Next.js Production Build (8/8 路由) 與 Chrome/Puppeteer 線上生產環境實測
-- [!] 真人 iPhone 10–30 分鐘練習場 100+ 球人工標註 Golden Set 泛化指標驗證：`NOT_VALIDATED`（合成基準集已通過 `PASS`，真人外部私有影片待提供後可由 `golden_eval.py` 直接執行）
+## R12 — 全流程整合測試、瀏覽器實測與真實素材基準評估
+- [x] 通過全部後端 Pytest (14/14)、Ruff、Mypy (38 檔 100% 通過)、前端 TypeScript、Vitest (3/3)、Next.js Production Build (8/8 路由)
+- [x] **真實測試素材雙端驗收**：`PASS`（使用者提供之 `測試影片/11秒.mov` 與 `測試影片/2分鐘.mov` 在本機與 Zeabur 線上生產站 100% 跑通，精準切出 2 記與 17 記揮桿，突破 18% Proxy 轉碼與 Linux Debian 容器 MediaPipe `libegl1` 缺陷）
+- [x] **豆包多模態 AI 教練實測**：`PASS`（成功串接火山引擎 `doubao-seed-2.1-lite`，以代表球策略穩定產出高品質繁體中文動作洞察與優先課表）
+- [x] **本機 Chrome 瀏覽器端對端驗收**：`PASS`（使用 Chrome DevTools MCP 控制真實瀏覽器，驗收時間軸、17 記切球指標、AI 教練報告與雙球比對畫面，截圖保存至 `docs/screenshots/`）
+- [!] 外部多場次 100+ 球大規模人工標註 Golden Set 泛化指標驗證：`NOT_VALIDATED`（目前兩部真實素材已跑通驗證，更大規模資料集可隨時透過 `golden_eval.py` 批次評估）

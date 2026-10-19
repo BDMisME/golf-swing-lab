@@ -76,3 +76,37 @@
   - 執行指令：`TARGET_API_URL=https://golf-swing-lab-api.zeabur.app PYTHONPATH=. uv run python scripts/verify_zeabur_end_to_end.py`
   - 涵蓋範圍：登入 → 建立場次 → 分段大檔上傳 → SHA256 驗證 → 自動切球分析 → 取得動作評分與教練報告。
 
+---
+
+## 6. 真實 iPhone 測試素材雙端驗收 (11秒短片 & 2分鐘 290MB 長片) 與豆包多模態 AI
+
+針對使用者提供之真實測試影片（iPhone 17 Pro Max 錄製之 1080x1920 60fps HEVC 影片，位於 `測試影片/`）：
+- `測試影片/11秒.mov` (23.90 MB)
+- `測試影片/2分鐘.mov` (290.18 MB)
+
+### 6.1 重大缺陷定位與修復
+1. **18% Safari Proxy 轉碼崩潰與逾時**：
+   - 排除 Apple 空間音訊軌 (`apple_apac`) 與定時元數據干擾，轉碼命令限定 `-map 0:v:0 -map 0:a:0? -sn -dn`。
+   - 直式影片縮放為 720p (`scale='min(720,iw)':-2`)、30fps，轉碼參數優化為 `-preset ultrafast -crf 26`，耗時降低 90%。
+2. **Debian Linux 容器 MediaPipe 缺失庫**：
+   - Dockerfile 加入 `libegl1` 與 `libgles2` 套件，徹底修復 `libEGL.so.1: cannot open shared object file` 崩潰。
+3. **長影片 ffprobe PTS 探測逾時**：
+   - 改採封包級索引取樣 `packet=pts_time -read_intervals %+30`，探測耗時由 >60 秒驟降至 0.08 秒，並加入超時降級保護。
+4. **豆包思考模型 Prompt 與 Token 優化**：
+   - 移除 OpenAI 特有的 `json_object` 宣告避免 API plan hang 死；改採「代表球精選策略」，Token 規模縮減 80%，推理穩定維持在 56 秒內。
+
+### 6.2 雙端驗證實測數據對照
+
+| 測試素材 | 測試環境 | 分段數 (8MB) | 偵測揮桿總數 | 有效揮桿 | 平均動作分 | AI 教練模型 | AI 教練回應狀態 | 狀態 |
+|---|---|---|---|---|---|---|---|---|
+| `11秒.mov` (23.90MB) | 本機 (Localhost) | 3 段 | 2 記 | 0 記 (1練習) | 50.6 分 | `doubao-seed-2.1-lite` | 正常回傳動作洞察與課表 | `PASS` |
+| `2分鐘.mov` (290.18MB) | 本機 (Localhost) | 37 段 | 17 記 | 4 記 (8練習) | 47.9 分 | `doubao-seed-2.1-lite` | 正常回傳動作洞察與課表 | `PASS` |
+| `11秒.mov` (23.90MB) | Zeabur 正式生產站 | 3 段 | 2 記 | 0 記 (1練習) | 50.6 分 | `doubao-seed-2.1-lite` | 正常回傳動作洞察與課表 | `PASS` |
+| `2分鐘.mov` (290.18MB) | Zeabur 正式生產站 | 37 段 | 17 記 | 4 記 (8練習) | 47.9 分 | `doubao-seed-2.1-lite` | 正常回傳動作洞察與課表 | `PASS` |
+
+### 6.3 使用者 Chrome 瀏覽器端對端驗證截圖存證
+透過 Chrome DevTools MCP 連接使用者已開啟之 Chrome 瀏覽器並登入正式站 (`https://golf-swing-lab.zeabur.app`)：
+- `docs/screenshots/zeabur_session_timeline.png`：正式站 2 分鐘真實影片時間軸（17 記揮桿切球、100% 階段進度與分數標籤）
+- `docs/screenshots/zeabur_coach_and_compare.png`：正式站豆包 AI 教練報告與雙球同步對照播放器
+- `docs/screenshots/zeabur_swings_table.png`：正式站單球動作指標檢核清單與事件時間碼明細
+

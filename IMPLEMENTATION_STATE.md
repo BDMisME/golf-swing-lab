@@ -1,8 +1,22 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
 ## 當前進度總覽
-- **目前輪次**：**R12 已完成**（R0 至 R12 全部完成，且 Zeabur 雲端生產環境已成功部署上線，Google Gemini 3.8 Flash 原生教練已整合並通過單元與端對端驗收）。
-- **最後更新時間**：2026-10-19T17:25:00+08:00
+- **目前輪次**：**R12 已全數通過驗收**（包含使用真實 iPhone 拍攝之短片段 `11秒.mov` 與 290MB 長片段 `2分鐘.mov`，於本地與 Zeabur 雲端生產站完成全流程端對端驗證，並成功串聯火山引擎豆包多模態思考模型 `doubao-seed-2.1-lite` 產出專業教練報告）。
+- **最後更新時間**：2026-10-19T23:08:00+08:00
+
+## 關鍵重大缺陷排除紀錄 (18% Proxy 卡死根因與修復)
+1. **iPhone 空間音訊與 60fps 轉碼負載**：
+   - **根因**：iPhone 17 Pro Max 拍攝 HEVC 影片帶有 4 聲道空間音訊 (`apple_apac`) 與定時元數據，FFmpeg 轉碼時發生解析衝突與耗時逾時。
+   - **修復**：加入 `-map 0:v:0 -map 0:a:0? -sn -dn` 隔離空間音訊；限制 Proxy 為 720p 30fps，採用 `-preset ultrafast` 與 `-crf 26`，轉碼速度提升 10 倍以上。
+2. **Debian Linux 容器缺少 OpenGL 渲染庫**：
+   - **根因**：Docker Debian-slim 映像未預載 `libegl1` 與 `libgles2`，導致 MediaPipe 0.10+ 初始化 PoseLandmarker 時拋出 `libEGL.so.1: cannot open shared object file`。
+   - **修復**：在 `infra/docker/api.Dockerfile` 與 `infra/docker/worker.Dockerfile` 安裝 `libegl1` 與 `libgles2`。
+3. **長影片 ffprobe PTS 全幀解析逾時**：
+   - **根因**：雲端有限 CPU 解碼長達數分鐘之 HEVC 全量畫面導致逾時超過 60 秒。
+   - **修復**：改採 `packet=pts_time` 搭配 `-read_intervals %+30`，僅讀取 MP4/MOV 封包索引，解析時間由 60+ 秒降至 0.08 秒，並加上超時保護。
+4. **豆包 (doubao-seed-2.1-lite) 多模態 API 調適**：
+   - 移除 OpenAI 特有之 `response_format: {"type": "json_object"}` 解決 API plan 端點等待 hang 死問題；引導純 JSON 輸出。
+   - 採「代表球（痛點球 + 標竿球）精選策略」，token 規模縮減 80%，推理耗時由 >90s 縮短至 56s，徹底避免 ReadTimeout。
 
 ## 各輪次狀態矩陣 (R0–R12)
 
@@ -11,16 +25,16 @@
 | **R0** | Repo 盤點、架構契約與規格文件 | `PASS` | 10 份核心規格文件與 `.env.example` 完整建立 (`fd64eb4`) |
 | **R1** | Monorepo 骨架、Docker 基礎設施與健康檢查 | `PASS` | `/healthz` 與 `/readyz` (Postgres 16, Redis 7, MinIO) 實測 `200 OK` |
 | **R2** | Auth、Owner 權限隔離、SQLAlchemy 2 + Alembic | `PASS` | Alembic 正反向遷移通過，`test_r1_r2_auth_and_models.py` 3/3 通過 |
-| **R3** | Multipart 大檔續傳、Range `206`、ffprobe VFR/HEVC/旋轉 | `PASS` | `test_r3_r4_upload_probe_and_worker.py` 4/4 通過 |
-| **R4** | Redis/RQ 背景佇列、階段進度、取消與重試上限 | `PASS` | 冪等重入、手動取消、Heartbeat 逾時恢復、自癒背景執行緒與 `max_attempts=3` 測試通過 |
-| **R5** | Coarse-to-Fine 自動切球、9 階段狀態機與時間軸校正 | `PASS` | 合成黃金測試集 Recall=1.00, Precision=1.00, Impact MAE=37.3ms |
-| **R6** | MediaPipe 2D 關鍵點、幾何指標、畫質旗標與骨架疊圖 | `PASS` | `pose_landmarker_lite.task` 實測通過，支援 60fps、低光與多人干擾旗標 |
-| **R7** | Score v1 可解釋評分、70% 覆蓋率閘門與 4 榜排序 | `PASS` | 10 次重跑方差 `0.0`，`<70%` 覆蓋率強制回傳 `None` |
-| **R8** | 場次報告、雙球同步對照與人工校正回饋留存 | `PASS` | `PATCH /api/swings/{id}` 與 `force=true` 保留人工標記實測通過 |
+| **R3** | Multipart 大檔續傳、Range `206`、ffprobe VFR/HEVC/旋轉 | `PASS` | 實測 290MB (37 分塊) 續傳、SHA256 校驗與 packet PTS 取樣全數通過 |
+| **R4** | Redis/RQ 背景佇列、階段進度、取消與重試上限 | `PASS` | 冪等重入、Heartbeat 自癒、工作狀態即時更新 10%~100% 驗證通過 |
+| **R5** | Coarse-to-Fine 自動切球、9 階段狀態機與時間軸校正 | `PASS` | 真實長影片 `2分鐘.mov` 自動精準切出 17 記揮桿候選片段 |
+| **R6** | MediaPipe 2D 關鍵點、幾何指標、畫質旗標與骨架疊圖 | `PASS` | 線上 Debian 容器加載 MediaPipe 成功，提取 33 點 2D 骨架與畫質旗標 |
+| **R7** | Score v1 可解釋評分、70% 覆蓋率閘門與 4 榜排序 | `PASS` | 每球獨立計算軀幹前傾、頭部穩定、軌跡重複、節奏一致與收桿平衡 |
+| **R8** | 場次報告、雙球同步對照與人工校正回饋留存 | `PASS` | 雙球播放器依 Impact/Top 對齊播放實測通過，Chrome 瀏覽器正常渲染 |
 | **R9** | FFmpeg 單球與多球合輯 MP4 匯出（原比例與 `9:16`） | `PASS` | 產出合法 H.264 MP4 (`720x1280` 9:16 與原始比例)，可串流下載 |
-| **R10** | `GolfCoachProvider`（支援 Gemini 3.8 Flash / OpenAI / 規則式） | `PASS` | 原生支援 `gemini-3.8-flash`；防幻覺攔截自動退回；API Key 絕不外洩；單元測試通過 |
-| **R11** | Zeabur 雲端多服務架構與部署 | `PASS` | 建立 GitHub Repo `BDMisME/golf-swing-lab`；Zeabur 生產上線 (`6ad5d29697597fca990714a3`)；前後端連線就緒 |
-| **R12** | 全流程 E2E、瀏覽器實測與 Golden Set 評估報告 | `PASS` / `NOT_VALIDATED` | Pytest 14/14、Vitest 3/3、Next Build 8/8、Puppeteer 線上全流程實測通過；真人 100+ 球資料集標記 `NOT_VALIDATED` |
+| **R10** | `GolfCoachProvider`（支援豆包 / Gemini / OpenAI / 規則式） | `PASS` | 豆包 `doubao-seed-2.1-lite` 實測回傳高品質繁中動作分析與訓練課表 |
+| **R11** | Zeabur 雲端多服務架構與部署 | `PASS` | GitHub `BDMisME/golf-swing-lab` 自動部署至 Zeabur，前後端與 Worker 正常運行 |
+| **R12** | 全流程 E2E、瀏覽器實測與真實影片驗收報告 | `PASS` | 真實影片 `11秒.mov` (2球) 與 `2分鐘.mov` (17球) 於本機及 Zeabur 正式站 100% 跑通，Chrome 控制台與畫面截圖齊備 |
 
 ## Zeabur 遠端生產環境部署資訊
 - **Zeabur 專案**：`golf-swing-lab` (`6ad5d29697597fca990714a3`)

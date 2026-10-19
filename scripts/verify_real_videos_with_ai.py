@@ -80,12 +80,27 @@ def upload_and_analyze_real_video(client: httpx.Client, headers: dict[str, str],
             p_pct = int(round((p_num / total_parts) * 100))
             if p_num % 5 == 1 or p_num == total_parts:
                 log(f"正在上傳第 {p_num}/{total_parts} 分段 ({p_size} bytes, 進度 {p_pct}%)...")
-            r_part = client.put(
-                f"{API_BASE}/api/uploads/{upload_id}/parts/{p_num}/content",
-                headers=headers,
-                content=chunk_data,
-                timeout=120.0,
-            )
+            # 支援重試以抵禦容器重啟時的瞬態 502/503
+            max_retries = 3
+            for retry in range(max_retries):
+                try:
+                    r_part = client.put(
+                        f"{API_BASE}/api/uploads/{upload_id}/parts/{p_num}/content",
+                        headers=headers,
+                        content=chunk_data,
+                        timeout=120.0,
+                    )
+                    if r_part.status_code in (200, 204):
+                        break
+                    if r_part.status_code in (502, 503, 504) and retry < max_retries - 1:
+                        time.sleep(3)
+                        continue
+                except Exception as net_err:
+                    if retry < max_retries - 1:
+                        time.sleep(3)
+                        continue
+                    raise net_err
+
             if r_part.status_code not in (200, 204):
                 raise RuntimeError(f"上傳分段 #{p_num} 失敗: {r_part.status_code} {r_part.text}")
             etag = r_part.json().get("etag", f'"{p_num}"').strip('"')
