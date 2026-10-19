@@ -6,10 +6,10 @@
   - **R2 長影片準確性與效能**：`PASS`（真實 iPhone 原片 `11秒.mov` 1/1 命中，`2分鐘.mov` 139 秒 8340 幀 12/12 記擊球 100% 召回、100% 精準零假球誤判，授權與隱私嚴格合規，`test_r2_long_video_accuracy.py` 3/3 通過）。
   - **R3 可驗證評分與精選球**：`PASS`（Score v1 5大分項、70% 覆蓋率硬門檻攔截、4 榜多維排序與「怎麼算的？」透明揭露，`test_r3_verifiable_scoring.py` 3/3 通過）。
   - **R4 DTL 專屬演算法**：`PASS`（卡爾曼濾波出球軌跡、物理合理性過濾拒絕水平橫穿身體/向後倒退雜訊、DTL 2D 幾何前傾/頭部位移/節奏比計算，`test_r4_dtl_algorithms.py` 3/3 通過）。
-  - **R5 個人化 AI 教練**：`IN_PROGRESS`（推進多模態 Vision 定格診斷、繁中 3 大體感口訣生成、離線降級至 RuleBasedCoachProvider 健全度驗證）。
-  - **R6 正式產品驗收**：`PLANNED`（全量 E2E 驗收、桌面 App 整合實測、安全與交付清單審核）。
-- **全量回歸測試進度**：`tests/test_r1` ~ `tests/test_r4` 共 15 項自動化測試 100% 通過（耗時 149.29s）。
-- **最後更新時間**：2026-10-20T03:15:00+08:00
+  - **R5 個人化 AI 教練**：`PASS`（完成多模態 Vision 定格診斷、繁中 3 大體感口訣生成、防偽安全網攔截虛構球速/距離、離線平滑降級至 RuleBasedCoachProvider 健全度驗證，`test_r5_personalized_coach.py` 4/4 通過）。
+  - **R6 正式產品驗收**：`IN_PROGRESS`（推進全量 E2E 整合驗收、桌面 App Launcher 實測、瀏覽器前端 UI 完整性與交付清單審核）。
+- **全量回歸測試進度**：`tests/test_r1` ~ `tests/test_r5` 共 19 項自動化測試 100% 通過。
+- **最後更新時間**：2026-10-20T03:16:00+08:00
 
 ## 關鍵重大缺陷排除紀錄 (18% Proxy 卡死根因與修復)
 1. **iPhone 空間音訊與 60fps 轉碼負載**：

@@ -33,6 +33,7 @@
 | **新 R2** | 長影片準確性與真實原片測試：`11秒.mov` (1/1 記)、`2分鐘.mov` (139 秒 8340 幀 12/12 記全中，召回率 100%，精確率 100% 零假球誤判) 及授權隱私盤點 | `uv run pytest tests/test_r2_long_video_accuracy.py -v` | 3 / 3 通過 | Real (真實 iPhone 17 Pro 原片) | `PASS` |
 | **新 R3** | 可驗證評分與精選球：Score v1 5 大分項、70% 覆蓋率硬門檻攔截 (`overall_nullable=None`)、透明度揭露與 4 榜多維排序 | `uv run pytest tests/test_r3_verifiable_scoring.py -v` | 3 / 3 通過 | Real | `PASS` |
 | **新 R4** | DTL 專屬演算法：卡爾曼濾波出球動態軌跡、高爾夫物理合理性過濾（濾除水平橫向/倒退/起點懸空）、DTL 幾何前傾/頭部/節奏比計算 | `uv run pytest tests/test_r4_dtl_algorithms.py -v` | 3 / 3 通過 | Real (Kalman + MediaPipe) | `PASS` |
+| **新 R5** | 個人化 AI 教練：多模態 Vision 定格截圖診斷、繁中 3 大體感口訣生成、防偽安全網攔截虛構球速/距離、離線降級至 RuleBasedCoachProvider 健全度驗證 | `uv run pytest tests/test_r5_personalized_coach.py -v` | 4 / 4 通過 | Real (`none`) + Mock Vision | `PASS` |
 
 ---
 
