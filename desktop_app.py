@@ -1,5 +1,7 @@
+import atexit
 import logging
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -9,8 +11,27 @@ logger = logging.getLogger("GolfSwingLabDesktop")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 APP_DIR = Path(__file__).resolve().parent
+os.chdir(APP_DIR)
 SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "GolfSwingLab"
 MODELS_DIR = SUPPORT_DIR / "models"
+
+_SPAWNED_PROCESSES: list[subprocess.Popen] = []
+
+
+def _cleanup_spawned_processes() -> None:
+    for p in _SPAWNED_PROCESSES:
+        try:
+            if p.poll() is None:
+                p.terminate()
+                p.wait(timeout=2)
+        except Exception:
+            try:
+                p.kill()
+            except Exception:
+                pass
+
+
+atexit.register(_cleanup_spawned_processes)
 
 
 def ensure_environment() -> None:
@@ -33,26 +54,28 @@ def ensure_environment() -> None:
 
 
 def ensure_services_running() -> None:
-    """確保 PostgreSQL, Redis, MinIO, API, Web 已在本機就緒。"""
+    """確保 PostgreSQL, Redis, MinIO, API, Worker, Web 已在本機就緒。"""
     import httpx
 
     # 1. 檢查 Docker Compose 基礎設施
+    compose_file = APP_DIR / "infra" / "compose.dev.yml"
     try:
-        res = subprocess.run(
-            ["docker", "compose", "ps", "--status", "running", "-q"],
-            cwd=str(APP_DIR),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if not res.stdout.strip():
-            logger.info("正在啟動本地容器基礎設施 (Postgres, Redis, MinIO)...")
-            subprocess.run(["docker", "compose", "up", "-d"], cwd=str(APP_DIR), check=True)
-            time.sleep(2)
+        if compose_file.exists():
+            res = subprocess.run(
+                ["docker", "compose", "-f", str(compose_file), "ps", "--status", "running", "-q"],
+                cwd=str(APP_DIR),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if not res.stdout.strip():
+                logger.info("正在啟動本地容器基礎設施 (Postgres, Redis, MinIO)...")
+                subprocess.run(["docker", "compose", "-f", str(compose_file), "up", "-d"], cwd=str(APP_DIR), check=True)
+                time.sleep(2)
     except Exception as exc:
         logger.warning(f"檢查 Docker 基礎設施提示: {exc}")
 
-    # 2. 檢查 API 與 Web 伺服器
+    # 2. 檢查 API 伺服器 (Port 28000)
     api_ready = False
     try:
         r = httpx.get("http://127.0.0.1:28000/healthz", timeout=1.5)
@@ -63,11 +86,38 @@ def ensure_services_running() -> None:
 
     if not api_ready:
         logger.info("啟動本地 API 伺服器 Sidecar...")
-        subprocess.Popen(
+        p_api = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "apps.api.main:app", "--host", "127.0.0.1", "--port", "28000"],
             cwd=str(APP_DIR),
         )
+        _SPAWNED_PROCESSES.append(p_api)
 
+    # 3. 檢查 RQ Worker 是否正在運行
+    worker_running = False
+    try:
+        check = subprocess.run(
+            ["pgrep", "-f", "apps.worker.main"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if check.returncode == 0 and check.stdout.strip():
+            worker_running = True
+    except Exception:
+        pass
+
+    if not worker_running:
+        logger.info("啟動本地 RQ 背景任務 Worker Sidecar...")
+        worker_env = os.environ.copy()
+        worker_env["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+        p_worker = subprocess.Popen(
+            [sys.executable, "-m", "apps.worker.main"],
+            cwd=str(APP_DIR),
+            env=worker_env,
+        )
+        _SPAWNED_PROCESSES.append(p_worker)
+
+    # 4. 檢查 Web 伺服器 (Port 23000)
     web_ready = False
     try:
         r = httpx.get("http://127.0.0.1:23000", timeout=1.5)
@@ -78,10 +128,24 @@ def ensure_services_running() -> None:
 
     if not web_ready:
         logger.info("啟動本地 Web 伺服器 Sidecar...")
-        subprocess.Popen(
+        p_web = subprocess.Popen(
             ["npm", "run", "start", "--", "-p", "23000"],
             cwd=str(APP_DIR / "apps" / "web"),
         )
+        _SPAWNED_PROCESSES.append(p_web)
+
+    # 5. 等待 Web 伺服器與 API 就緒 (最長 12 秒)
+    start_wait = time.time()
+    while time.time() - start_wait < 12:
+        try:
+            rw = httpx.get("http://127.0.0.1:23000", timeout=1.0)
+            ra = httpx.get("http://127.0.0.1:28000/healthz", timeout=1.0)
+            if rw.status_code == 200 and ra.status_code == 200:
+                logger.info("本地服務健康檢查通過，準備載入視窗。")
+                break
+        except Exception:
+            pass
+        time.sleep(0.8)
 
 
 def launch_desktop_window() -> None:

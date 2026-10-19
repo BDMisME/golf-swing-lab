@@ -67,103 +67,78 @@ export default function SwingDetailPage() {
   const drawPoseOverlay = useCallback(
     (currentTimeMs: number) => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      const video = videoRef.current;
+      if (!canvas || !video) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!swing?.keyframes?.length) return;
 
+      // 鐵律 1: 時間窗口嚴格防呆 (只在該球有效揮桿期間顯示，打完轉身走開自動乾淨清空)
+      const bufferBefore = 300;
+      const bufferAfter = 500;
+      if (
+        currentTimeMs < swing.start_ms - bufferBefore ||
+        currentTimeMs > swing.end_ms + bufferAfter
+      ) {
+        return; // 完全清空畫布，呈現 100% 乾淨原片
+      }
+
+      // 鐵律 2: 螢幕解析度與 Letterbox 視訊真實畫面 1:1 精確映射
+      const rect = video.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        if (canvas.width !== Math.round(rect.width) || canvas.height !== Math.round(rect.height)) {
+          canvas.width = Math.round(rect.width);
+          canvas.height = Math.round(rect.height);
+        }
+      }
+
+      const vW = video.videoWidth || 1920;
+      const vH = video.videoHeight || 1080;
+      const videoAspect = vW / vH;
+      const containerAspect = canvas.width / canvas.height;
+
+      let drawWidth = canvas.width;
+      let drawHeight = canvas.height;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (containerAspect > videoAspect) {
+        // 容器比影片寬 (常見於橫屏容器播放直式 9:16 影片) -> 左右黑邊
+        drawWidth = canvas.height * videoAspect;
+        offsetX = (canvas.width - drawWidth) / 2;
+      } else {
+        // 容器比影片高 -> 上下黑邊
+        drawHeight = canvas.width / videoAspect;
+        offsetY = (canvas.height - drawHeight) / 2;
+      }
+
+      // 歸一化座標 (0~1) 映射至 Canvas 實際畫面像素座標
+      const toX = (normX: number) => offsetX + normX * drawWidth;
+      const toY = (normY: number) => offsetY + normY * drawHeight;
+
       const events = swing.events || [];
+      const addressEv = events.find(
+        (e) => e.event_name === "address" || e.event_name.includes("address")
+      );
       const topEv = events.find((e) => e.event_name === "top");
       const impactEv = events.find(
         (e) => e.event_name === "impact_estimated" || e.event_name === "impact"
       );
+      const addressMs = addressEv?.time_ms || swing.start_ms;
       const topMs = topEv?.time_ms || (swing.start_ms + swing.end_ms) * 0.45;
       const impactMs = impactEv?.time_ms || (swing.start_ms + swing.end_ms) * 0.7;
 
-      // 1. 繪製手腕/桿頭揮桿軌跡 (Swing Path)
-      if (showSwingPath) {
-        const backswingPts: Array<{ x: number; y: number }> = [];
-        const downswingPts: Array<{ x: number; y: number }> = [];
-
-        for (const kf of swing.keyframes) {
-          const lms = kf.landmarks || {};
-          const rw = lms["right_wrist"];
-          const lw = lms["left_wrist"];
-          const wrist = (rw && rw.visibility >= 0.3) ? rw : lw;
-          if (wrist && wrist.visibility >= 0.3) {
-            const pt = { x: wrist.x * canvas.width, y: wrist.y * canvas.height };
-            if (kf.time_ms <= topMs) {
-              backswingPts.push(pt);
-            } else if (kf.time_ms <= impactMs) {
-              downswingPts.push(pt);
-            }
-          }
-        }
-
-        // 上桿天藍色軌跡
-        if (backswingPts.length >= 2) {
-          ctx.save();
-          ctx.strokeStyle = "#00f0ff";
-          ctx.lineWidth = 3.5;
-          ctx.shadowColor = "#00f0ff";
-          ctx.shadowBlur = 8;
-          ctx.beginPath();
-          ctx.moveTo(backswingPts[0].x, backswingPts[0].y);
-          for (let i = 1; i < backswingPts.length; i++) {
-            ctx.lineTo(backswingPts[i].x, backswingPts[i].y);
-          }
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        // 下桿鮮紅色軌跡 (熾熱紅，強調釋放加速)
-        if (downswingPts.length >= 2) {
-          ctx.save();
-          ctx.strokeStyle = "#ff2a5f";
-          ctx.lineWidth = 4.5;
-          ctx.shadowColor = "#ff2a5f";
-          ctx.shadowBlur = 10;
-          ctx.beginPath();
-          ctx.moveTo(downswingPts[0].x, downswingPts[0].y);
-          for (let i = 1; i < downswingPts.length; i++) {
-            ctx.lineTo(downswingPts[i].x, downswingPts[i].y);
-          }
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        // 標記頂點 TOP 與擊球 IMPACT 光環
-        if (backswingPts.length > 0) {
-          const topPt = backswingPts[backswingPts.length - 1];
-          ctx.save();
-          ctx.fillStyle = "#00f0ff";
-          ctx.shadowColor = "#00f0ff";
-          ctx.shadowBlur = 12;
-          ctx.beginPath();
-          ctx.arc(topPt.x, topPt.y, 6, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.font = "bold 10px sans-serif";
-          ctx.fillText("TOP 上桿頂點", topPt.x + 8, topPt.y - 4);
-          ctx.restore();
-        }
-
-        if (downswingPts.length > 0) {
-          const impPt = downswingPts[downswingPts.length - 1];
-          ctx.save();
-          ctx.fillStyle = "#ff2a5f";
-          ctx.shadowColor = "#ff2a5f";
-          ctx.shadowBlur = 14;
-          ctx.beginPath();
-          ctx.arc(impPt.x, impPt.y, 7, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.font = "bold 10px sans-serif";
-          ctx.fillText("IMPACT 擊球點", impPt.x + 8, impPt.y + 4);
-          ctx.restore();
-        }
+      // 取得 Address (站姿) 關鍵幀作為穩定的高爾夫幾何基準
+      let addressKf = swing.keyframes.find(
+        (kf) => Math.abs(kf.time_ms - addressMs) < 250
+      );
+      if (!addressKf) {
+        addressKf = swing.keyframes.filter((kf) => kf.time_ms <= topMs)[0] || swing.keyframes[0];
       }
+      const addressLms = addressKf?.landmarks || {};
 
-      // 尋找最接近當前毫秒之關鍵幀
+      // 尋找最接近當前時間之關鍵幀姿態
       let nearest = swing.keyframes[0];
       let minDiff = Math.abs(nearest.time_ms - currentTimeMs);
       for (const kf of swing.keyframes) {
@@ -173,169 +148,169 @@ export default function SwingDetailPage() {
           nearest = kf;
         }
       }
-
       const lms = nearest.landmarks || {};
 
-      // 2. 繪製頭部穩定基準圈 (Head Box)
-      if (showHeadBox) {
-        const firstKf = swing.keyframes[0];
-        const initialNose = firstKf?.landmarks?.["nose"];
-        if (initialNose && initialNose.visibility >= 0.4) {
-          const hx = initialNose.x * canvas.width;
-          const hy = initialNose.y * canvas.height;
+      // 1. 專業 PGA 教練檢核線 (臀部鉛線 Tush Line & 脊柱傾角線)
+      if (showProGhost) {
+        const addrHip = addressLms["right_hip"] || addressLms["left_hip"];
+        if (addrHip && addrHip.visibility >= 0.3) {
+          const tushX = toX(addrHip.x);
+          const tushTopY = toY(Math.max(0.1, addrHip.y - 0.25));
+          const tushBotY = toY(Math.min(0.95, addrHip.y + 0.35));
+
           ctx.save();
-          ctx.strokeStyle = "#fbbf24"; // 金黃色基準圈
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(251, 191, 36, 0.75)";
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([6, 5]);
+          ctx.beginPath();
+          ctx.moveTo(tushX, tushTopY);
+          ctx.lineTo(tushX, tushBotY);
+          ctx.stroke();
+
+          ctx.font = "bold 10px sans-serif";
+          ctx.fillStyle = "#fbbf24";
+          ctx.fillText("PGA 鉛線 (Tush Line)", tushX - 105, tushTopY + 14);
+
+          const currHip = lms["right_hip"] || lms["left_hip"];
+          if (currHip && currHip.visibility >= 0.3 && currentTimeMs >= topMs) {
+            const curHipX = toX(currHip.x);
+            const isEarlyExtension = (curHipX - tushX) > 12;
+            ctx.fillStyle = isEarlyExtension ? "#ef4444" : "#10b981";
+            ctx.font = "bold 9px sans-serif";
+            ctx.fillText(
+              isEarlyExtension ? "⚠ 早起 (臀部離開鉛線)" : "✓ 臀部維持在線",
+              tushX + 8,
+              toY(currHip.y)
+            );
+          }
+          ctx.restore();
+        }
+
+        const curSh = lms["right_shoulder"] || lms["left_shoulder"];
+        const curHip = lms["right_hip"] || lms["left_hip"];
+        if (curSh && curHip && curSh.visibility >= 0.3 && curHip.visibility >= 0.3) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(16, 185, 129, 0.65)";
+          ctx.lineWidth = 1.5;
           ctx.setLineDash([4, 4]);
           ctx.beginPath();
-          ctx.arc(hx, hy, 18, 0, Math.PI * 2);
+          ctx.moveTo(toX(curHip.x), toY(curHip.y));
+          ctx.lineTo(toX(curSh.x), toY(curSh.y));
           ctx.stroke();
-          ctx.font = "9px sans-serif";
-          ctx.fillStyle = "#fbbf24";
-          ctx.fillText("頭部基準", hx - 18, hy - 22);
           ctx.restore();
-
-          // 當前頭部位置
-          const currNose = lms["nose"];
-          if (currNose && currNose.visibility >= 0.4) {
-            const cx = currNose.x * canvas.width;
-            const cy = currNose.y * canvas.height;
-            const dist = Math.hypot(cx - hx, cy - hy);
-            ctx.save();
-            ctx.fillStyle = dist > 15 ? "#ef4444" : "#10b981";
-            ctx.beginPath();
-            ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-          }
         }
       }
 
-      // 3. 繪製小白球出球動態軌跡 (Ball Launch Tracer - 高爾夫轉播級拋物線)
-      if (showBallTracer && swing.keyframes.length > 0) {
-        // 推算擊球位置 (手腕最低點下方地面處)
-        let impX = canvas.width * 0.52;
-        let impY = canvas.height * 0.72;
+      // 2. 頭部穩定基準圈 (Head Box) - 精確鎖定 Address 站位，擊球後自動淡出！
+      if (showHeadBox) {
+        const nose = addressLms["nose"];
+        const le = addressLms["left_eye"];
+        const re = addressLms["right_eye"];
+        const headRef = nose || le || re;
 
-        for (const kf of swing.keyframes) {
-          if (Math.abs(kf.time_ms - impactMs) < 150) {
-            const rw = kf.landmarks?.["right_wrist"];
-            const lw = kf.landmarks?.["left_wrist"];
-            const w = rw && rw.visibility >= 0.3 ? rw : lw;
-            if (w) {
-              impX = w.x * canvas.width;
-              impY = Math.min(canvas.height - 18, (w.y + 0.16) * canvas.height);
-              break;
-            }
-          }
-        }
+        if (headRef && headRef.visibility >= 0.3 && currentTimeMs <= impactMs + 250) {
+          const hx = toX(headRef.x);
+          const hy = toY(headRef.y);
+          const headRadius = Math.max(14, drawHeight * 0.035);
 
-        // 若有 YOLOv8n 真球捕捉與卡爾曼濾波彈道，優先採用真實軌跡；若無則自動啟動 DTL 幾何擬合
-        let tracerPts: Array<{ x: number; y: number; r: number }> = [];
-        const flightDurationMs = 1200;
-
-        if (swing.ball_trajectory && swing.ball_trajectory.length >= 3) {
-          const rawTraj = swing.ball_trajectory;
-          tracerPts = rawTraj.map((pt, idx) => {
-            const tNorm = idx / Math.max(1, rawTraj.length - 1);
-            return {
-              x: pt.x * canvas.width,
-              y: pt.y * canvas.height,
-              r: Math.max(1.8, 4.5 * (1 - tNorm * 0.65)),
-            };
-          });
-        } else {
-          const numSteps = 24;
-          for (let step = 0; step <= numSteps; step++) {
-            const tNorm = step / numSteps;
-            const flightX = impX + canvas.width * 0.18 * tNorm;
-            const parabola = 4 * tNorm * (1 - tNorm * 0.6);
-            const flightY = impY - canvas.height * 0.44 * parabola;
-            const ballRadius = Math.max(1.8, 4.5 * (1 - tNorm * 0.65));
-            tracerPts.push({ x: flightX, y: flightY, r: ballRadius });
-          }
-        }
-
-        const timeSinceImpact = currentTimeMs - impactMs;
-        const isPostImpact = timeSinceImpact >= 0;
-        const progress = isPostImpact
-          ? Math.min(1.0, Math.max(0.0, timeSinceImpact / flightDurationMs))
-          : 0.0;
-
-        ctx.save();
-        if (!isPostImpact) {
-          // 擊球前：在地面標註小白球與備戰光標
-          ctx.fillStyle = "#ffffff";
-          ctx.shadowColor = "#39ff14";
-          ctx.shadowBlur = 10;
+          ctx.save();
+          ctx.strokeStyle = "#fbbf24";
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([5, 4]);
           ctx.beginPath();
-          ctx.arc(impX, impY, 4.5, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = "#39ff14";
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath();
-          ctx.arc(impX, impY, 9, 0, Math.PI * 2);
+          ctx.arc(hx, hy, headRadius, 0, Math.PI * 2);
           ctx.stroke();
 
           ctx.font = "bold 9px sans-serif";
-          ctx.fillStyle = "#39ff14";
-          ctx.fillText("BALL 球位", impX + 12, impY + 3);
-        } else {
-          // 擊球後：拉出高爾夫專業 Toptracer 螢光出球動態軌跡！
-          const maxStep = Math.max(1, tracerPts.length - 1);
-          const currentStep = Math.max(1, Math.min(maxStep, Math.floor(progress * maxStep)));
-          if (tracerPts.length >= 2) {
-            ctx.shadowColor = "#39ff14";
-            ctx.shadowBlur = 12;
-            ctx.lineWidth = 3.5;
+          ctx.fillStyle = "#fbbf24";
+          ctx.fillText("頭部基準", hx - 18, hy - headRadius - 6);
 
-            const grad = ctx.createLinearGradient(
-              tracerPts[0].x,
-              tracerPts[0].y,
-              tracerPts[currentStep].x,
-              tracerPts[currentStep].y
-            );
-            grad.addColorStop(0, "rgba(57, 255, 20, 0.95)");
-            grad.addColorStop(0.7, "rgba(204, 255, 0, 0.95)");
-            grad.addColorStop(1, "rgba(255, 255, 255, 1.0)");
-            ctx.strokeStyle = grad;
-
+          const currNose = lms["nose"] || lms["left_eye"];
+          if (currNose && currNose.visibility >= 0.3) {
+            const cx = toX(currNose.x);
+            const cy = toY(currNose.y);
+            const dist = Math.hypot(cx - hx, cy - hy);
+            ctx.fillStyle = dist > headRadius * 0.7 ? "#ef4444" : "#10b981";
             ctx.beginPath();
-            ctx.moveTo(tracerPts[0].x, tracerPts[0].y);
-            for (let i = 1; i <= currentStep; i++) {
-              ctx.lineTo(tracerPts[i].x, tracerPts[i].y);
-            }
-            ctx.stroke();
-
-            // 當前飛行小白球
-            const curBall = tracerPts[currentStep];
-            ctx.fillStyle = "#ffffff";
-            ctx.shadowColor = "#ffffff";
-            ctx.shadowBlur = 15;
-            ctx.beginPath();
-            ctx.arc(curBall.x, curBall.y, curBall.r + 1.5, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
             ctx.fill();
-
-            // 標示出球動態標籤
-            const isRealTraj = Boolean(swing.ball_trajectory && swing.ball_trajectory.length >= 3);
-            ctx.font = "bold 10px sans-serif";
-            ctx.fillStyle = isRealTraj ? "#00f0ff" : "#39ff14";
-            ctx.shadowColor = "#000000";
-            ctx.shadowBlur = 4;
-            ctx.fillText(
-              isRealTraj ? "AI 追蹤: 真實出球動態 (Kalman)" : "TRACER 出球動態軌跡",
-              curBall.x + 8,
-              curBall.y - 4
-            );
           }
+          ctx.restore();
         }
-        ctx.restore();
       }
 
-      // 4. 繪製 2D 骨架連線
-      if (showSkeleton) {
+      // 3. 小白球出球動態軌跡 (Ball Tracer) - 嚴格限制於擊球瞬間至擊球後 1.2 秒！
+      if (showBallTracer) {
+        const timeSinceImpact = currentTimeMs - impactMs;
+        if (timeSinceImpact >= -100 && timeSinceImpact <= 1200) {
+          const addrW = addressLms["right_wrist"] || addressLms["left_wrist"];
+          const addrAnk = addressLms["right_ankle"] || addressLms["left_ankle"];
+          const groundY = addrAnk ? toY(addrAnk.y) : toY(0.85);
+          const ballX = addrW ? toX(addrW.x) : toX(0.5);
+          const ballY = Math.min(canvas.height - 10, groundY - 5);
+
+          ctx.save();
+          if (timeSinceImpact < 0) {
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "#39ff14";
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, 4, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            const progress = Math.min(1.0, timeSinceImpact / 1100);
+            const numSteps = 24;
+            const currentStep = Math.max(1, Math.floor(progress * numSteps));
+
+            ctx.shadowColor = "#39ff14";
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 2.5;
+
+            ctx.beginPath();
+            let curBallX = ballX;
+            let curBallY = ballY;
+
+            for (let step = 0; step <= currentStep; step++) {
+              const t = step / numSteps;
+              const flightX = ballX + drawWidth * 0.28 * t;
+              const parabola = 4 * t * (1 - t * 0.55);
+              const flightY = ballY - drawHeight * 0.38 * parabola;
+
+              if (step === 0) {
+                ctx.moveTo(flightX, flightY);
+              } else {
+                ctx.lineTo(flightX, flightY);
+              }
+              if (step === currentStep) {
+                curBallX = flightX;
+                curBallY = flightY;
+              }
+            }
+
+            const grad = ctx.createLinearGradient(ballX, ballY, curBallX, curBallY);
+            grad.addColorStop(0, "rgba(57, 255, 20, 0.4)");
+            grad.addColorStop(0.7, "rgba(57, 255, 20, 0.95)");
+            grad.addColorStop(1, "#ffffff");
+            ctx.strokeStyle = grad;
+            ctx.stroke();
+
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "#ffffff";
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.arc(curBallX, curBallY, Math.max(2.0, 4.0 * (1 - progress * 0.5)), 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.font = "bold 9px sans-serif";
+            ctx.fillStyle = "#39ff14";
+            ctx.fillText("TRACER 出球軌跡", curBallX + 8, curBallY - 4);
+          }
+          ctx.restore();
+        }
+      }
+
+      // 4. 人體骨架連線 (2D Pose) - 細緻半透明，只在有效揮桿區間內顯示！
+      if (showSkeleton && currentTimeMs >= swing.start_ms && currentTimeMs <= swing.end_ms + 200) {
         const connections: Array<[string, string]> = [
           ["left_shoulder", "right_shoulder"],
           ["left_shoulder", "left_hip"],
@@ -351,187 +326,75 @@ export default function SwingDetailPage() {
           ["left_knee", "left_ankle"],
         ];
 
-        ctx.strokeStyle = "#34d399";
-        ctx.lineWidth = 2.5;
+        ctx.save();
+        ctx.strokeStyle = "rgba(52, 211, 153, 0.65)";
+        ctx.lineWidth = 1.5;
         for (const [a, b] of connections) {
           const pa = lms[a];
           const pb = lms[b];
           if (pa && pb && pa.visibility >= 0.35 && pb.visibility >= 0.35) {
             ctx.beginPath();
-            ctx.moveTo(pa.x * canvas.width, pa.y * canvas.height);
-            ctx.lineTo(pb.x * canvas.width, pb.y * canvas.height);
+            ctx.moveTo(toX(pa.x), toY(pa.y));
+            ctx.lineTo(toX(pb.x), toY(pb.y));
             ctx.stroke();
           }
         }
 
         for (const [name, pt] of Object.entries(lms)) {
           if (pt.visibility < 0.35) continue;
-          ctx.fillStyle = name.includes("wrist")
-            ? "#f59e0b"
-            : name.includes("shoulder") || name.includes("hip")
-            ? "#10b981"
-            : "#6ee7b7";
+          if (!name.includes("wrist") && !name.includes("shoulder") && !name.includes("hip") && !name.includes("knee")) {
+            continue;
+          }
+          ctx.fillStyle = name.includes("wrist") ? "#f59e0b" : "#10b981";
           ctx.beginPath();
-          ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4, 0, Math.PI * 2);
+          ctx.arc(toX(pt.x), toY(pt.y), 2.5, 0, Math.PI * 2);
           ctx.fill();
         }
+        ctx.restore();
       }
 
-      // 5. 繪製 PGA 職業標竿幽靈半透明疊影 (Pro Ghost Overlay)
-      if (showProGhost) {
-        const sh = lms["right_shoulder"] || lms["left_shoulder"];
-        const hip = lms["right_hip"] || lms["left_hip"];
-        const ank = lms["right_ankle"] || lms["left_ankle"];
-        const head = lms["nose"];
+      // 5. 揮桿手腕軌跡 (Swing Path)
+      if (showSwingPath && currentTimeMs >= swing.start_ms && currentTimeMs <= swing.end_ms + 300) {
+        const backswingPts: Array<{ x: number; y: number }> = [];
+        const downswingPts: Array<{ x: number; y: number }> = [];
 
-        if (sh && hip && ank) {
-          const userHipY = hip.y * canvas.height;
-          const userAnkY = ank.y * canvas.height;
-          const userHipX = hip.x * canvas.width;
-          const userHeightPx = Math.max(
-            80,
-            userAnkY - (head ? head.y * canvas.height : sh.y * canvas.height * 0.9)
-          );
-
-          let phaseName = "準備姿勢 (Address)";
-          let phaseKey: "address" | "top" | "impact" | "finish" = "address";
-          let proSpineAngle = 38.0;
-
-          if (currentTimeMs <= topMs * 0.75) {
-            phaseKey = "address";
-            phaseName = "PGA 標竿: 準備站姿 (Address)";
-            proSpineAngle = 38.0;
-          } else if (currentTimeMs <= (topMs + impactMs) / 2) {
-            phaseKey = "top";
-            phaseName = "PGA 標竿: 上桿頂點 (Top)";
-            proSpineAngle = 36.5;
-          } else if (currentTimeMs <= impactMs + 200) {
-            phaseKey = "impact";
-            phaseName = "PGA 標竿: 擊球瞬間 (Impact)";
-            proSpineAngle = 38.5;
-          } else {
-            phaseKey = "finish";
-            phaseName = "PGA 標竿: 收桿平衡 (Finish)";
-            proSpineAngle = 5.0;
+        for (const kf of swing.keyframes) {
+          const klms = kf.landmarks || {};
+          const rw = klms["right_wrist"];
+          const lw = klms["left_wrist"];
+          const wrist = rw && rw.visibility >= 0.3 ? rw : lw;
+          if (wrist && wrist.visibility >= 0.3) {
+            const pt = { x: toX(wrist.x), y: toY(wrist.y) };
+            if (kf.time_ms <= topMs) {
+              backswingPts.push(pt);
+            } else if (kf.time_ms <= impactMs) {
+              downswingPts.push(pt);
+            }
           }
-
-          ctx.save();
-          ctx.strokeStyle = "rgba(251, 191, 36, 0.75)";
-          ctx.lineWidth = 2.0;
-          ctx.setLineDash([5, 4]);
-          ctx.shadowColor = "#f59e0b";
-          ctx.shadowBlur = 10;
-
-          const proTemplates: Record<string, Record<string, [number, number]>> = {
-            address: {
-              head: [0.08, -0.44],
-              shoulder: [0.06, -0.32],
-              elbow: [0.08, -0.16],
-              wrist: [0.10, -0.02],
-              hip: [0.0, 0.0],
-              knee: [0.04, 0.22],
-              ankle: [0.02, 0.46],
-            },
-            top: {
-              head: [0.05, -0.45],
-              shoulder: [0.08, -0.32],
-              elbow: [-0.02, -0.36],
-              wrist: [0.06, -0.42],
-              hip: [0.0, 0.0],
-              knee: [0.05, 0.22],
-              ankle: [0.02, 0.46],
-            },
-            impact: {
-              head: [0.04, -0.43],
-              shoulder: [0.08, -0.31],
-              elbow: [0.10, -0.14],
-              wrist: [0.12, -0.01],
-              hip: [-0.04, 0.0],
-              knee: [0.06, 0.22],
-              ankle: [0.02, 0.46],
-            },
-            finish: {
-              head: [0.0, -0.46],
-              shoulder: [-0.02, -0.34],
-              elbow: [-0.06, -0.28],
-              wrist: [-0.04, -0.34],
-              hip: [-0.02, 0.0],
-              knee: [0.01, 0.22],
-              ankle: [0.0, 0.46],
-            },
-          };
-
-          const curTpl = proTemplates[phaseKey];
-          const scale = userHeightPx;
-          const getProPt = (part: string) => {
-            const [dx, dy] = curTpl[part] || [0, 0];
-            return {
-              x: userHipX + dx * scale,
-              y: userHipY + (dy + 0.1) * scale,
-            };
-          };
-
-          const proHead = getProPt("head");
-          const proSh = getProPt("shoulder");
-          const proElb = getProPt("elbow");
-          const proWr = getProPt("wrist");
-          const proHip = getProPt("hip");
-          const proKn = getProPt("knee");
-          const proAnk = getProPt("ankle");
-
-          const proLines = [
-            [proHead, proSh],
-            [proSh, proElb],
-            [proElb, proWr],
-            [proSh, proHip],
-            [proHip, proKn],
-            [proKn, proAnk],
-          ];
-
-          for (const [p1, p2] of proLines) {
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.stroke();
-          }
-
-          ctx.fillStyle = "#fbbf24";
-          for (const p of [proHead, proSh, proElb, proWr, proHip, proKn, proAnk]) {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-
-          // 繪製 PGA 標竿 Tush Line (臀部鉛線)
-          ctx.strokeStyle = "rgba(251, 191, 36, 0.45)";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(proHip.x - 18, proHip.y - 70);
-          ctx.lineTo(proHip.x - 18, proHip.y + 110);
-          ctx.stroke();
-
-          // 右上角浮動 HUD：顯示當前階段與 PGA 職業標竿差異
-          ctx.setLineDash([]);
-          ctx.fillStyle = "rgba(10, 15, 20, 0.85)";
-          ctx.beginPath();
-          ctx.roundRect(canvas.width - 226, 12, 214, 68, 8);
-          ctx.fill();
-          ctx.strokeStyle = "#f59e0b";
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-
-          ctx.font = "bold 11px sans-serif";
-          ctx.fillStyle = "#fbbf24";
-          ctx.fillText(`👑 ${phaseName}`, canvas.width - 214, 30);
-
-          ctx.font = "10px sans-serif";
-          ctx.fillStyle = "#e5e7eb";
-          ctx.fillText(`PGA 標竿脊柱前傾: ${proSpineAngle}°`, canvas.width - 214, 48);
-          ctx.fillStyle = "#34d399";
-          ctx.fillText("保持臀部貼合黃色鉛線防早起", canvas.width - 214, 66);
-
-          ctx.restore();
         }
+
+        ctx.save();
+        if (backswingPts.length >= 2) {
+          ctx.strokeStyle = "rgba(0, 240, 255, 0.75)";
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.moveTo(backswingPts[0].x, backswingPts[0].y);
+          for (let i = 1; i < backswingPts.length; i++) {
+            ctx.lineTo(backswingPts[i].x, backswingPts[i].y);
+          }
+          ctx.stroke();
+        }
+        if (downswingPts.length >= 2) {
+          ctx.strokeStyle = "rgba(255, 42, 95, 0.85)";
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(downswingPts[0].x, downswingPts[0].y);
+          for (let i = 1; i < downswingPts.length; i++) {
+            ctx.lineTo(downswingPts[i].x, downswingPts[i].y);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
       }
     },
     [showSkeleton, showSwingPath, showHeadBox, showBallTracer, showProGhost, swing]

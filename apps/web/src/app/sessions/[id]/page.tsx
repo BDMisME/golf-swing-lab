@@ -780,15 +780,28 @@ export default function SessionDetailPage() {
                       綜合 {sw.overall_score ?? "N/A"} 分
                     </span>
                   </div>
-                  {primaryVideo && (
-                    <video
-                      controls
-                      playsInline
-                      preload="metadata"
-                      src={`${API_BASE_URL}/api/videos/${primaryVideo.id}/stream?token=${encodeURIComponent(getAuthToken() || "")}#t=${(sw.start_ms / 1000).toFixed(2)},${(sw.end_ms / 1000).toFixed(2)}`}
-                      className="compare-video w-full rounded-lg border border-gray-800 bg-black"
-                    />
-                  )}
+                  {(() => {
+                    const targetVideo = sessionData?.videos?.find((v: any) => v.id === sw.video_id) || primaryVideo;
+                    if (!targetVideo) return null;
+                    return (
+                      <video
+                        controls
+                        playsInline
+                        muted
+                        preload="auto"
+                        onLoadedMetadata={(e) => {
+                          e.currentTarget.currentTime = sw.start_ms / 1000;
+                        }}
+                        onTimeUpdate={(e) => {
+                          if (e.currentTarget.currentTime >= sw.end_ms / 1000) {
+                            e.currentTarget.currentTime = sw.start_ms / 1000;
+                          }
+                        }}
+                        src={`${API_BASE_URL}/api/videos/${targetVideo.id}/stream?token=${encodeURIComponent(getAuthToken() || "")}#t=${(sw.start_ms / 1000).toFixed(2)},${(sw.end_ms / 1000).toFixed(2)}`}
+                        className="compare-video aspect-video w-full rounded-lg border border-gray-800 bg-black object-contain"
+                      />
+                    );
+                  })()}
                   <div className="space-y-1.5 text-xs">
                     {Object.entries(sw.subscores || {})
                       .filter(
