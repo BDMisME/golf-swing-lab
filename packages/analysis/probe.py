@@ -165,33 +165,42 @@ def generate_proxy_and_thumbnail(
     proxy_p.parent.mkdir(parents=True, exist_ok=True)
     thumb_p.parent.mkdir(parents=True, exist_ok=True)
 
-    # 產生 H.264 + yuv420p + faststart，自動套用旋轉並限制最大邊長 720p 以兼顧畫質與速度
+    # 產生 Safari 相容 H.264 + yuv420p + faststart：
+    # 限制寬度 720p、30fps，採用 ultrafast 極速轉碼，並僅擷取第 1 條視訊與標準音訊，過濾 Apple 空間音訊與元數據
     proxy_cmd = [
         "ffmpeg",
         "-y",
         "-i",
         str(in_p),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+        "-sn",
+        "-dn",
         "-vf",
-        "scale='min(1280,iw)':-2",
+        "scale='min(720,iw)':-2",
+        "-r",
+        "30",
         "-c:v",
         "libx264",
         "-preset",
-        "veryfast",
+        "ultrafast",
         "-crf",
-        "24",
+        "26",
         "-pix_fmt",
         "yuv420p",
         "-g",
-        "15",
+        "30",
         "-movflags",
         "+faststart",
         "-c:a",
         "aac",
         "-b:a",
-        "96k",
+        "64k",
         str(proxy_p),
     ]
-    proc = subprocess.run(proxy_cmd, capture_output=True, text=True, timeout=300)
+    proc = subprocess.run(proxy_cmd, capture_output=True, text=True, timeout=600)
     if proc.returncode != 0:
         raise VideoProbeError(f"Proxy 轉碼失敗: {proc.stderr[-400:]}")
 
@@ -217,6 +226,44 @@ def generate_proxy_and_thumbnail(
                 "-y",
                 "-i",
                 str(proxy_p),
+                "-frames:v",
+                "1",
+                str(thumb_p),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+
+def extract_thumbnail_fallback(in_p: Path, thumb_p: Path) -> None:
+    """直接從原始影片截取第 0.5 秒縮圖（用於 Proxy 轉碼跳過或失敗時的保底機制）。"""
+    thumb_p.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00.500",
+            "-i",
+            str(in_p),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "3",
+            str(thumb_p),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if not thumb_p.exists():
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(in_p),
                 "-frames:v",
                 "1",
                 str(thumb_p),

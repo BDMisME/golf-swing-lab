@@ -43,13 +43,13 @@ class Settings(BaseSettings):
     scoring_version: str = "score-v1"
     data_retention_days: int = 30
 
-    llm_provider: str = "none"
+    llm_provider: str = "openai-compatible"
     llm_api_key: str = ""
-    llm_base_url: str = "https://api.openai.com/v1"
-    llm_model: str = "gpt-4o-mini"
+    llm_base_url: str = "https://ark.cn-beijing.volces.com/api/plan/v3"
+    llm_model: str = "doubao-seed-2.1-lite"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
-    llm_max_budget_usd: float = 0.0
+    llm_max_budget_usd: float = 100.0
 
     # 若為 true，API 在無獨立 worker 或單一容器架構中自動於背景線程處理任務
     inline_worker_fallback: bool = True

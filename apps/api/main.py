@@ -1665,7 +1665,7 @@ async def get_session_report(
     ]
     practice_swings = [s for s in serialized_swings if s["label"] == "practice_swing"]
     needs_review = [s for s in serialized_swings if s["review_status"] == "needs_review"]
-    scorable_swings = [s for s in valid_swings if s["overall_score"] is not None]
+    scorable_swings = [s for s in serialized_swings if s["overall_score"] is not None]
 
     overall_scores = [float(s["overall_score"]) for s in scorable_swings]
     avg_overall = round(sum(overall_scores) / len(overall_scores), 1) if overall_scores else None

@@ -21,7 +21,11 @@ from apps.api.models import (
 )
 from packages.analysis.detection.scanner import CoarseToFineDetector
 from packages.analysis.exporter import export_swing_compilation
-from packages.analysis.probe import generate_proxy_and_thumbnail, probe_video_file
+from packages.analysis.probe import (
+    extract_thumbnail_fallback,
+    generate_proxy_and_thumbnail,
+    probe_video_file,
+)
 from packages.analysis.scoring.engine import compute_swing_score
 from packages.storage.s3_client import get_storage_service
 
@@ -144,15 +148,29 @@ def run_video_analysis_job(job_id: str) -> dict[str, Any]:
                 if not _append_job_log(db, job, "proxy", 18, "正在生成 Safari 相容 H.264 預覽 Proxy 與縮圖"):
                     return {"status": "cancelled", "job_id": job_id}
 
-                generate_proxy_and_thumbnail(local_raw, local_proxy, local_thumb)
-                proxy_key = f"proxies/{video.owner_id}/{video.id}/proxy.mp4"
-                thumb_key = f"thumbnails/{video.owner_id}/{video.id}/thumb.jpg"
-                storage.put_file(proxy_key, local_proxy, "video/mp4")
-                if local_thumb.exists():
-                    storage.put_file(thumb_key, local_thumb, "image/jpeg")
-                    video.thumbnail_storage_key = thumb_key
-                video.proxy_storage_key = proxy_key
-                db.commit()
+                try:
+                    generate_proxy_and_thumbnail(local_raw, local_proxy, local_thumb)
+                    if local_proxy.exists():
+                        proxy_key = f"proxies/{video.owner_id}/{video.id}/proxy.mp4"
+                        storage.put_file(proxy_key, local_proxy, "video/mp4")
+                        video.proxy_storage_key = proxy_key
+                    if local_thumb.exists():
+                        thumb_key = f"thumbnails/{video.owner_id}/{video.id}/thumb.jpg"
+                        storage.put_file(thumb_key, local_thumb, "image/jpeg")
+                        video.thumbnail_storage_key = thumb_key
+                    db.commit()
+                except Exception as proxy_err:
+                    _append_job_log(db, job, "proxy", 22, f"預覽轉碼跳過 ({proxy_err})，直接使用原片執行高爾夫分析")
+                    if not local_thumb.exists():
+                        try:
+                            extract_thumbnail_fallback(local_raw, local_thumb)
+                            if local_thumb.exists():
+                                thumb_key = f"thumbnails/{video.owner_id}/{video.id}/thumb.jpg"
+                                storage.put_file(thumb_key, local_thumb, "image/jpeg")
+                                video.thumbnail_storage_key = thumb_key
+                        except Exception:
+                            pass
+                    db.commit()
 
                 # 使用正規化旋轉與關鍵幀之 Proxy 或原片執行 Coarse-to-Fine 偵測
                 analysis_target = local_proxy if local_proxy.exists() else local_raw

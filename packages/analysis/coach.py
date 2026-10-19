@@ -66,7 +66,9 @@ class RuleBasedCoachProvider:
         session_summary: dict[str, Any],
         swing_evidence: list[dict[str, Any]],
     ) -> CoachReport:
-        valid_swings = [s for s in swing_evidence if s.get("label") == "valid_swing"]
+        valid_swings = [
+            s for s in swing_evidence if s.get("label") in ("valid_swing", "practice_swing")
+        ]
         observations: list[CoachObservation] = []
         drills: list[CoachDrill] = []
         uncertainties: list[str] = [
@@ -207,14 +209,14 @@ class OpenAICompatibleCoachProvider:
         base_url: str = "https://api.openai.com/v1",
         model: str = "gpt-4o-mini",
         max_budget_usd: float = 1.0,
-        timeout_sec: float = 12.0,
+        timeout_sec: float = 45.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.max_budget_usd = max_budget_usd
-        self.timeout_sec = timeout_sec
+        self.timeout_sec = max(120.0, timeout_sec)
         self.transport = transport
         self.fallback = RuleBasedCoachProvider()
 
@@ -228,15 +230,46 @@ class OpenAICompatibleCoachProvider:
             return base_report
 
         system_prompt = (
-            "你是 Golf Swing Lab 的專業高爾夫 2D 後方視角（DTL）動作分析教練。"
-            "請一律使用繁體中文（台灣）回答，並輸出符合 CoachReport schema 的 JSON。"
-            "嚴格禁止編造或推論：球飛行距離、球速、桿頭速度、甜蜜點、桿面角、3D 旋轉角度或實際球路。"
-            "每個建議都必須引用輸入資料中的 segment_id、time_ms 與 metric_key。"
+            "你是 Golf Swing Lab 專業高爾夫動作分析教練。一律使用繁體中文（台灣）。\n"
+            "請依據輸入數據產出嚴格純 JSON（請勿輸出 Markdown ```json 標記）：\n"
+            "{\n"
+            '  "summary": "場次評估摘要",\n'
+            '  "observations": [\n'
+            '    {"title": "動作觀察標題", "detail": "詳細說明", "confidence": 0.9}\n'
+            "  ],\n"
+            '  "priority_fixes": [\n'
+            '    {"focus_area": "焦點", "action_cue": "口訣", "drill_steps": "訓練步驟", "target_metric": "改善目標"}\n'
+            "  ],\n"
+            '  "uncertainties": ["限制說明"]\n'
+            "}\n"
+            "最高誠信原則：嚴禁編造或推論球速、桿頭速度、飛行距離、甜蜜點品質、桿面角度或實際球路。"
         )
+
+        # 智慧挑選代表球：最低分球（問題痛點）與最高分球（標竿球），大幅降低推理延遲
+        scorable = [s for s in swing_evidence if s.get("overall_score") is not None]
+        selected_swings = []
+        if scorable:
+            sorted_s = sorted(scorable, key=lambda x: float(x.get("overall_score") or 0))
+            selected_swings.append({"role": "需重點改善球", **sorted_s[0]})
+            if len(sorted_s) > 1:
+                selected_swings.append({"role": "場次標竿球", **sorted_s[-1]})
+        else:
+            for idx, s in enumerate(swing_evidence[:2]):
+                selected_swings.append({"role": f"揮桿 #{idx+1}", **s})
+
+        compact_evidence = []
+        for s in selected_swings:
+            compact_evidence.append({
+                "role": s.get("role"),
+                "segment_id": s.get("segment_id") or s.get("id"),
+                "label": s.get("label"),
+                "overall_score": s.get("overall_score"),
+                "subscores": s.get("subscores"),
+            })
+
         payload = {
             "model": self.model,
             "temperature": 0.2,
-            "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {
@@ -244,7 +277,7 @@ class OpenAICompatibleCoachProvider:
                     "content": json.dumps(
                         {
                             "session_summary": session_summary,
-                            "swing_evidence": swing_evidence[:10],
+                            "representative_swings": compact_evidence,
                         },
                         ensure_ascii=False,
                     ),
@@ -261,12 +294,48 @@ class OpenAICompatibleCoachProvider:
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                content = data["choices"][0]["message"]["content"]
+                content = data["choices"][0]["message"]["content"].strip()
+                if content.startswith("```"):
+                    lines = content.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    content = "\n".join(lines).strip()
+
                 parsed = json.loads(content)
                 parsed["provider"] = "openai-compatible"
                 parsed["model"] = self.model
                 parsed["llm_enabled"] = True
                 parsed.setdefault("notice", f"由外部 LLM ({self.model}) 依 2D 量測證據生成。")
+
+                raw_obs = parsed.get("observations") or []
+                norm_obs = []
+                for idx, item in enumerate(raw_obs):
+                    if isinstance(item, str):
+                        norm_obs.append({
+                            "title": f"動作觀察 #{idx + 1}",
+                            "detail": item,
+                            "confidence": 0.85,
+                        })
+                    elif isinstance(item, dict):
+                        norm_obs.append(item)
+                parsed["observations"] = norm_obs
+
+                raw_fixes = parsed.get("priority_fixes") or []
+                norm_fixes = []
+                for idx, item in enumerate(raw_fixes):
+                    if isinstance(item, str):
+                        norm_fixes.append({
+                            "focus_area": f"重點改善 #{idx + 1}",
+                            "action_cue": item,
+                            "drill_steps": item,
+                            "target_metric": "動作穩定度",
+                        })
+                    elif isinstance(item, dict):
+                        norm_fixes.append(item)
+                parsed["priority_fixes"] = norm_fixes
+
                 report = CoachReport.model_validate(parsed)
 
                 # 檢查是否違反誠信原則（出現未授權之距離/球速臆測）
@@ -279,8 +348,8 @@ class OpenAICompatibleCoachProvider:
                     if forbidden.lower() in combined_text:
                         raise ValueError(f"LLM 輸出包含禁止臆測之物理名詞: {forbidden}")
                 return report
-        except Exception:
-            # 外部 API 超時、驗證失敗或違規時，安全退回規則式報告
+        except Exception as e:
+            print(f"[CoachProvider Warning] LLM 分析失敗或降級 ({type(e).__name__}: {e})，安全退回規則式報告", flush=True)
             return base_report
 
 
