@@ -1,0 +1,47 @@
+# OS & Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node / Next.js
+node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/playwright-report/
+apps/web/test-results/
+*.tsbuildinfo
+
+# Local runtime & data volumes
+.data/
+storage_data/
+tmp/
+logs/
+*.sqlite3
+*.db
+
+# Private media (never commit raw private user videos)
+tests/golden/private_videos/
+*.mov
+*.MOV
+!tests/fixtures/*.mp4
+!tests/fixtures/*.mov
