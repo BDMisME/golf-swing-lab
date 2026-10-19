@@ -1,0 +1,127 @@
+apiVersion: zeabur.com/v1
+kind: Template
+metadata:
+  name: golf-swing-lab
+spec:
+  description: Golf Swing Lab — AI 高爾夫練習場長影片自動切球、2D 動作分析與評分系統
+  services:
+    - name: gsl-postgres
+      template: PREBUILT
+      spec:
+        source:
+          image: postgres:16-alpine
+        ports:
+          - id: database
+            port: 5432
+            type: TCP
+        volumes:
+          - id: pg-data
+            dir: /var/lib/postgresql/data
+        env:
+          POSTGRES_USER:
+            default: gsl
+          POSTGRES_PASSWORD:
+            default: gsl_secret_password
+          POSTGRES_DB:
+            default: golf_swing_lab
+
+    - name: gsl-redis
+      template: PREBUILT
+      spec:
+        source:
+          image: redis:7-alpine
+        ports:
+          - id: redis
+            port: 6379
+            type: TCP
+        volumes:
+          - id: redis-data
+            dir: /data
+
+    - name: gsl-minio
+      template: PREBUILT
+      spec:
+        source:
+          image: minio/minio:latest
+        command: ["server", "/data", "--console-address", ":9001"]
+        ports:
+          - id: api
+            port: 9000
+            type: HTTP
+          - id: console
+            port: 9001
+            type: HTTP
+        volumes:
+          - id: minio-data
+            dir: /data
+        env:
+          MINIO_ROOT_USER:
+            default: minioadmin
+          MINIO_ROOT_PASSWORD:
+            default: minioadmin123
+
+    - name: gsl-api
+      template: GIT
+      dependencies:
+        - gsl-postgres
+        - gsl-redis
+        - gsl-minio
+      spec:
+        source:
+          dockerfile: infra/docker/api.Dockerfile
+        ports:
+          - id: http
+            port: 8000
+            type: HTTP
+        env:
+          DATABASE_URL:
+            default: postgresql+psycopg://gsl:gsl_secret_password@gsl-postgres:5432/golf_swing_lab
+          REDIS_URL:
+            default: redis://gsl-redis:6379/0
+          S3_ENDPOINT_URL:
+            default: http://gsl-minio:9000
+          S3_ACCESS_KEY_ID:
+            default: minioadmin
+          S3_SECRET_ACCESS_KEY:
+            default: minioadmin123
+          S3_BUCKET_NAME:
+            default: golf-swing-lab
+          LLM_PROVIDER:
+            default: none
+
+    - name: gsl-worker
+      template: GIT
+      dependencies:
+        - gsl-postgres
+        - gsl-redis
+        - gsl-minio
+      spec:
+        source:
+          dockerfile: infra/docker/worker.Dockerfile
+        env:
+          DATABASE_URL:
+            default: postgresql+psycopg://gsl:gsl_secret_password@gsl-postgres:5432/golf_swing_lab
+          REDIS_URL:
+            default: redis://gsl-redis:6379/0
+          S3_ENDPOINT_URL:
+            default: http://gsl-minio:9000
+          S3_ACCESS_KEY_ID:
+            default: minioadmin
+          S3_SECRET_ACCESS_KEY:
+            default: minioadmin123
+          S3_BUCKET_NAME:
+            default: golf-swing-lab
+          LLM_PROVIDER:
+            default: none
+
+    - name: gsl-web
+      template: GIT
+      dependencies:
+        - gsl-api
+      spec:
+        source:
+          dockerfile: infra/docker/web.Dockerfile
+        ports:
+          - id: web
+            port: 3000
+            type: HTTP

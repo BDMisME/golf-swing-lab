@@ -1,0 +1,41 @@
+{
+  "dataset_version": "golden-v1",
+  "video_id": "synthetic_dtl_session_01",
+  "fps": 30.0,
+  "duration_ms": 16000,
+  "camera_angle": "DTL",
+  "handedness": "right",
+  "note": "Synthetic benchmark fixture with 3 valid swings at known PTS intervals. Real 100+ swing human iPhone dataset remains NOT_VALIDATED until external private videos are provided.",
+  "ground_truth_swings": [
+    {
+      "gt_id": "gt-1",
+      "start_ms": 1500,
+      "end_ms": 4700,
+      "top_ms": 3164,
+      "impact_ms": 3548,
+      "label": "valid_swing",
+      "ball_strike": "yes",
+      "quality": "good"
+    },
+    {
+      "gt_id": "gt-2",
+      "start_ms": 6500,
+      "end_ms": 9700,
+      "top_ms": 8164,
+      "impact_ms": 8548,
+      "label": "valid_swing",
+      "ball_strike": "yes",
+      "quality": "good"
+    },
+    {
+      "gt_id": "gt-3",
+      "start_ms": 11500,
+      "end_ms": 14700,
+      "top_ms": 13164,
+      "impact_ms": 13548,
+      "label": "valid_swing",
+      "ball_strike": "yes",
+      "quality": "good"
+    }
+  ]
+}

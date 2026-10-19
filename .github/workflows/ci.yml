@@ -1,0 +1,71 @@
+name: Golf Swing Lab CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-and-analysis:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: gsl
+          POSTGRES_PASSWORD: gsl_dev_password
+          POSTGRES_DB: golf_swing_lab
+        ports:
+          - 25432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 26379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libgl1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Python 3.12
+        run: uv python install 3.12 && uv sync --python 3.12
+      - name: Lint & Typecheck
+        run: |
+          uv run ruff check apps packages tests
+          uv run mypy apps packages
+      - name: Alembic Migrations Smoke
+        run: |
+          uv run alembic -c apps/api/alembic.ini upgrade head
+          uv run alembic -c apps/api/alembic.ini downgrade base
+          uv run alembic -c apps/api/alembic.ini upgrade head
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - name: Install & Build Web
+        working-directory: apps/web
+        run: |
+          pnpm install
+          pnpm run typecheck
+          pnpm run test:unit
+          pnpm run build

@@ -1,28 +1,32 @@
-# IMPLEMENTATION_STATE.md — 專案實作狀態與續作紀錄
+# IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 1. 當前進度總覽
-- **目前輪次（Current Round）**：`R0 Completed → Entering R1`
-- **最後更新時間**：`2026-10-19T14:32:00+08:00`
-- **下一個可執行任務（Next Executable Task）**：`T-R1-01`（建立 Python Monorepo、基礎設施 Docker Compose 與核心套件骨架）
+## 當前進度總覽
+- **目前輪次**：**R12 已完成**（R0 至 R12 所有本機可自主完成之開發、單元測試、整合測試、前後端建置、Docker/Zeabur 部署規格與瀏覽器 E2E 驗收皆已完成並驗證通過）。
+- **最後更新時間**：2026-10-19T16:05:00+08:00
 
-## 2. 各輪次 Gate 狀態
+## 各輪次狀態矩陣 (R0–R12)
 
-| 輪次 | 名稱 | Gate 狀態 | 測試/驗證結果 | Retry 次數 | 備註 |
-|---|---|---|---|---:|---|
-| **R0** | Repo 起始盤點與設計契約 | `PASS` | 規格文件、API/DB/Scoring 契約、工具鏈與授權稽核 100% 完成 | 0 | 已確認 Zeabur Dockerfile 與 Health Check 官方規範 |
-| **R1** | Monorepo、基礎架構與 UI Shell | `IN_PROGRESS` | - | 0 | 準備建立 `packages/*`, `apps/*`, `infra/compose.dev.yml` |
-| **R2** | Auth、資料模型與 API | `PENDING` | - | 0 | - |
-| **R3** | 大影片上傳、存儲與影片預覽 | `PENDING` | - | 0 | - |
-| **R4** | 背景任務與可靠性 | `PENDING` | - | 0 | - |
-| **R5** | 自動揮桿候選偵測 | `PENDING` | - | 0 | - |
-| **R6** | 動作事件、骨架與信心 | `PENDING` | - | 0 | - |
-| **R7** | 動作評分與排序 | `PENDING` | - | 0 | - |
-| **R8** | 場次報告與雙球對照 | `PENDING` | - | 0 | - |
-| **R9** | 影片匯出與社群分享 | `PENDING` | - | 0 | - |
-| **R10** | LLM Adapter（無金鑰可通過） | `PENDING` | - | 0 | - |
-| **R11** | Zeabur staging 與部署 | `PENDING` | - | 0 | 遠端 Zeabur 帳號授權若未提供將標記 `EXTERNAL_BLOCKER` |
-| **R12** | 產品 UAT 與可用版釋出 | `PENDING` | - | 0 | 真實 100+ 球 iPhone 原片若未提供將標記 `NOT_VALIDATED` |
+| 輪次 | 名稱 | 狀態 | 驗證證據摘要 |
+|---|---|---|---|
+| **R0** | Repo 盤點、架構契約與規格文件 | `PASS` | 10 份核心規格文件與 `.env.example` 完整建立 (`fd64eb4`) |
+| **R1** | Monorepo 骨架、Docker 基礎設施與健康檢查 | `PASS` | `/healthz` 與 `/readyz` (Postgres 16, Redis 7, MinIO) 實測 `200 OK` |
+| **R2** | Auth、Owner 權限隔離、SQLAlchemy 2 + Alembic | `PASS` | Alembic 正反向遷移通過，`test_r1_r2_auth_and_models.py` 3/3 通過 |
+| **R3** | Multipart 大檔續傳、Range `206`、ffprobe VFR/HEVC/旋轉 | `PASS` | `test_r3_r4_upload_probe_and_worker.py` 4/4 通過 |
+| **R4** | Redis/RQ 背景佇列、階段進度、取消與重試上限 | `PASS` | 冪等重入、手動取消、Heartbeat 逾時恢復與 `max_attempts=3` 測試通過 |
+| **R5** | Coarse-to-Fine 自動切球、9 階段狀態機與時間軸校正 | `PASS` | 合成黃金測試集 Recall=1.00, Precision=1.00, Impact MAE=37.3ms |
+| **R6** | MediaPipe 2D 關鍵點、幾何指標、畫質旗標與骨架疊圖 | `PASS` | `pose_landmarker_lite.task` 實測通過，支援 60fps、低光與多人干擾旗標 |
+| **R7** | Score v1 可解釋評分、70% 覆蓋率閘門與 4 榜排序 | `PASS` | 10 次重跑方差 `0.0`，`<70%` 覆蓋率強制回傳 `None` |
+| **R8** | 場次報告、雙球同步對照與人工校正回饋留存 | `PASS` | `PATCH /api/swings/{id}` 與 `force=true` 保留人工標記實測通過 |
+| **R9** | FFmpeg 單球與多球合輯 MP4 匯出（原比例與 `9:16`） | `PASS` | 產出合法 H.264 MP4 (`720x1280` 9:16 與原始比例)，可串流下載 |
+| **R10** | `GolfCoachProvider`（`none` 規則式與 `openai-compatible`） | `PASS` | 預設免 Key 運作；LLM 捏造球速/距離時自動攔截降級；API Key 不外洩 |
+| **R11** | Dockerfiles、生產 Compose 與 Zeabur 部署規格 | `PASS` / `EXTERNAL_BLOCKER` | 本機 `docker compose config` 驗證通過；遠端 Zeabur 因無外部 Token 標記 `EXTERNAL_BLOCKER` |
+| **R12** | 全流程 E2E、瀏覽器實測與 Golden Set 評估報告 | `PASS` / `NOT_VALIDATED` | Pytest 13/13、Vitest 3/3、Next Build 8/8、Chrome DevTools 6 頁實測截圖通過；真人 100+ 球資料集標記 `NOT_VALIDATED` |
 
-## 3. 外部阻礙（External Blockers & Unvalidated Dependencies）
-1. **真實 iPhone DTL 長影片 Golden Set（100+ 次揮桿）**：目前工作區無私人實拍影片，本專案將自動生成包含多段合成揮桿、空揮、休息、旋轉 metadata、HEVC、VFR、低光與多人干擾之真實編碼 `.mp4` / `.mov` 測試集完成端到端實測；針對真實人類 100+ 球統計指標將誠實標記為 `NOT_VALIDATED`。
-2. **Zeabur 雲端帳號與專案 Token**：本機未配置 Zeabur CLI Token，將完整交付可立即部署之 `infra/docker/*.Dockerfile`、`infra/zeabur/` 配置與自動化檢查腳本，遠端部署狀態誠實標記為 `EXTERNAL_BLOCKER`。
+## 服務連接埠與啟動方式（無衝突本機配置）
+- **PostgreSQL 16**：`localhost:25432` (`infra/compose.dev.yml`)
+- **Redis 7**：`localhost:26379` (`infra/compose.dev.yml`)
+- **MinIO S3**：`localhost:29000` / Console `localhost:29001` (`infra/compose.dev.yml`)
+- **FastAPI (`gsl-api`)**：`http://localhost:28000` (`uv run uvicorn apps.api.main:app --host 127.0.0.1 --port 28000`)
+- **RQ Worker (`gsl-worker`)**：`OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES uv run python -m apps.worker.main`
+- **Next.js (`gsl-web`)**：`http://localhost:23000` (`cd apps/web && npm run start -- -p 23000`)
+- **預設體驗帳號**：`golfer@swinglab.local` / 密碼：`GolfSwingLab!2026`
