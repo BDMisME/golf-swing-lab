@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgl1 \
+    libegl1 \
+    libgles2 \
     libglib2.0-0 \
     curl \
     && rm -rf /var/lib/apt/lists/*
