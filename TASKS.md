@@ -50,14 +50,15 @@
 - [x] 實作 `packages/analysis/exporter.py` 支援單球與 2–3 球合輯匯出（`original` 與 `9:16` `720x1280` 直式構圖）
 - [x] 實作 `/api/exports` 與 `/api/exports/{id}/download` 並於前端 `/exports` 驗證下載
 
-## R10 — 可插拔教練介面與防幻覺護欄
+## R10 — 可插拔教練介面與防幻覺護欄 (支援 Gemini 3.8 Flash)
 - [x] 實作 `RuleBasedCoachProvider` (`LLM_PROVIDER=none` 預設完整運作) 與 `OpenAICompatibleCoachProvider`
+- [x] 實作 `GeminiCoachProvider` 支援 Google Gemini 3.8 Flash (`gemini-3.8-flash`)，速度極快、繁體中文原生理解、結構化輸出
 - [x] 實作違規詞彙（球速、飛行距離、曲球等）防幻覺攔截自動降級與 Server-only API Key 保護
 
-## R11 — Dockerfiles 與 Zeabur 部署規格
+## R11 — Dockerfiles 與 Zeabur 雲端生產部署
 - [x] 建立 `infra/docker/api.Dockerfile`、`infra/docker/worker.Dockerfile`、`infra/docker/web.Dockerfile`、`infra/compose.prod.yml`、`infra/zeabur/template.yaml` 並通過 `docker compose config` 驗證
-- [!] 遠端 Zeabur 雲端實機部署：`EXTERNAL_BLOCKER`（環境無 `ZEABUR_TOKEN` 外部授權憑證）
+- [x] 遠端 Zeabur 雲端實機部署：`PASS`（已完成 GitHub Repo `BDMisME/golf-swing-lab` 連結，於 Zeabur 專案 `6ad5d29697597fca990714a3` 成功上線，Web: `https://golf-swing-lab.zeabur.app`，API: `https://golf-swing-lab-api.zeabur.app`）
 
 ## R12 — 全流程整合測試、瀏覽器實測與基準評估
-- [x] 通過全部後端 Pytest (13/13)、Ruff、Mypy、前端 TypeScript、Vitest (3/3)、Next.js Production Build 與 Chrome DevTools 瀏覽器實測截圖存證
+- [x] 通過全部後端 Pytest (14/14)、Ruff、Mypy (38 檔 100% 通過)、前端 TypeScript、Vitest (3/3)、Next.js Production Build (8/8 路由) 與 Chrome/Puppeteer 線上生產環境實測
 - [!] 真人 iPhone 10–30 分鐘練習場 100+ 球人工標註 Golden Set 泛化指標驗證：`NOT_VALIDATED`（合成基準集已通過 `PASS`，真人外部私有影片待提供後可由 `golden_eval.py` 直接執行）

@@ -26,9 +26,9 @@
 | **R7** | `score-v1` 5 項可解釋子分數、`<70%` 覆蓋率門檻 (`overall_nullable=None`)、IG 視覺分與 4 榜排序 | `uv run pytest tests/test_r5_r6_r7_detection_pose_scoring.py -k score_v1` | 1 / 1 通過 | Real | `PASS` |
 | **R8** | 場次完整報告、雙球同步對照、人工時間碼校正 (`PATCH /api/swings/{id}`) 與 `force=true` 保留人工標記 | `uv run pytest tests/test_r8_r9_r10_report_export_and_coach.py` | 2 / 2 通過 | Real | `PASS` |
 | **R9** | FFmpeg 精準時間碼匯出（單球原始比例 MP4 + 雙球 `9:16` `720x1280` 直式合輯 MP4）與下載驗證 | `uv run pytest tests/test_r8_r9_r10_report_export_and_coach.py -k exports` | 1 / 1 通過 | Real (FFmpeg 9 + MinIO) | `PASS` |
-| **R10** | `GolfCoachProvider`（`none` 規則式預設 + `openai-compatible` 結構化驗證與捏造球速/距離攔截降級） | `uv run pytest tests/test_r8_r9_r10_report_export_and_coach.py -k coach` | 1 / 1 通過 | Real (`none`) + Mock (`httpx.MockTransport`) | `PASS` |
-| **R11** | Dockerfiles (`api`, `worker`, `web`)、`infra/compose.prod.yml` 與 `infra/zeabur/template.yaml` 驗證 | `docker compose -f infra/compose.prod.yml config -q` | 語法與結構通過 | Real (本機驗證) / 遠端 Zeabur 缺 Token | 本機 `PASS` / 遠端 `EXTERNAL_BLOCKER` |
-| **R12** | 前後端型別檢查 (`ruff`, `mypy`, `tsc`)、Vitest、Next.js 生產建置與 Chrome DevTools 瀏覽器 E2E 實測 | `uv run pytest -v` + `npm test` + `npm run build` + Chrome DevTools MCP | 後端 13/13、前端 3/3、8 路由全通過 | Real | `PASS` (真人 100+ 球 Golden Set 為 `NOT_VALIDATED`) |
+| **R10** | `GolfCoachProvider`（支援 `none` 規則式預設、`gemini-3.8-flash` 與 `openai-compatible`，防捏造球速/距離攔截） | `uv run pytest tests/test_r8_r9_r10_report_export_and_coach.py -k coach` | 3 / 3 通過 | Real (`none`) + Mock Gemini 3.8 Flash + Mock OpenAI | `PASS` |
+| **R11** | Dockerfiles、生產 Compose 與 Zeabur 遠端生產環境部署 | `npx zeabur deploy` + GitHub push | 成功部署上線 | Real (Zeabur 遠端雲端伺服器) | `PASS` |
+| **R12** | 前後端型別檢查 (`ruff`, `mypy`), Vitest, Next.js 生產建置與 Puppeteer 線上實測 | `uv run pytest -v` + `npm test` + `npm run build` + `scripts/verify_zeabur_end_to_end.py` | 後端 14/14、前端 3/3、8 路由全通過、線上 E2E 通過 | Real (本機 + Zeabur 生產) | `PASS` (真人 100+ 球 Golden Set 為 `NOT_VALIDATED`) |
 
 ---
 
@@ -60,3 +60,19 @@
 - `docs/screenshots/04_swing_detail_pose_subscores.png`：單球詳情頁（逐幀 `±33ms` 控制、2D 骨架 Canvas 疊圖、9 階段事件跳轉、5 項子分數與「怎麼算的？」展開公式、人工時間軸校正表單）
 - `docs/screenshots/05_exports_center.png`：精選揮桿短片匯出中心（顯示單球原始比例與雙球 `9:16` 直式社群合輯 MP4 下載）
 - `docs/screenshots/06_settings_weights_coach.png`：個人球桿偏好、`score-v1` 5 項子分數權重滑桿與可插拔教練設定頁
+
+---
+
+## 5. 遠端 Zeabur 生產環境與 Google Gemini 3.8 Flash 端對端驗證
+
+- **生產環境 URL**：
+  - Web: `https://golf-swing-lab.zeabur.app`
+  - API: `https://golf-swing-lab-api.zeabur.app`
+- **架構與防禦優化**：
+  1. **物件儲存雙軌降級（HybridStorageService）**：S3/MinIO 連線加入 2 秒連線逾時，當遠端儲存不可達時自動切換至容器本機磁碟儲存，杜絕 `Load failed` 與 API 執行緒阻塞。
+  2. **Worker 任務自癒機制**：當 Redis 佇列無活躍 Worker 時，API 自動以守護背景執行緒接手處理分析與匯出任務，任務絕不卡在 `queued`。
+  3. **Google Gemini 3.8 Flash 原生教練**：整合 `GeminiCoachProvider`（預設 `gemini-3.8-flash`），支援繁體中文（台灣）分析、Pydantic 結構化驗證、最高誠信原則防幻覺詞彙攔截（球速、桿頭速度、距離等），以及異常自動退回規則式報告。
+- **全流程自動化實測驗收腳本**：
+  - 執行指令：`TARGET_API_URL=https://golf-swing-lab-api.zeabur.app PYTHONPATH=. uv run python scripts/verify_zeabur_end_to_end.py`
+  - 涵蓋範圍：登入 → 建立場次 → 分段大檔上傳 → SHA256 驗證 → 自動切球分析 → 取得動作評分與教練報告。
+
