@@ -24,10 +24,12 @@ export default function SessionDetailPage() {
     "posture" | "tempo" | "finish" | "ig"
   >("posture");
   const [compareIds, setCompareIds] = useState<[string, string]>(["", ""]);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [manualStartMs, setManualStartMs] = useState(1000);
   const [manualEndMs, setManualEndMs] = useState(4200);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
@@ -48,13 +50,19 @@ export default function SessionDetailPage() {
         }
       }
 
-      const rep = await apiFetch<any>(`/api/sessions/${sessionId}/report`);
-      setReport(rep);
+      // 立即解鎖時間軸與切球清單渲染！
+      setLoading(false);
+
+      // 異步背景獲取教練報告，不阻斷主畫面互動
+      setReportLoading(true);
+      apiFetch<any>(`/api/sessions/${sessionId}/report`)
+        .then((rep) => setReport(rep))
+        .catch(() => {})
+        .finally(() => setReportLoading(false));
     } catch (err: any) {
       if (String(err.message).includes("401")) {
         router.push("/login");
       }
-    } finally {
       setLoading(false);
     }
   }, [sessionId, router, compareIds]);
@@ -83,6 +91,15 @@ export default function SessionDetailPage() {
   const handleTriggerAnalyze = async (videoId: string, force = false) => {
     await apiFetch(`/api/videos/${videoId}/analyze?force=${force}`, {
       method: "POST",
+    });
+    await loadAll();
+  };
+
+  const handleToggleLabel = async (swId: string, currentLabel: string) => {
+    const nextLabel = currentLabel === "practice_swing" ? "valid_swing" : "practice_swing";
+    await apiFetch(`/api/swings/${swId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ label: nextLabel }),
     });
     await loadAll();
   };
@@ -366,13 +383,27 @@ export default function SessionDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-gray-800/80 pt-3">
-                  <Link
-                    href={`/swings/${sw.id}`}
-                    className="rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600 hover:text-white"
-                  >
-                    單球詳情與怎麼算的？
-                  </Link>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-gray-800/80 pt-3">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/swings/${sw.id}`}
+                      className="rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600 hover:text-white"
+                    >
+                      單球詳情與軌跡 &rarr;
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLabel(sw.id, sw.label)}
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                        sw.label === "practice_swing"
+                          ? "border border-emerald-600/60 bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/60"
+                          : "border border-gray-700 bg-gray-900 text-gray-400 hover:text-gray-200"
+                      }`}
+                      title={sw.label === "practice_swing" ? "點擊將此球轉為正式揮桿並重新計分" : "點擊將此球設為空揮練習"}
+                    >
+                      {sw.label === "practice_swing" ? "轉為正式擊球" : "設為空揮"}
+                    </button>
+                  </div>
                   <button
                     onClick={() => handleDeleteSwing(sw.id)}
                     className="text-xs text-gray-500 hover:text-red-400"
@@ -494,6 +525,54 @@ export default function SessionDetailPage() {
             </div>
           </div>
 
+          {/* 雙球慢動作控制列 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-800 bg-black/60 p-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 font-semibold">雙球播放速度:</span>
+              {[
+                { label: "1.0x 原速", val: 1.0 },
+                { label: "0.5x 慢速", val: 0.5 },
+                { label: "0.25x 超慢動作", val: 0.25 },
+              ].map((sp) => (
+                <button
+                  key={sp.val}
+                  type="button"
+                  onClick={() => {
+                    setPlaybackSpeed(sp.val);
+                    const vids = document.querySelectorAll<HTMLVideoElement>(".compare-video");
+                    vids.forEach((v) => {
+                      v.playbackRate = sp.val;
+                    });
+                  }}
+                  className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                    playbackSpeed === sp.val
+                      ? "bg-emerald-500 text-black shadow-sm"
+                      : "border border-gray-700 bg-black/40 text-gray-300 hover:border-gray-500"
+                  }`}
+                >
+                  {sp.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const vids = document.querySelectorAll<HTMLVideoElement>(".compare-video");
+                  const allPaused = Array.from(vids).every((v) => v.paused);
+                  vids.forEach((v) => {
+                    if (allPaused) v.play();
+                    else v.pause();
+                  });
+                }}
+                className="rounded-lg border border-emerald-600 bg-emerald-950/40 px-3 py-1 font-semibold text-emerald-400 hover:bg-emerald-900/50"
+              >
+                ▶/⏸ 雙球同步播放 / 暫停
+              </button>
+            </div>
+          </div>
+
           {swingA && swingB && (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {[swingA, swingB].map((sw, idx) => (
@@ -512,9 +591,10 @@ export default function SessionDetailPage() {
                   {primaryVideo && (
                     <video
                       controls
+                      playsInline
                       preload="metadata"
-                      src={`${API_BASE_URL}/api/videos/${primaryVideo.id}/stream#t=${(sw.start_ms / 1000).toFixed(2)},${(sw.end_ms / 1000).toFixed(2)}`}
-                      className="w-full rounded-lg border border-gray-800 bg-black"
+                      src={`${API_BASE_URL}/api/videos/${primaryVideo.id}/stream?token=${encodeURIComponent(getAuthToken() || "")}#t=${(sw.start_ms / 1000).toFixed(2)},${(sw.end_ms / 1000).toFixed(2)}`}
+                      className="compare-video w-full rounded-lg border border-gray-800 bg-black"
                     />
                   )}
                   <div className="space-y-1.5 text-xs">
@@ -547,7 +627,15 @@ export default function SessionDetailPage() {
         </section>
       )}
 
-      {/* 規則式 / AI 教練總結報告 */}
+      {/* 規則式 / AI 教練總結報告 (含骨架波紋加載狀態) */}
+      {reportLoading && !report?.coach_report && (
+        <section className="animate-pulse rounded-2xl border border-gray-800 bg-[#0d161d] p-5 space-y-3">
+          <div className="h-4 w-48 rounded bg-gray-700" />
+          <div className="h-3 w-72 rounded bg-gray-800" />
+          <div className="h-16 w-full rounded-xl bg-gray-800/50" />
+        </section>
+      )}
+
       {report?.coach_report && (
         <section className="rounded-2xl border border-emerald-900/60 bg-[#0d161d] p-5 space-y-4">
           <div className="flex items-center justify-between">

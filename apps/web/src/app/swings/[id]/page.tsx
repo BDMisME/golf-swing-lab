@@ -22,6 +22,9 @@ export default function SwingDetailPage() {
 
   const [swing, setSwing] = useState<SwingSegmentItem | null>(null);
   const [showSkeleton, setShowSkeleton] = useState(true);
+  const [showSwingPath, setShowSwingPath] = useState(true);
+  const [showHeadBox, setShowHeadBox] = useState(true);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [expandedSubscore, setExpandedSubscore] = useState<string | null>(
     "spine_tilt_stability"
   );
@@ -58,7 +61,7 @@ export default function SwingDetailPage() {
     loadSwing();
   }, [loadSwing, router]);
 
-  // 繪製 2D 骨架疊圖於 Canvas
+  // 繪製高爾夫專業 2D 揮桿軌跡 (Swing Path Arc) 與人體骨架疊圖
   const drawPoseOverlay = useCallback(
     (currentTimeMs: number) => {
       const canvas = canvasRef.current;
@@ -66,7 +69,97 @@ export default function SwingDetailPage() {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (!showSkeleton || !swing?.keyframes?.length) return;
+      if (!swing?.keyframes?.length) return;
+
+      const events = swing.events || [];
+      const topEv = events.find((e) => e.event_name === "top");
+      const impactEv = events.find(
+        (e) => e.event_name === "impact_estimated" || e.event_name === "impact"
+      );
+      const topMs = topEv?.time_ms || (swing.start_ms + swing.end_ms) * 0.45;
+      const impactMs = impactEv?.time_ms || (swing.start_ms + swing.end_ms) * 0.7;
+
+      // 1. 繪製手腕/桿頭揮桿軌跡 (Swing Path)
+      if (showSwingPath) {
+        const backswingPts: Array<{ x: number; y: number }> = [];
+        const downswingPts: Array<{ x: number; y: number }> = [];
+
+        for (const kf of swing.keyframes) {
+          const lms = kf.landmarks || {};
+          const rw = lms["right_wrist"];
+          const lw = lms["left_wrist"];
+          const wrist = (rw && rw.visibility >= 0.3) ? rw : lw;
+          if (wrist && wrist.visibility >= 0.3) {
+            const pt = { x: wrist.x * canvas.width, y: wrist.y * canvas.height };
+            if (kf.time_ms <= topMs) {
+              backswingPts.push(pt);
+            } else if (kf.time_ms <= impactMs) {
+              downswingPts.push(pt);
+            }
+          }
+        }
+
+        // 上桿天藍色軌跡
+        if (backswingPts.length >= 2) {
+          ctx.save();
+          ctx.strokeStyle = "#00f0ff";
+          ctx.lineWidth = 3.5;
+          ctx.shadowColor = "#00f0ff";
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.moveTo(backswingPts[0].x, backswingPts[0].y);
+          for (let i = 1; i < backswingPts.length; i++) {
+            ctx.lineTo(backswingPts[i].x, backswingPts[i].y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 下桿鮮紅色軌跡 (熾熱紅，強調釋放加速)
+        if (downswingPts.length >= 2) {
+          ctx.save();
+          ctx.strokeStyle = "#ff2a5f";
+          ctx.lineWidth = 4.5;
+          ctx.shadowColor = "#ff2a5f";
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.moveTo(downswingPts[0].x, downswingPts[0].y);
+          for (let i = 1; i < downswingPts.length; i++) {
+            ctx.lineTo(downswingPts[i].x, downswingPts[i].y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 標記頂點 TOP 與擊球 IMPACT 光環
+        if (backswingPts.length > 0) {
+          const topPt = backswingPts[backswingPts.length - 1];
+          ctx.save();
+          ctx.fillStyle = "#00f0ff";
+          ctx.shadowColor = "#00f0ff";
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.arc(topPt.x, topPt.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = "bold 10px sans-serif";
+          ctx.fillText("TOP 上桿頂點", topPt.x + 8, topPt.y - 4);
+          ctx.restore();
+        }
+
+        if (downswingPts.length > 0) {
+          const impPt = downswingPts[downswingPts.length - 1];
+          ctx.save();
+          ctx.fillStyle = "#ff2a5f";
+          ctx.shadowColor = "#ff2a5f";
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.arc(impPt.x, impPt.y, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = "bold 10px sans-serif";
+          ctx.fillText("IMPACT 擊球點", impPt.x + 8, impPt.y + 4);
+          ctx.restore();
+        }
+      }
 
       // 尋找最接近當前毫秒之關鍵幀
       let nearest = swing.keyframes[0];
@@ -80,46 +173,100 @@ export default function SwingDetailPage() {
       }
 
       const lms = nearest.landmarks || {};
-      const connections: Array<[string, string]> = [
-        ["left_shoulder", "right_shoulder"],
-        ["left_shoulder", "left_hip"],
-        ["right_shoulder", "right_hip"],
-        ["left_hip", "right_hip"],
-        ["right_shoulder", "right_elbow"],
-        ["right_elbow", "right_wrist"],
-        ["right_hip", "right_knee"],
-        ["right_knee", "right_ankle"],
-      ];
 
-      ctx.strokeStyle = "#10b981";
-      ctx.lineWidth = 3;
-      for (const [a, b] of connections) {
-        const pa = lms[a];
-        const pb = lms[b];
-        if (pa && pb && pa.visibility >= 0.4 && pb.visibility >= 0.4) {
+      // 2. 繪製頭部穩定基準圈 (Head Box)
+      if (showHeadBox) {
+        const firstKf = swing.keyframes[0];
+        const initialNose = firstKf?.landmarks?.["nose"];
+        if (initialNose && initialNose.visibility >= 0.4) {
+          const hx = initialNose.x * canvas.width;
+          const hy = initialNose.y * canvas.height;
+          ctx.save();
+          ctx.strokeStyle = "#fbbf24"; // 金黃色基準圈
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
           ctx.beginPath();
-          ctx.moveTo(pa.x * canvas.width, pa.y * canvas.height);
-          ctx.lineTo(pb.x * canvas.width, pb.y * canvas.height);
+          ctx.arc(hx, hy, 18, 0, Math.PI * 2);
           ctx.stroke();
+          ctx.font = "9px sans-serif";
+          ctx.fillStyle = "#fbbf24";
+          ctx.fillText("頭部基準", hx - 18, hy - 22);
+          ctx.restore();
+
+          // 當前頭部位置
+          const currNose = lms["nose"];
+          if (currNose && currNose.visibility >= 0.4) {
+            const cx = currNose.x * canvas.width;
+            const cy = currNose.y * canvas.height;
+            const dist = Math.hypot(cx - hx, cy - hy);
+            ctx.save();
+            ctx.fillStyle = dist > 15 ? "#ef4444" : "#10b981";
+            ctx.beginPath();
+            ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
         }
       }
 
-      for (const [name, pt] of Object.entries(lms)) {
-        if (pt.visibility < 0.4) continue;
-        ctx.fillStyle = name.includes("wrist") ? "#f59e0b" : "#34d399";
-        ctx.beginPath();
-        ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 5, 0, Math.PI * 2);
-        ctx.fill();
+      // 3. 繪製 2D 骨架連線
+      if (showSkeleton) {
+        const connections: Array<[string, string]> = [
+          ["left_shoulder", "right_shoulder"],
+          ["left_shoulder", "left_hip"],
+          ["right_shoulder", "right_hip"],
+          ["left_hip", "right_hip"],
+          ["right_shoulder", "right_elbow"],
+          ["right_elbow", "right_wrist"],
+          ["left_shoulder", "left_elbow"],
+          ["left_elbow", "left_wrist"],
+          ["right_hip", "right_knee"],
+          ["right_knee", "right_ankle"],
+          ["left_hip", "left_knee"],
+          ["left_knee", "left_ankle"],
+        ];
+
+        ctx.strokeStyle = "#34d399";
+        ctx.lineWidth = 2.5;
+        for (const [a, b] of connections) {
+          const pa = lms[a];
+          const pb = lms[b];
+          if (pa && pb && pa.visibility >= 0.35 && pb.visibility >= 0.35) {
+            ctx.beginPath();
+            ctx.moveTo(pa.x * canvas.width, pa.y * canvas.height);
+            ctx.lineTo(pb.x * canvas.width, pb.y * canvas.height);
+            ctx.stroke();
+          }
+        }
+
+        for (const [name, pt] of Object.entries(lms)) {
+          if (pt.visibility < 0.35) continue;
+          ctx.fillStyle = name.includes("wrist")
+            ? "#f59e0b"
+            : name.includes("shoulder") || name.includes("hip")
+            ? "#10b981"
+            : "#6ee7b7";
+          ctx.beginPath();
+          ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     },
-    [showSkeleton, swing]
+    [showSkeleton, showSwingPath, showHeadBox, swing]
   );
 
   useEffect(() => {
     if (swing) {
       drawPoseOverlay(swing.start_ms);
     }
-  }, [swing, showSkeleton, drawPoseOverlay]);
+  }, [swing, showSkeleton, showSwingPath, showHeadBox, drawPoseOverlay]);
+
+  const changePlaybackSpeed = (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = speed;
+    }
+  };
 
   const stepFrame = (deltaMs: number) => {
     if (!videoRef.current) return;
@@ -203,39 +350,105 @@ export default function SwingDetailPage() {
             <video
               ref={videoRef}
               controls
+              playsInline
               preload="metadata"
               onTimeUpdate={(e) =>
                 drawPoseOverlay(Math.round(e.currentTarget.currentTime * 1000))
               }
-              src={`${API_BASE_URL}/api/videos/${swing.video_id}/stream#t=${(swing.start_ms / 1000).toFixed(2)},${(swing.end_ms / 1000).toFixed(2)}`}
+              src={`${API_BASE_URL}/api/videos/${swing.video_id}/stream?token=${encodeURIComponent(getAuthToken() || "")}#t=${(swing.start_ms / 1000).toFixed(2)},${(swing.end_ms / 1000).toFixed(2)}`}
               className="aspect-video w-full"
             />
             <canvas
               ref={canvasRef}
-              width={480}
-              height={360}
+              width={640}
+              height={480}
               className="pointer-events-none absolute inset-0 h-full w-full"
             />
+            {/* 軌跡圖例與提示 */}
+            <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2 rounded-lg bg-black/60 px-2.5 py-1.5 text-[11px] backdrop-blur-sm">
+              <span className="flex items-center gap-1 text-[#00f0ff] font-bold">
+                <span className="inline-block h-2 w-3 rounded-sm bg-[#00f0ff]" />
+                上桿軌跡
+              </span>
+              <span className="text-gray-500">|</span>
+              <span className="flex items-center gap-1 text-[#ff2a5f] font-bold">
+                <span className="inline-block h-2 w-3 rounded-sm bg-[#ff2a5f]" />
+                下桿軌跡
+              </span>
+              <span className="text-gray-500">|</span>
+              <span className="flex items-center gap-1 text-amber-400 font-bold">
+                <span className="inline-block h-2 w-2 rounded-full border border-amber-400" />
+                頭部基準
+              </span>
+            </div>
           </div>
 
+          {/* 慢動作播放與逐幀控制列 */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-800 bg-[#0d141a] p-3 text-xs">
             <div className="flex items-center gap-2">
+              <span className="text-gray-400 font-medium">播放速度:</span>
+              {[
+                { label: "1.0x 原速", val: 1.0 },
+                { label: "0.5x 慢速", val: 0.5 },
+                { label: "0.25x 超慢動作", val: 0.25 },
+              ].map((sp) => (
+                <button
+                  key={sp.val}
+                  type="button"
+                  onClick={() => changePlaybackSpeed(sp.val)}
+                  className={`rounded-lg px-2.5 py-1 font-semibold transition ${
+                    playbackSpeed === sp.val
+                      ? "bg-emerald-500 text-black shadow-sm"
+                      : "border border-gray-700 bg-black/40 text-gray-300 hover:border-gray-500"
+                  }`}
+                >
+                  {sp.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => stepFrame(-33)}
-                className="rounded-lg border border-gray-700 bg-black/50 px-3 py-1.5 font-semibold text-white hover:border-emerald-500"
+                className="rounded-lg border border-gray-700 bg-black/50 px-2.5 py-1 font-semibold text-white hover:border-emerald-500"
               >
-                &larr; 前一幀 (-33ms)
+                &larr; -33ms (前一幀)
               </button>
               <button
                 type="button"
                 onClick={() => stepFrame(33)}
-                className="rounded-lg border border-gray-700 bg-black/50 px-3 py-1.5 font-semibold text-white hover:border-emerald-500"
+                className="rounded-lg border border-gray-700 bg-black/50 px-2.5 py-1 font-semibold text-white hover:border-emerald-500"
               >
-                後一幀 (+33ms) &rarr;
+                +33ms (後一幀) &rarr;
               </button>
             </div>
+          </div>
 
+          {/* 視覺圖層開關 */}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-800 bg-[#0d141a] p-3 text-xs">
+            <button
+              type="button"
+              onClick={() => setShowSwingPath((v) => !v)}
+              className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                showSwingPath
+                  ? "bg-cyan-600 text-white"
+                  : "border border-gray-700 text-gray-300"
+              }`}
+            >
+              {showSwingPath ? "✓ 顯示揮桿軌跡 (上桿藍/下桿紅)" : "隱藏揮桿軌跡"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHeadBox((v) => !v)}
+              className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                showHeadBox
+                  ? "bg-amber-600 text-white"
+                  : "border border-gray-700 text-gray-300"
+              }`}
+            >
+              {showHeadBox ? "✓ 顯示頭部穩定基準圈" : "隱藏頭部基準圈"}
+            </button>
             <button
               type="button"
               onClick={() => setShowSkeleton((v) => !v)}
@@ -245,7 +458,7 @@ export default function SwingDetailPage() {
                   : "border border-gray-700 text-gray-300"
               }`}
             >
-              {showSkeleton ? "隱藏 2D 骨架疊圖" : "顯示 2D 骨架疊圖"}
+              {showSkeleton ? "✓ 顯示人體骨架連線" : "隱藏人體骨架"}
             </button>
           </div>
 

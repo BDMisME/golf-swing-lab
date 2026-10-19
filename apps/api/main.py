@@ -113,6 +113,9 @@ def _dispatch_analysis_job(job_id: str) -> str | None:
         return "inline_fallback"
 
 
+_COACH_REPORT_CACHE: dict[str, dict[str, Any]] = {}
+
+
 def _dispatch_export_job(export_id: str) -> None:
     settings = get_settings()
     if settings.inline_worker_fallback:
@@ -912,11 +915,19 @@ def stream_video(
     verify_owner(db, current_user, video.owner_id, "video", video.id)
 
     storage = get_storage_service()
-    target_key = video.proxy_storage_key or video.storage_key
-    try:
-        head = storage.head_object(target_key)
-    except Exception as exc:
-        raise APIError(404, "STORAGE_OBJECT_NOT_FOUND", "物件儲存中找不到影片檔案") from exc
+    candidates = [k for k in [video.proxy_storage_key, video.storage_key] if k]
+    head = None
+    target_key = None
+    for k in candidates:
+        try:
+            head = storage.head_object(k)
+            target_key = k
+            break
+        except Exception:
+            continue
+
+    if not head or not target_key:
+        raise APIError(404, "STORAGE_OBJECT_NOT_FOUND", "物件儲存中找不到影片檔案，可能伺服器重新啟動中")
 
     total_size = int(head["size_bytes"])
     range_header = request.headers.get("range") or request.headers.get("Range")
@@ -1637,6 +1648,7 @@ def toggle_favorite(
 @app.get("/api/sessions/{session_id}/report")
 async def get_session_report(
     session_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
@@ -1736,7 +1748,15 @@ async def get_session_report(
     else:
         coach_provider = RuleBasedCoachProvider()
 
-    coach_report = await coach_provider.generate_feedback(summary_dict, serialized_swings)
+    regenerate = request.query_params.get("regenerate") in ("true", "1")
+    cache_key = f"{sess.id}:{len(serialized_swings)}:{provider_type}"
+
+    if not regenerate and cache_key in _COACH_REPORT_CACHE:
+        coach_report_data = _COACH_REPORT_CACHE[cache_key]
+    else:
+        coach_report = await coach_provider.generate_feedback(summary_dict, serialized_swings)
+        coach_report_data = coach_report.model_dump()
+        _COACH_REPORT_CACHE[cache_key] = coach_report_data
 
     return {
         "session": _serialize_session(db, sess),
@@ -1745,7 +1765,7 @@ async def get_session_report(
         "needs_review_swings": needs_review,
         "rankings": rankings,
         "favorites": fav_dicts,
-        "coach_report": coach_report.model_dump(),
+        "coach_report": coach_report_data,
     }
 
 
