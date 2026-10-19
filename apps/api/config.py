@@ -51,8 +51,8 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.8-flash"
     llm_max_budget_usd: float = 0.0
 
-    # 若為 true，API 在 enqueue 背景任務時同時可在無獨立 worker 測試環境中執行 inline worker
-    inline_worker_fallback: bool = False
+    # 若為 true，API 在無獨立 worker 或單一容器架構中自動於背景線程處理任務
+    inline_worker_fallback: bool = True
 
     @property
     def cors_origins(self) -> list[str]:

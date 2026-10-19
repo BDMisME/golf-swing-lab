@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from redis import Redis
-from rq import Queue
+from rq import Queue, Worker
 from sqlalchemy import desc, select, text
 from sqlalchemy.orm import Session
 
@@ -88,7 +88,7 @@ def utcnow() -> datetime:
 
 
 def _dispatch_analysis_job(job_id: str) -> str | None:
-    """將分析任務排入背景處理。若啟用 inline_worker_fallback 則直接由本進程背景執行緒處理。"""
+    """將分析任務排入背景處理。若無可用 worker 或啟用 inline_worker_fallback，則自動啟動背景執行緒。"""
     settings = get_settings()
     if settings.inline_worker_fallback:
         t = threading.Thread(target=run_video_analysis_job, args=(job_id,), daemon=True)
@@ -97,6 +97,13 @@ def _dispatch_analysis_job(job_id: str) -> str | None:
 
     try:
         redis_conn = Redis.from_url(settings.redis_url)
+        workers = Worker.all(connection=redis_conn)
+        active_analysis_workers = [w for w in workers if any(q.name == "gsl-analysis" for q in w.queues)]
+        if not active_analysis_workers:
+            t = threading.Thread(target=run_video_analysis_job, args=(job_id,), daemon=True)
+            t.start()
+            return "inline_thread_auto"
+
         q = Queue("gsl-analysis", connection=redis_conn, default_timeout=settings.rq_job_timeout_sec)
         rq_job = q.enqueue(run_video_analysis_job, job_id, job_timeout=settings.rq_job_timeout_sec)
         return str(rq_job.id)
@@ -115,6 +122,13 @@ def _dispatch_export_job(export_id: str) -> None:
 
     try:
         redis_conn = Redis.from_url(settings.redis_url)
+        workers = Worker.all(connection=redis_conn)
+        active_export_workers = [w for w in workers if any(q.name == "gsl-exports" for q in w.queues)]
+        if not active_export_workers:
+            t = threading.Thread(target=run_export_job, args=(export_id,), daemon=True)
+            t.start()
+            return
+
         q = Queue("gsl-exports", connection=redis_conn, default_timeout=600)
         q.enqueue(run_export_job, export_id, job_timeout=600)
     except Exception:
@@ -1703,9 +1717,14 @@ async def get_session_report(
 
     coach_provider: GolfCoachProvider
     if provider_type == "gemini" and api_key:
+        chosen_model = (
+            (user_setting.llm_model.strip() if user_setting and user_setting.llm_model else None)
+            or s_cfg.gemini_model
+            or "gemini-3.8-flash"
+        )
         coach_provider = GeminiCoachProvider(
             api_key=api_key,
-            model=(user_setting.llm_model if user_setting else s_cfg.gemini_model),
+            model=chosen_model,
         )
     elif provider_type == "openai-compatible" and api_key:
         coach_provider = OpenAICompatibleCoachProvider(

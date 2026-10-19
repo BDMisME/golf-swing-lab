@@ -158,7 +158,7 @@ def create_synthetic_dtl_video(
         ]
 
     total_frames = int(round((duration_ms / 1000.0) * fps))
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
     writer = cv2.VideoWriter(str(raw_avi), fourcc, float(fps), (width, height))
     try:
         for idx in range(total_frames):

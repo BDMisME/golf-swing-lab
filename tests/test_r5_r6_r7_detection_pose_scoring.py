@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from typing import Any
+
 from packages.analysis.detection.scanner import (
     CoarseToFineDetector,
     compute_time_iou,
@@ -107,7 +109,7 @@ def test_score_v1_determinism_coverage_gate_and_rankings() -> None:
     assert s1.ig_visual_score is not None
 
     # 有效覆蓋率 < 70%（僅有 25% + 15% = 40% 分項有效）必須回傳 overall_nullable = None
-    sparse_metrics = [
+    sparse_metrics: list[dict[str, Any]] = [
         {"metric_key": "spine_tilt_delta_deg", "value": 3.0, "confidence": 0.85},
         {"metric_key": "head_displacement_ratio", "value": 0.07, "confidence": 0.85},
         {"metric_key": "hand_path_deviation_ratio", "value": None, "confidence": 0.0},

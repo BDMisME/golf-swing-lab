@@ -9,7 +9,11 @@ from fastapi.testclient import TestClient
 from apps.api.config import get_settings
 from apps.api.main import app
 from apps.worker.tasks import run_export_job, run_video_analysis_job
-from packages.analysis.coach import OpenAICompatibleCoachProvider, RuleBasedCoachProvider
+from packages.analysis.coach import (
+    GeminiCoachProvider,
+    OpenAICompatibleCoachProvider,
+    RuleBasedCoachProvider,
+)
 from packages.analysis.probe import probe_video_file
 from tests.fixtures.video_factory import create_synthetic_dtl_video
 
@@ -279,3 +283,139 @@ async def test_llm_coach_adapter_mock_and_anti_hallucination_guard() -> None:
     assert get_s.status_code == 200
     assert "sk-secret-never-expose-12345" not in get_s.text
     assert get_s.json()["has_llm_api_key"] is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_38_flash_coach_provider() -> None:
+    session_summary = {"session_id": "s-gemini", "average_overall_score": 85.0}
+    swing_evidence = [
+        {
+            "id": "seg-201",
+            "sequence_no": 1,
+            "start_ms": 1000,
+            "impact_time_ms": 2800,
+            "label": "valid_swing",
+            "subscores": {
+                "spine_tilt_stability": {
+                    "score": 85.0,
+                    "raw_value": 3.8,
+                    "confidence": 0.95,
+                    "how_calculated": "軀幹前傾角變化 3.8 度",
+                }
+            },
+        }
+    ]
+
+    # 1. 正常結構化回傳測試 (gemini-3.8-flash)
+    def gemini_ok_handler(request: httpx.Request) -> httpx.Response:
+        assert "gemini-3.8-flash" in str(request.url)
+        mock_gemini_body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps(
+                                    {
+                                        "notice": "由 Google gemini-3.8-flash 依據 2D 骨架生成",
+                                        "summary": "整體上下桿節奏穩定，軀幹前傾角保持良好。",
+                                        "observations": [
+                                            {
+                                                "title": "維持軀幹前傾穩定",
+                                                "detail": "於 2800ms 處觀測到 3.8 度變化，表現良好",
+                                                "segment_id": "seg-201",
+                                                "time_ms": 2800,
+                                                "metric_key": "spine_tilt_delta_deg",
+                                                "metric_value": 3.8,
+                                                "confidence": 0.95,
+                                            }
+                                        ],
+                                        "priority_fixes": [
+                                            {
+                                                "focus_area": "強化收桿平衡",
+                                                "action_cue": "擊球後維持收桿平衡 2 秒",
+                                                "drill_steps": "每球擊出後定住收桿姿勢默數 2 秒，連續練習 10 球。",
+                                                "target_metric": "finish_sway_ratio <= 0.12",
+                                            }
+                                        ],
+                                        "uncertainties": [
+                                            "2D DTL 單相機無法量測桿頭速度與真實球飛行距離"
+                                        ],
+                                    },
+                                    ensure_ascii=False,
+                                )
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        return httpx.Response(200, json=mock_gemini_body)
+
+    gemini_provider = GeminiCoachProvider(
+        api_key="mock-gemini-key",
+        model="gemini-3.8-flash",
+        transport=httpx.MockTransport(gemini_ok_handler),
+    )
+    report = await gemini_provider.generate_feedback(session_summary, swing_evidence)
+    assert report.provider == "gemini"
+    assert report.model == "gemini-3.8-flash"
+    assert report.llm_enabled is True
+    assert len(report.observations) == 1
+    assert report.observations[0].time_ms == 2800
+    assert report.observations[0].segment_id == "seg-201"
+
+    # 2. 違規防呆測試（若輸出編造球速或飛行距離，安全降級回 RuleBasedCoachProvider）
+    def gemini_hallucinating_handler(_request: httpx.Request) -> httpx.Response:
+        bad_gemini_body = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps(
+                                    {
+                                        "notice": "",
+                                        "summary": "這球飛行距離估計達 220 碼，球速約 135 mph！",
+                                        "observations": [],
+                                        "priority_fixes": [],
+                                        "uncertainties": [],
+                                    },
+                                    ensure_ascii=False,
+                                )
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        return httpx.Response(200, json=bad_gemini_body)
+
+    guarded_gemini = GeminiCoachProvider(
+        api_key="mock-gemini-key",
+        model="gemini-3.8-flash",
+        transport=httpx.MockTransport(gemini_hallucinating_handler),
+    )
+    r_guarded = await guarded_gemini.generate_feedback(session_summary, swing_evidence)
+    assert r_guarded.provider == "none"
+    assert r_guarded.llm_enabled is False
+
+    # 3. 網路異常或 HTTP 500 測試（自動降級，零停機）
+    def gemini_error_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "Internal Server Error"})
+
+    err_gemini = GeminiCoachProvider(
+        api_key="mock-gemini-key",
+        model="gemini-3.8-flash",
+        transport=httpx.MockTransport(gemini_error_handler),
+    )
+    r_err = await err_gemini.generate_feedback(session_summary, swing_evidence)
+    assert r_err.provider == "none"
+    assert r_err.llm_enabled is False
+
+    # 4. 無 API Key 測試（直接使用規則式報告）
+    no_key_gemini = GeminiCoachProvider(api_key="", model="gemini-3.8-flash")
+    r_no_key = await no_key_gemini.generate_feedback(session_summary, swing_evidence)
+    assert r_no_key.provider == "none"
+    assert r_no_key.llm_enabled is False
+
