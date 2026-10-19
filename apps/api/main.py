@@ -88,32 +88,36 @@ def utcnow() -> datetime:
 
 
 def _dispatch_analysis_job(job_id: str) -> str | None:
-    """將分析任務排入 Redis RQ 佇列；若啟用 inline_worker_fallback 或無獨立 worker 監聽時同步啟動背景執行緒。"""
+    """將分析任務排入背景處理。若啟用 inline_worker_fallback 則直接由本進程背景執行緒處理。"""
     settings = get_settings()
-    rq_id: str | None = None
+    if settings.inline_worker_fallback:
+        t = threading.Thread(target=run_video_analysis_job, args=(job_id,), daemon=True)
+        t.start()
+        return "inline_thread"
+
     try:
         redis_conn = Redis.from_url(settings.redis_url)
         q = Queue("gsl-analysis", connection=redis_conn, default_timeout=settings.rq_job_timeout_sec)
         rq_job = q.enqueue(run_video_analysis_job, job_id, job_timeout=settings.rq_job_timeout_sec)
-        rq_id = str(rq_job.id)
+        return str(rq_job.id)
     except Exception:
-        rq_id = None
-
-    if settings.inline_worker_fallback:
         t = threading.Thread(target=run_video_analysis_job, args=(job_id,), daemon=True)
         t.start()
-    return rq_id
+        return "inline_fallback"
 
 
 def _dispatch_export_job(export_id: str) -> None:
     settings = get_settings()
+    if settings.inline_worker_fallback:
+        t = threading.Thread(target=run_export_job, args=(export_id,), daemon=True)
+        t.start()
+        return
+
     try:
         redis_conn = Redis.from_url(settings.redis_url)
         q = Queue("gsl-exports", connection=redis_conn, default_timeout=600)
         q.enqueue(run_export_job, export_id, job_timeout=600)
     except Exception:
-        pass
-    if settings.inline_worker_fallback:
         t = threading.Thread(target=run_export_job, args=(export_id,), daemon=True)
         t.start()
 
