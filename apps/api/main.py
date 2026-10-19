@@ -1246,6 +1246,11 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
         "score_version": score.score_version if score else "score-v1",
         "score_explanation": score.explanation if score else "",
         "subscores": score.subscores_json if score else {},
+        "ball_trajectory": (
+            artifact.quality_metadata.get("ball_trajectory", [])
+            if (artifact and artifact.quality_metadata)
+            else []
+        ),
         "events": [
             {
                 "id": e.id,

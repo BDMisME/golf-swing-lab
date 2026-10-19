@@ -11,7 +11,11 @@ from packages.analysis.events.state_machine import (
     SwingPhaseStateMachine,
     compute_observable_metrics,
 )
-from packages.analysis.pose.extractor import FramePoseResult, PoseExtractor
+from packages.analysis.pose import (
+    FramePoseResult,
+    PoseExtractor,
+    create_pose_extractor,
+)
 
 
 def compute_time_iou(a_start: int, a_end: int, b_start: int, b_end: int) -> float:
@@ -92,7 +96,7 @@ class CoarseToFineDetector:
         duration_ms: int,
         progress_cb: Callable[[str, int, str], None] | None = None,
     ) -> tuple[list[CandidateSegmentResult], dict[str, Any]]:
-        extractor = PoseExtractor()
+        extractor = create_pose_extractor()
         try:
             if progress_cb:
                 progress_cb("coarse_scan", 20, "啟動低解析度稀疏掃描 (Coarse Scan)")
@@ -148,7 +152,7 @@ class CoarseToFineDetector:
         extractor: PoseExtractor | None = None,
     ) -> CandidateSegmentResult | None:
         own_extractor = extractor is None
-        ext = extractor or PoseExtractor()
+        ext = extractor or create_pose_extractor()
         try:
             fine_frames = self._sample_video_window(
                 video_path=video_path,
@@ -229,12 +233,36 @@ class CoarseToFineDetector:
                 if fr.time_ms in event_times or idx_f % 2 == 0:
                     keyframes.append(fr.to_dict())
 
+            # 若為有效擊球，啟動小白球專用模型與卡爾曼濾波器捕獲出球飛行彈道
+            ball_traj: list[dict[str, float]] = []
+            imp_ev = next((e for e in events if "impact" in e.event_name), None)
+            if imp_ev and label == "valid_swing":
+                try:
+                    from packages.analysis.tracking.ball_tracker import GolfBallDetector
+                    b_det = GolfBallDetector()
+                    ref_wrist = None
+                    for fr in fine_frames:
+                        if abs(fr.time_ms - imp_ev.time_ms) < 150:
+                            rw = fr.landmarks.get("right_wrist") or fr.landmarks.get("left_wrist")
+                            if rw:
+                                ref_wrist = (rw.x, rw.y)
+                                break
+                    ball_traj = b_det.track_swing_launch(
+                        video_path=video_path,
+                        impact_ms=imp_ev.time_ms,
+                        player_wrist_norm=ref_wrist,
+                        duration_ms=1200,
+                    )
+                except Exception as b_exc:
+                    logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
+
             quality_meta = {
                 "mean_brightness": round(float(np.mean(brights or [0.0])), 2),
                 "mean_sharpness": round(float(np.mean(sharps or [0.0])), 2),
                 "max_camera_motion": round(float(np.max(cam_motions or [0.0])), 4),
                 "state_trace": state_trace,
                 "sampled_frame_count": len(fine_frames),
+                "ball_trajectory": ball_traj,
             }
 
             return CandidateSegmentResult(

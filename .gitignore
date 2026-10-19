@@ -45,3 +45,9 @@ tests/golden/private_videos/
 *.MOV
 !tests/fixtures/*.mp4
 !tests/fixtures/*.mov
+
+# AI Model weights (stored in ~/Library/Application Support/GolfSwingLab/models)
+*.pt
+*.onnx
+*.engine
+dist_mac/

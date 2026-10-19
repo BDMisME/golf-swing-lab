@@ -30,6 +30,7 @@ export default function SessionDetailPage() {
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
+  const [trendMetric, setTrendMetric] = useState<"score" | "spine" | "head" | "tempo">("score");
 
   const loadAll = useCallback(async () => {
     try {
@@ -327,6 +328,197 @@ export default function SessionDetailPage() {
             + 手動新增揮桿片段
           </button>
         </form>
+
+        {/* 揮桿動作長期進步與穩定度曲線 (Progress Trend Analytics) */}
+        {swings.length >= 2 && (
+          <div className="rounded-xl border border-gray-800 bg-black/40 p-4 space-y-3">
+            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>📈 揮桿動作進步與穩定度曲線</span>
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-medium">
+                    室內模擬器級數據
+                  </span>
+                </h3>
+                <p className="text-[11px] text-gray-400">
+                  球員在各球動作指標上的連續變化，實時追蹤體能、節奏與動作穩定度的真實進步曲線。
+                </p>
+              </div>
+
+              {/* 指標切換鈕 */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                {[
+                  { key: "score", label: "綜合動作評分" },
+                  { key: "spine", label: "前傾穩定度" },
+                  { key: "head", label: "頭部微動" },
+                  { key: "tempo", label: "節奏一致性" },
+                ].map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setTrendMetric(m.key as any)}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                      trendMetric === m.key
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "border border-gray-800 bg-black/60 text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* SVG 折線圖 */}
+            {(() => {
+              const scorableSwings = swings.filter((s) => s.overall_score !== null);
+              if (scorableSwings.length < 2) return null;
+
+              const getVal = (s: SwingSegmentItem) => {
+                if (trendMetric === "score") return s.overall_score ?? 0;
+                if (trendMetric === "spine")
+                  return s.subscores?.spine_tilt_stability?.score ?? 0;
+                if (trendMetric === "head")
+                  return s.subscores?.head_stability?.score ?? 0;
+                if (trendMetric === "tempo")
+                  return s.subscores?.tempo_consistency?.score ?? 0;
+                return s.overall_score ?? 0;
+              };
+
+              const vals = scorableSwings.map(getVal);
+              const maxVal = Math.max(...vals, 90);
+              const minVal = Math.max(0, Math.min(...vals, 60) - 10);
+              const range = Math.max(10, maxVal - minVal);
+
+              const w = 700;
+              const h = 150;
+              const padX = 40;
+              const padY = 25;
+
+              const pts = vals.map((v, i) => {
+                const x = padX + (i / (vals.length - 1)) * (w - padX * 2);
+                const y = h - padY - ((v - minVal) / range) * (h - padY * 2);
+                return { x, y, v, s: scorableSwings[i] };
+              });
+
+              const pathD = pts.reduce(
+                (acc, pt, idx) =>
+                  idx === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`,
+                ""
+              );
+
+              // 職業標竿線 Y (85分)
+              const proY =
+                h - padY - ((85 - minVal) / range) * (h - padY * 2);
+
+              const firstHalf = vals.slice(0, Math.floor(vals.length / 2));
+              const secondHalf = vals.slice(Math.floor(vals.length / 2));
+              const avg1 = firstHalf.reduce((a, b) => a + b, 0) / (firstHalf.length || 1);
+              const avg2 = secondHalf.reduce((a, b) => a + b, 0) / (secondHalf.length || 1);
+              const delta = Math.round((avg2 - avg1) * 10) / 10;
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-gray-400">
+                    <span className="flex items-center gap-2">
+                      <span>場次均分: <b className="text-white">{(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)}分</b></span>
+                      <span>·</span>
+                      <span>最高單球: <b className="text-emerald-400">{Math.max(...vals)}分</b></span>
+                    </span>
+                    <span className={`font-semibold ${delta >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                      {delta >= 0 ? `↑ 後半場狀態提升 +${delta} 分` : `↓ 動作略有疲勞下滑 ${delta} 分`}
+                    </span>
+                  </div>
+
+                  <div className="relative w-full overflow-hidden rounded-xl border border-gray-800 bg-[#070b0e] p-2">
+                    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-36">
+                      <defs>
+                        <linearGradient id="curveGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* 職業標竿參考虛線 (85分) */}
+                      {proY >= padY && proY <= h - padY && (
+                        <g>
+                          <line
+                            x1={padX}
+                            y1={proY}
+                            x2={w - padX}
+                            y2={proY}
+                            stroke="#fbbf24"
+                            strokeWidth="1.2"
+                            strokeDasharray="4 4"
+                            opacity="0.6"
+                          />
+                          <text
+                            x={w - padX - 4}
+                            y={proY - 4}
+                            fill="#fbbf24"
+                            fontSize="9"
+                            textAnchor="end"
+                            fontWeight="bold"
+                          >
+                            PGA 巡迴賽標竿 (85分)
+                          </text>
+                        </g>
+                      )}
+
+                      {/* 面積填色 */}
+                      <path
+                        d={`${pathD} L ${pts[pts.length - 1].x} ${h - padY} L ${pts[0].x} ${h - padY} Z`}
+                        fill="url(#curveGrad)"
+                      />
+
+                      {/* 折線 */}
+                      <path
+                        d={pathD}
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+
+                      {/* 數據點 */}
+                      {pts.map((pt, idx) => (
+                        <g key={idx} className="cursor-pointer">
+                          <circle
+                            cx={pt.x}
+                            cy={pt.y}
+                            r="4.5"
+                            fill="#070b0e"
+                            stroke="#10b981"
+                            strokeWidth="2"
+                          />
+                          <text
+                            x={pt.x}
+                            y={pt.y - 8}
+                            fill="#9ca3af"
+                            fontSize="9"
+                            textAnchor="middle"
+                          >
+                            {pt.v}
+                          </text>
+                          <text
+                            x={pt.x}
+                            y={h - 8}
+                            fill="#6b7280"
+                            fontSize="9"
+                            textAnchor="middle"
+                          >
+                            #{pt.s.sequence_no}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* 每一球列表 */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

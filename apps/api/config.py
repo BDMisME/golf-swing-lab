@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     max_video_duration_sec: int = 1800  # 30 minutes
     worker_concurrency: int = 1
     rq_job_timeout_sec: int = 3600
+    pose_backend: str = "yolov8x-pose"
     analysis_model_version: str = "pose-v1"
     scoring_version: str = "score-v1"
     data_retention_days: int = 30

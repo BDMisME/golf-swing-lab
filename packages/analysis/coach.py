@@ -41,6 +41,7 @@ class GolfCoachProvider(Protocol):
         self,
         session_summary: dict[str, Any],
         swing_evidence: list[dict[str, Any]],
+        keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport: ...
 
 
@@ -65,6 +66,7 @@ class RuleBasedCoachProvider:
         self,
         session_summary: dict[str, Any],
         swing_evidence: list[dict[str, Any]],
+        keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport:
         valid_swings = [
             s for s in swing_evidence if s.get("label") in ("valid_swing", "practice_swing")
@@ -224,21 +226,22 @@ class OpenAICompatibleCoachProvider:
         self,
         session_summary: dict[str, Any],
         swing_evidence: list[dict[str, Any]],
+        keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport:
-        base_report = await self.fallback.generate_feedback(session_summary, swing_evidence)
+        base_report = await self.fallback.generate_feedback(session_summary, swing_evidence, keyframe_images)
         if not self.api_key or self.max_budget_usd <= 0:
             return base_report
 
         system_prompt = (
             "你是 Golf Swing Lab 專業高爾夫動作分析教練。一律使用繁體中文（台灣）。\n"
-            "請依據輸入數據產出嚴格純 JSON（請勿輸出 Markdown ```json 標記）：\n"
+            "請身為頂級職業巡迴賽教練，依據輸入數據與選手關鍵定格照片產出嚴格純 JSON（請勿輸出 Markdown ```json 標記）：\n"
             "{\n"
-            '  "summary": "場次評估摘要",\n'
+            '  "summary": "場次評估摘要（3-4句話，點出站姿、揮桿平面與整體流暢度）",\n'
             '  "observations": [\n'
-            '    {"title": "動作觀察標題", "detail": "詳細說明", "confidence": 0.9}\n'
+            '    {"title": "動作觀察標題", "detail": "詳細說明（結合附圖視線觀察與幾何指標）", "confidence": 0.9}\n'
             "  ],\n"
             '  "priority_fixes": [\n'
-            '    {"focus_area": "焦點", "action_cue": "口訣", "drill_steps": "訓練步驟", "target_metric": "改善目標"}\n'
+            '    {"focus_area": "焦點", "action_cue": "體感口訣", "drill_steps": "具體修正練習步驟", "target_metric": "改善目標"}\n'
             "  ],\n"
             '  "uncertainties": ["限制說明"]\n'
             "}\n"
@@ -267,21 +270,43 @@ class OpenAICompatibleCoachProvider:
                 "subscores": s.get("subscores"),
             })
 
+        evidence_json = json.dumps(
+            {
+                "session_summary": session_summary,
+                "representative_swings": compact_evidence,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+        # 支援多模態圖片 (Vision API - 豆包 doubao-seed-2.1-lite)
+        if keyframe_images and len(keyframe_images) > 0:
+            user_content: list[dict[str, Any]] = [
+                {
+                    "type": "text",
+                    "text": (
+                        f"選手揮桿場次統計與代表球指標：\n{evidence_json}\n\n"
+                        "附上選手關鍵影格截圖（Address、Top、Impact、Finish）。"
+                        "請結合照片中選手之真實脊柱前傾、雙手懸垂、頭部位置、臀部轉向與收桿平衡，提供專業動作診斷與具體練習建議！"
+                    ),
+                }
+            ]
+            for img in keyframe_images[:4]:
+                b64_val = img.get("base64") or ""
+                url_str = b64_val if b64_val.startswith("data:") else f"data:image/jpeg;base64,{b64_val}"
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": url_str},
+                })
+        else:
+            user_content = evidence_json
+
         payload = {
             "model": self.model,
             "temperature": 0.2,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "session_summary": session_summary,
-                            "representative_swings": compact_evidence,
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
+                {"role": "user", "content": user_content},
             ],
         }
 
@@ -380,8 +405,9 @@ class GeminiCoachProvider:
         self,
         session_summary: dict[str, Any],
         swing_evidence: list[dict[str, Any]],
+        keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport:
-        base_report = await self.fallback.generate_feedback(session_summary, swing_evidence)
+        base_report = await self.fallback.generate_feedback(session_summary, swing_evidence, keyframe_images)
         if not self.api_key:
             return base_report
 

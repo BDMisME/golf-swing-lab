@@ -99,6 +99,7 @@ export interface SwingSegmentItem {
     pose_confidence: number;
     landmarks: Record<string, { x: number; y: number; visibility: number }>;
   }>;
+  ball_trajectory?: Array<{ time_ms: number; x: number; y: number }>;
   feedback_history?: Array<{
     id: string;
     category: string;

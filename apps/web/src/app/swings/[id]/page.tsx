@@ -25,6 +25,7 @@ export default function SwingDetailPage() {
   const [showSwingPath, setShowSwingPath] = useState(true);
   const [showHeadBox, setShowHeadBox] = useState(true);
   const [showBallTracer, setShowBallTracer] = useState(true);
+  const [showProGhost, setShowProGhost] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [expandedSubscore, setExpandedSubscore] = useState<string | null>(
     "spine_tilt_stability"
@@ -229,19 +230,30 @@ export default function SwingDetailPage() {
           }
         }
 
-        // 計算 DTL 視角出球拋物線 (隨透視向遠方球道縮小飛行)
-        const tracerPts: Array<{ x: number; y: number; r: number }> = [];
-        const flightDurationMs = 1200; // 1.2 秒出球追蹤
-        const numSteps = 24;
+        // 若有 YOLOv8n 真球捕捉與卡爾曼濾波彈道，優先採用真實軌跡；若無則自動啟動 DTL 幾何擬合
+        let tracerPts: Array<{ x: number; y: number; r: number }> = [];
+        const flightDurationMs = 1200;
 
-        for (let step = 0; step <= numSteps; step++) {
-          const tNorm = step / numSteps;
-          // 水平向右微偏 (桿面釋放平面)，垂直向上拋物線，透視尺寸縮小
-          const flightX = impX + canvas.width * 0.18 * tNorm;
-          const parabola = 4 * tNorm * (1 - tNorm * 0.6);
-          const flightY = impY - canvas.height * 0.44 * parabola;
-          const ballRadius = Math.max(1.8, 4.5 * (1 - tNorm * 0.65));
-          tracerPts.push({ x: flightX, y: flightY, r: ballRadius });
+        if (swing.ball_trajectory && swing.ball_trajectory.length >= 3) {
+          const rawTraj = swing.ball_trajectory;
+          tracerPts = rawTraj.map((pt, idx) => {
+            const tNorm = idx / Math.max(1, rawTraj.length - 1);
+            return {
+              x: pt.x * canvas.width,
+              y: pt.y * canvas.height,
+              r: Math.max(1.8, 4.5 * (1 - tNorm * 0.65)),
+            };
+          });
+        } else {
+          const numSteps = 24;
+          for (let step = 0; step <= numSteps; step++) {
+            const tNorm = step / numSteps;
+            const flightX = impX + canvas.width * 0.18 * tNorm;
+            const parabola = 4 * tNorm * (1 - tNorm * 0.6);
+            const flightY = impY - canvas.height * 0.44 * parabola;
+            const ballRadius = Math.max(1.8, 4.5 * (1 - tNorm * 0.65));
+            tracerPts.push({ x: flightX, y: flightY, r: ballRadius });
+          }
         }
 
         const timeSinceImpact = currentTimeMs - impactMs;
@@ -272,7 +284,8 @@ export default function SwingDetailPage() {
           ctx.fillText("BALL 球位", impX + 12, impY + 3);
         } else {
           // 擊球後：拉出高爾夫專業 Toptracer 螢光出球動態軌跡！
-          const currentStep = Math.max(1, Math.floor(progress * numSteps));
+          const maxStep = Math.max(1, tracerPts.length - 1);
+          const currentStep = Math.max(1, Math.min(maxStep, Math.floor(progress * maxStep)));
           if (tracerPts.length >= 2) {
             ctx.shadowColor = "#39ff14";
             ctx.shadowBlur = 12;
@@ -306,11 +319,16 @@ export default function SwingDetailPage() {
             ctx.fill();
 
             // 標示出球動態標籤
+            const isRealTraj = Boolean(swing.ball_trajectory && swing.ball_trajectory.length >= 3);
             ctx.font = "bold 10px sans-serif";
-            ctx.fillStyle = "#39ff14";
+            ctx.fillStyle = isRealTraj ? "#00f0ff" : "#39ff14";
             ctx.shadowColor = "#000000";
             ctx.shadowBlur = 4;
-            ctx.fillText("TRACER 出球軌跡", curBall.x + 8, curBall.y - 4);
+            ctx.fillText(
+              isRealTraj ? "AI 追蹤: 真實出球動態 (Kalman)" : "TRACER 出球動態軌跡",
+              curBall.x + 8,
+              curBall.y - 4
+            );
           }
         }
         ctx.restore();
@@ -358,15 +376,172 @@ export default function SwingDetailPage() {
           ctx.fill();
         }
       }
+
+      // 5. 繪製 PGA 職業標竿幽靈半透明疊影 (Pro Ghost Overlay)
+      if (showProGhost) {
+        const sh = lms["right_shoulder"] || lms["left_shoulder"];
+        const hip = lms["right_hip"] || lms["left_hip"];
+        const ank = lms["right_ankle"] || lms["left_ankle"];
+        const head = lms["nose"];
+
+        if (sh && hip && ank) {
+          const userHipY = hip.y * canvas.height;
+          const userAnkY = ank.y * canvas.height;
+          const userHipX = hip.x * canvas.width;
+          const userHeightPx = Math.max(
+            80,
+            userAnkY - (head ? head.y * canvas.height : sh.y * canvas.height * 0.9)
+          );
+
+          let phaseName = "準備姿勢 (Address)";
+          let phaseKey: "address" | "top" | "impact" | "finish" = "address";
+          let proSpineAngle = 38.0;
+
+          if (currentTimeMs <= topMs * 0.75) {
+            phaseKey = "address";
+            phaseName = "PGA 標竿: 準備站姿 (Address)";
+            proSpineAngle = 38.0;
+          } else if (currentTimeMs <= (topMs + impactMs) / 2) {
+            phaseKey = "top";
+            phaseName = "PGA 標竿: 上桿頂點 (Top)";
+            proSpineAngle = 36.5;
+          } else if (currentTimeMs <= impactMs + 200) {
+            phaseKey = "impact";
+            phaseName = "PGA 標竿: 擊球瞬間 (Impact)";
+            proSpineAngle = 38.5;
+          } else {
+            phaseKey = "finish";
+            phaseName = "PGA 標竿: 收桿平衡 (Finish)";
+            proSpineAngle = 5.0;
+          }
+
+          ctx.save();
+          ctx.strokeStyle = "rgba(251, 191, 36, 0.75)";
+          ctx.lineWidth = 2.0;
+          ctx.setLineDash([5, 4]);
+          ctx.shadowColor = "#f59e0b";
+          ctx.shadowBlur = 10;
+
+          const proTemplates: Record<string, Record<string, [number, number]>> = {
+            address: {
+              head: [0.08, -0.44],
+              shoulder: [0.06, -0.32],
+              elbow: [0.08, -0.16],
+              wrist: [0.10, -0.02],
+              hip: [0.0, 0.0],
+              knee: [0.04, 0.22],
+              ankle: [0.02, 0.46],
+            },
+            top: {
+              head: [0.05, -0.45],
+              shoulder: [0.08, -0.32],
+              elbow: [-0.02, -0.36],
+              wrist: [0.06, -0.42],
+              hip: [0.0, 0.0],
+              knee: [0.05, 0.22],
+              ankle: [0.02, 0.46],
+            },
+            impact: {
+              head: [0.04, -0.43],
+              shoulder: [0.08, -0.31],
+              elbow: [0.10, -0.14],
+              wrist: [0.12, -0.01],
+              hip: [-0.04, 0.0],
+              knee: [0.06, 0.22],
+              ankle: [0.02, 0.46],
+            },
+            finish: {
+              head: [0.0, -0.46],
+              shoulder: [-0.02, -0.34],
+              elbow: [-0.06, -0.28],
+              wrist: [-0.04, -0.34],
+              hip: [-0.02, 0.0],
+              knee: [0.01, 0.22],
+              ankle: [0.0, 0.46],
+            },
+          };
+
+          const curTpl = proTemplates[phaseKey];
+          const scale = userHeightPx;
+          const getProPt = (part: string) => {
+            const [dx, dy] = curTpl[part] || [0, 0];
+            return {
+              x: userHipX + dx * scale,
+              y: userHipY + (dy + 0.1) * scale,
+            };
+          };
+
+          const proHead = getProPt("head");
+          const proSh = getProPt("shoulder");
+          const proElb = getProPt("elbow");
+          const proWr = getProPt("wrist");
+          const proHip = getProPt("hip");
+          const proKn = getProPt("knee");
+          const proAnk = getProPt("ankle");
+
+          const proLines = [
+            [proHead, proSh],
+            [proSh, proElb],
+            [proElb, proWr],
+            [proSh, proHip],
+            [proHip, proKn],
+            [proKn, proAnk],
+          ];
+
+          for (const [p1, p2] of proLines) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = "#fbbf24";
+          for (const p of [proHead, proSh, proElb, proWr, proHip, proKn, proAnk]) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // 繪製 PGA 標竿 Tush Line (臀部鉛線)
+          ctx.strokeStyle = "rgba(251, 191, 36, 0.45)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(proHip.x - 18, proHip.y - 70);
+          ctx.lineTo(proHip.x - 18, proHip.y + 110);
+          ctx.stroke();
+
+          // 右上角浮動 HUD：顯示當前階段與 PGA 職業標竿差異
+          ctx.setLineDash([]);
+          ctx.fillStyle = "rgba(10, 15, 20, 0.85)";
+          ctx.beginPath();
+          ctx.roundRect(canvas.width - 226, 12, 214, 68, 8);
+          ctx.fill();
+          ctx.strokeStyle = "#f59e0b";
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          ctx.font = "bold 11px sans-serif";
+          ctx.fillStyle = "#fbbf24";
+          ctx.fillText(`👑 ${phaseName}`, canvas.width - 214, 30);
+
+          ctx.font = "10px sans-serif";
+          ctx.fillStyle = "#e5e7eb";
+          ctx.fillText(`PGA 標竿脊柱前傾: ${proSpineAngle}°`, canvas.width - 214, 48);
+          ctx.fillStyle = "#34d399";
+          ctx.fillText("保持臀部貼合黃色鉛線防早起", canvas.width - 214, 66);
+
+          ctx.restore();
+        }
+      }
     },
-    [showSkeleton, showSwingPath, showHeadBox, showBallTracer, swing]
+    [showSkeleton, showSwingPath, showHeadBox, showBallTracer, showProGhost, swing]
   );
 
   useEffect(() => {
     if (swing) {
       drawPoseOverlay(swing.start_ms);
     }
-  }, [swing, showSkeleton, showSwingPath, showHeadBox, showBallTracer, drawPoseOverlay]);
+  }, [swing, showSkeleton, showSwingPath, showHeadBox, showBallTracer, showProGhost, drawPoseOverlay]);
 
   const changePlaybackSpeed = (speed: number) => {
     setPlaybackSpeed(speed);
@@ -492,6 +667,11 @@ export default function SwingDetailPage() {
                 <span className="inline-block h-2 w-2 rounded-full bg-[#39ff14]" />
                 出球動態軌跡 (Tracer)
               </span>
+              <span className="text-gray-500">|</span>
+              <span className="flex items-center gap-1 text-[#fbbf24] font-bold">
+                <span className="inline-block h-2 w-3 rounded-sm border border-dashed border-[#fbbf24] bg-[#fbbf24]/20" />
+                👑 PGA 職業幽靈疊影 (HUD)
+              </span>
             </div>
           </div>
 
@@ -582,6 +762,17 @@ export default function SwingDetailPage() {
               }`}
             >
               {showBallTracer ? "✓ 顯示出球動態軌跡 (Ball Tracer)" : "隱藏出球動態軌跡"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowProGhost((v) => !v)}
+              className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                showProGhost
+                  ? "bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-bold shadow-md"
+                  : "border border-gray-700 text-gray-300"
+              }`}
+            >
+              {showProGhost ? "✓ 👑 PGA 職業幽靈疊影 (HUD)" : "👑 PGA 職業幽靈疊影"}
             </button>
           </div>
 
