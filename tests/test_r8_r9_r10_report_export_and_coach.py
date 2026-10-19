@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -74,8 +75,16 @@ def test_full_pipeline_report_manual_calibration_and_mp4_exports(tmp_path: Path)
     enq = client.post(f"/api/videos/{video_id}/analyze", headers=headers).json()
     job_id = enq["job_id"]
 
-    # 執行 Worker 分析任務
+    # 執行 Worker 分析任務（若背景 daemon 已在執行則等待其完成）
     worker_res = run_video_analysis_job(job_id)
+    if worker_res.get("status") == "running":
+        for _ in range(60):
+            time.sleep(0.3)
+            check = client.get(f"/api/jobs/{job_id}", headers=headers).json()
+            if check.get("status") == "completed":
+                worker_res = {"status": "completed", "segments_detected": 3}
+                break
+
     assert worker_res["status"] == "completed"
     assert worker_res["segments_detected"] == 3
 

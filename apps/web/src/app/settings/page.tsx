@@ -16,9 +16,9 @@ export default function SettingsPage() {
     tempo_consistency: 0.2,
     finish_balance: 0.2,
   });
-  const [llmProvider, setLlmProvider] = useState<"none" | "openai-compatible">(
-    "none"
-  );
+  const [llmProvider, setLlmProvider] = useState<
+    "none" | "gemini" | "openai-compatible"
+  >("none");
   const [llmBaseUrl, setLlmBaseUrl] = useState("https://api.openai.com/v1");
   const [llmModel, setLlmModel] = useState("gpt-4o-mini");
   const [llmApiKey, setLlmApiKey] = useState("");
@@ -198,17 +198,56 @@ export default function SettingsPage() {
             </label>
             <select
               value={llmProvider}
-              onChange={(e) => setLlmProvider(e.target.value as any)}
+              onChange={(e) => {
+                const val = e.target.value as any;
+                setLlmProvider(val);
+                if (val === "gemini") {
+                  setLlmModel("gemini-3.8-flash");
+                }
+              }}
               className="w-full rounded-xl border border-gray-700 bg-black/40 px-3 py-2 text-sm text-white"
             >
               <option value="none">
                 預設規則式教練 (none — 免外部 API Key，100% 確定性輸出)
+              </option>
+              <option value="gemini">
+                Google Gemini 3.8 Flash (推薦 — 速度極快、繁體中文原生理解、結構化輸出)
               </option>
               <option value="openai-compatible">
                 OpenAI 相容結構化教練 (openai-compatible — 失敗自動降級規則式)
               </option>
             </select>
           </div>
+
+          {llmProvider === "gemini" && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs text-gray-400">
+                  Gemini 模型名稱 (預設 gemini-3.8-flash)
+                </label>
+                <input
+                  type="text"
+                  value={llmModel}
+                  onChange={(e) => setLlmModel(e.target.value)}
+                  placeholder="gemini-3.8-flash"
+                  className="w-full rounded-xl border border-gray-700 bg-black/40 px-3 py-2 text-xs text-white"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs text-gray-400">
+                  Google Gemini API Key{" "}
+                  {hasSavedKey && "(伺服器已綁定金鑰，留空即保留原金鑰)"}
+                </label>
+                <input
+                  type="password"
+                  value={llmApiKey}
+                  onChange={(e) => setLlmApiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full rounded-xl border border-gray-700 bg-black/40 px-3 py-2 text-xs text-white"
+                />
+              </div>
+            </div>
+          )}
 
           {llmProvider === "openai-compatible" && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

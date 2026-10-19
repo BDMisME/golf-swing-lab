@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from apps.api.config import get_settings
@@ -71,6 +71,13 @@ def run_video_analysis_job(job_id: str) -> dict[str, Any]:
             return {"status": "not_found", "job_id": job_id}
         if job.status == "cancelled":
             return {"status": "cancelled", "job_id": job_id}
+        if job.status == "completed":
+            seg_count = len(
+                db.scalars(
+                    select(SwingSegment).where(SwingSegment.video_id == job.video_id)
+                ).all()
+            )
+            return {"status": "completed", "job_id": job_id, "segments_detected": seg_count}
 
         video = db.get(Video, job.video_id)
         if not video:
@@ -81,13 +88,33 @@ def run_video_analysis_job(job_id: str) -> dict[str, Any]:
             db.commit()
             return {"status": "failed", "job_id": job_id}
 
-        job.status = "running"
-        job.attempt_count = int(job.attempt_count or 0) + 1
-        job.started_at = _now()
-        job.heartbeat_at = _now()
-        job.error_code = None
-        job.error_message = None
+        # 原子性樂觀鎖：只有狀態仍為 queued 的任務才能搶先開始執行
+        claim_stmt = (
+            update(AnalysisJob)
+            .where(AnalysisJob.id == job_id, AnalysisJob.status == "queued")
+            .values(
+                status="running",
+                attempt_count=AnalysisJob.attempt_count + 1,
+                started_at=_now(),
+                heartbeat_at=_now(),
+            )
+        )
+        claim_res = db.execute(claim_stmt)
         db.commit()
+        if getattr(claim_res, "rowcount", 0) == 0:
+            # 任務已被另一個 Worker 或執行緒認領並處理中
+            db.refresh(job)
+            if job.status == "completed":
+                seg_count = len(
+                    db.scalars(
+                        select(SwingSegment).where(SwingSegment.video_id == job.video_id)
+                    ).all()
+                )
+                return {"status": "completed", "job_id": job_id, "segments_detected": seg_count}
+            return {"status": job.status, "job_id": job_id}
+
+        # 重新整理 job 物件
+        db.refresh(job)
 
         try:
             with tempfile.TemporaryDirectory(prefix=f"gsl_job_{job.id[:8]}_") as tmp_dir:

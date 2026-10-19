@@ -64,12 +64,12 @@ spec:
       spec:
         id: gsl-minio
         source:
-          image: minio/minio:latest
-          command:
-            - server
-            - /data
-            - --console-address
-            - ":9001"
+          image: quay.io/minio/minio:latest
+        command:
+          - server
+          - /data
+          - --console-address
+          - ":9001"
         ports:
           - id: api
             port: 9000
@@ -97,7 +97,6 @@ spec:
       dependencies:
         - gsl-postgres
         - gsl-redis
-        - gsl-minio
       spec:
         source:
           source: GITHUB
@@ -120,6 +119,12 @@ spec:
             expose: false
           REDIS_URL:
             default: redis://gsl-redis:6379/0
+            expose: false
+          INLINE_WORKER_FALLBACK:
+            default: "true"
+            expose: false
+          STORAGE_PROVIDER:
+            default: s3
             expose: false
           S3_ENDPOINT_URL:
             default: http://gsl-minio:9000
@@ -158,7 +163,6 @@ spec:
       dependencies:
         - gsl-postgres
         - gsl-redis
-        - gsl-minio
       spec:
         source:
           source: GITHUB
@@ -174,6 +178,9 @@ spec:
             expose: false
           REDIS_URL:
             default: redis://gsl-redis:6379/0
+            expose: false
+          STORAGE_PROVIDER:
+            default: s3
             expose: false
           S3_ENDPOINT_URL:
             default: http://gsl-minio:9000

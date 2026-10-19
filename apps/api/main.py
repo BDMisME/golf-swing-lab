@@ -60,6 +60,7 @@ from apps.api.schemas import (
 )
 from apps.worker.tasks import run_export_job, run_video_analysis_job
 from packages.analysis.coach import (
+    GeminiCoachProvider,
     GolfCoachProvider,
     OpenAICompatibleCoachProvider,
     RuleBasedCoachProvider,
@@ -940,6 +941,23 @@ def stream_video(
     )
 
 
+@app.get("/api/storage/file")
+def get_storage_file(
+    key: str = Query(...),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    storage = get_storage_service()
+    try:
+        head = storage.head_object(key)
+        obj = storage.get_object_range(key)
+        return StreamingResponse(
+            obj["body"].iter_chunks(chunk_size=256 * 1024),
+            media_type=head.get("content_type", "application/octet-stream"),
+        )
+    except Exception as exc:
+        raise APIError(404, "STORAGE_FILE_NOT_FOUND", f"找不到指定儲存物件: {exc}") from exc
+
+
 # ============================================================================
 # 6. Background Jobs (Enqueue / Status / Retry / Cancel)
 # ============================================================================
@@ -1680,7 +1698,12 @@ async def get_session_report(
     }
 
     coach_provider: GolfCoachProvider
-    if provider_type == "openai-compatible" and api_key:
+    if provider_type == "gemini" and api_key:
+        coach_provider = GeminiCoachProvider(
+            api_key=api_key,
+            model=(user_setting.llm_model if user_setting else s_cfg.gemini_model),
+        )
+    elif provider_type == "openai-compatible" and api_key:
         coach_provider = OpenAICompatibleCoachProvider(
             api_key=api_key,
             base_url=(user_setting.llm_base_url if user_setting else s_cfg.llm_base_url),

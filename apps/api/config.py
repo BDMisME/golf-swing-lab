@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:26379/0"
 
     storage_provider: str = "s3"
+    local_storage_dir: str = "/tmp/gsl_storage"
     s3_endpoint_url: str = "http://localhost:29000"
     s3_internal_endpoint_url: str = "http://localhost:29000"
     s3_region: str = "us-east-1"
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     session_secret: str = "change-me-in-production-at-least-32-bytes-long-secret-key"
     admin_email: str = "golfer@swinglab.local"
     admin_password: str = "GolfSwingLab!2026"
-    allowed_origins: str = "http://localhost:23000,http://127.0.0.1:23000,http://localhost:3000"
+    allowed_origins: str = "http://localhost:23000,http://127.0.0.1:23000,http://localhost:3000,https://golf-swing-lab.zeabur.app"
 
     max_upload_bytes: int = 8589934592  # 8 GiB
     max_video_duration_sec: int = 1800  # 30 minutes
@@ -46,6 +47,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_base_url: str = "https://api.openai.com/v1"
     llm_model: str = "gpt-4o-mini"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
     llm_max_budget_usd: float = 0.0
 
     # 若為 true，API 在 enqueue 背景任務時同時可在無獨立 worker 測試環境中執行 inline worker
@@ -53,7 +56,10 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        if "https://golf-swing-lab.zeabur.app" not in origins:
+            origins.append("https://golf-swing-lab.zeabur.app")
+        return origins
 
 
 @lru_cache
