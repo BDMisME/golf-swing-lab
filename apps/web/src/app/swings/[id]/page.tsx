@@ -24,6 +24,7 @@ export default function SwingDetailPage() {
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showSwingPath, setShowSwingPath] = useState(true);
   const [showHeadBox, setShowHeadBox] = useState(true);
+  const [showBallTracer, setShowBallTracer] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [expandedSubscore, setExpandedSubscore] = useState<string | null>(
     "spine_tilt_stability"
@@ -209,7 +210,113 @@ export default function SwingDetailPage() {
         }
       }
 
-      // 3. 繪製 2D 骨架連線
+      // 3. 繪製小白球出球動態軌跡 (Ball Launch Tracer - 高爾夫轉播級拋物線)
+      if (showBallTracer && swing.keyframes.length > 0) {
+        // 推算擊球位置 (手腕最低點下方地面處)
+        let impX = canvas.width * 0.52;
+        let impY = canvas.height * 0.72;
+
+        for (const kf of swing.keyframes) {
+          if (Math.abs(kf.time_ms - impactMs) < 150) {
+            const rw = kf.landmarks?.["right_wrist"];
+            const lw = kf.landmarks?.["left_wrist"];
+            const w = rw && rw.visibility >= 0.3 ? rw : lw;
+            if (w) {
+              impX = w.x * canvas.width;
+              impY = Math.min(canvas.height - 18, (w.y + 0.16) * canvas.height);
+              break;
+            }
+          }
+        }
+
+        // 計算 DTL 視角出球拋物線 (隨透視向遠方球道縮小飛行)
+        const tracerPts: Array<{ x: number; y: number; r: number }> = [];
+        const flightDurationMs = 1200; // 1.2 秒出球追蹤
+        const numSteps = 24;
+
+        for (let step = 0; step <= numSteps; step++) {
+          const tNorm = step / numSteps;
+          // 水平向右微偏 (桿面釋放平面)，垂直向上拋物線，透視尺寸縮小
+          const flightX = impX + canvas.width * 0.18 * tNorm;
+          const parabola = 4 * tNorm * (1 - tNorm * 0.6);
+          const flightY = impY - canvas.height * 0.44 * parabola;
+          const ballRadius = Math.max(1.8, 4.5 * (1 - tNorm * 0.65));
+          tracerPts.push({ x: flightX, y: flightY, r: ballRadius });
+        }
+
+        const timeSinceImpact = currentTimeMs - impactMs;
+        const isPostImpact = timeSinceImpact >= 0;
+        const progress = isPostImpact
+          ? Math.min(1.0, Math.max(0.0, timeSinceImpact / flightDurationMs))
+          : 0.0;
+
+        ctx.save();
+        if (!isPostImpact) {
+          // 擊球前：在地面標註小白球與備戰光標
+          ctx.fillStyle = "#ffffff";
+          ctx.shadowColor = "#39ff14";
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(impX, impY, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = "#39ff14";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.arc(impX, impY, 9, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.font = "bold 9px sans-serif";
+          ctx.fillStyle = "#39ff14";
+          ctx.fillText("BALL 球位", impX + 12, impY + 3);
+        } else {
+          // 擊球後：拉出高爾夫專業 Toptracer 螢光出球動態軌跡！
+          const currentStep = Math.max(1, Math.floor(progress * numSteps));
+          if (tracerPts.length >= 2) {
+            ctx.shadowColor = "#39ff14";
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 3.5;
+
+            const grad = ctx.createLinearGradient(
+              tracerPts[0].x,
+              tracerPts[0].y,
+              tracerPts[currentStep].x,
+              tracerPts[currentStep].y
+            );
+            grad.addColorStop(0, "rgba(57, 255, 20, 0.95)");
+            grad.addColorStop(0.7, "rgba(204, 255, 0, 0.95)");
+            grad.addColorStop(1, "rgba(255, 255, 255, 1.0)");
+            ctx.strokeStyle = grad;
+
+            ctx.beginPath();
+            ctx.moveTo(tracerPts[0].x, tracerPts[0].y);
+            for (let i = 1; i <= currentStep; i++) {
+              ctx.lineTo(tracerPts[i].x, tracerPts[i].y);
+            }
+            ctx.stroke();
+
+            // 當前飛行小白球
+            const curBall = tracerPts[currentStep];
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "#ffffff";
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(curBall.x, curBall.y, curBall.r + 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 標示出球動態標籤
+            ctx.font = "bold 10px sans-serif";
+            ctx.fillStyle = "#39ff14";
+            ctx.shadowColor = "#000000";
+            ctx.shadowBlur = 4;
+            ctx.fillText("TRACER 出球軌跡", curBall.x + 8, curBall.y - 4);
+          }
+        }
+        ctx.restore();
+      }
+
+      // 4. 繪製 2D 骨架連線
       if (showSkeleton) {
         const connections: Array<[string, string]> = [
           ["left_shoulder", "right_shoulder"],
@@ -252,14 +359,14 @@ export default function SwingDetailPage() {
         }
       }
     },
-    [showSkeleton, showSwingPath, showHeadBox, swing]
+    [showSkeleton, showSwingPath, showHeadBox, showBallTracer, swing]
   );
 
   useEffect(() => {
     if (swing) {
       drawPoseOverlay(swing.start_ms);
     }
-  }, [swing, showSkeleton, showSwingPath, showHeadBox, drawPoseOverlay]);
+  }, [swing, showSkeleton, showSwingPath, showHeadBox, showBallTracer, drawPoseOverlay]);
 
   const changePlaybackSpeed = (speed: number) => {
     setPlaybackSpeed(speed);
@@ -380,6 +487,11 @@ export default function SwingDetailPage() {
                 <span className="inline-block h-2 w-2 rounded-full border border-amber-400" />
                 頭部基準
               </span>
+              <span className="text-gray-500">|</span>
+              <span className="flex items-center gap-1 text-[#39ff14] font-bold">
+                <span className="inline-block h-2 w-2 rounded-full bg-[#39ff14]" />
+                出球動態軌跡 (Tracer)
+              </span>
             </div>
           </div>
 
@@ -459,6 +571,17 @@ export default function SwingDetailPage() {
               }`}
             >
               {showSkeleton ? "✓ 顯示人體骨架連線" : "隱藏人體骨架"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBallTracer((v) => !v)}
+              className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                showBallTracer
+                  ? "bg-lime-500 text-black font-bold shadow-sm"
+                  : "border border-gray-700 text-gray-300"
+              }`}
+            >
+              {showBallTracer ? "✓ 顯示出球動態軌跡 (Ball Tracer)" : "隱藏出球動態軌跡"}
             </button>
           </div>
 

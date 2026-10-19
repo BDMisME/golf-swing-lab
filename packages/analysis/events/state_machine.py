@@ -239,14 +239,15 @@ class SwingPhaseStateMachine:
             ),
         ]
 
-        # 判斷是正式揮桿 (valid_swing) 還是空揮 (practice_swing)
-        # 空揮特徵：下桿峰值能量明顯較低，或收桿停留極短且手腕未完整通過擊球最低點
-        downswing_peak_energy = max(energies[top_idx : impact_idx + 1] or [0.0])
+        # 判斷是正式揮桿 (valid_swing) 還是空揮練習 (practice_swing)
+        # 只要具備清晰上桿頂點、下桿轉折與收桿平衡 (finish_hold_ms >= 350 或 vertical_amplitude >= 0.08)，即認定為正式揮桿
         finish_hold_ms = max(0, times[-1] - times[follow_idx])
-        impact_depth = wrist_ys[impact_idx] - top_y
-        if impact_depth < vertical_amplitude * 0.68 or (
-            downswing_peak_energy < 0.042 and finish_hold_ms < 450
-        ):
+        downswing_peak_energy = max(energies[top_idx : impact_idx + 1] or [0.0])
+        is_subtle_waggle = (
+            vertical_amplitude < 0.065
+            or (downswing_peak_energy < 0.015 and finish_hold_ms < 300)
+        )
+        if is_subtle_waggle:
             label = "practice_swing"
         else:
             label = "valid_swing"

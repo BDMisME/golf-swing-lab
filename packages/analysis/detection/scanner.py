@@ -118,19 +118,22 @@ class CoarseToFineDetector:
 
             results: list[CandidateSegmentResult] = []
             total_wins = max(1, len(candidate_windows))
+            seq_counter = 1
             for idx, (win_start, win_end) in enumerate(candidate_windows, start=1):
                 seg = self.analyze_single_window(
                     video_path=video_path,
                     start_ms=win_start,
                     end_ms=win_end,
-                    sequence_no=idx,
+                    sequence_no=seq_counter,
                     extractor=extractor,
                 )
-                if seg is not None:
+                if seg is not None and len(seg.events) >= 4:
+                    seg.sequence_no = seq_counter
                     results.append(seg)
+                    seq_counter += 1
                 if progress_cb:
                     pct = 50 + int((idx / total_wins) * 30)
-                    progress_cb("fine_scan", pct, f"已完成第 {idx}/{len(candidate_windows)} 球精細分析")
+                    progress_cb("fine_scan", pct, f"已完成第 {idx}/{len(candidate_windows)} 候選視窗精細分析")
 
             return results, quality_summary
         finally:
