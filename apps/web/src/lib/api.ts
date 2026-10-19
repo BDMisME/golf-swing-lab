@@ -147,11 +147,20 @@ export async function apiFetch<T = any>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      credentials: "include",
+    });
+  } catch (netErr: any) {
+    const rawMsg = String(netErr?.message || netErr);
+    if (rawMsg.includes("Load failed") || rawMsg.includes("Failed to fetch") || rawMsg.includes("NetworkError")) {
+      throw new Error(`無法連線至 API 伺服器 (${API_BASE_URL})，請確認網路連線或伺服器正在重新啟動中`);
+    }
+    throw netErr;
+  }
 
   if (!res.ok) {
     let errPayload: any = null;
