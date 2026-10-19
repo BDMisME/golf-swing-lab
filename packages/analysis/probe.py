@@ -111,32 +111,68 @@ def probe_video_file(file_path: str | Path, collect_pts: bool = False) -> VideoM
 
     pts_list: list[int] = []
     if collect_pts:
-        pts_cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "frame=best_effort_timestamp_time,pkt_pts_time",
-            "-of",
-            "json",
-            str(path),
-        ]
-        pts_proc = subprocess.run(pts_cmd, capture_output=True, text=True, timeout=60)
-        if pts_proc.returncode == 0:
-            try:
+        try:
+            # 優先使用 packet=pts_time 搭配 30 秒抽樣區間，不解碼畫面即可高速讀取 PTS 並判斷 VFR
+            pts_cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "packet=pts_time",
+                "-read_intervals",
+                "%+30",
+                "-of",
+                "json",
+                str(path),
+            ]
+            pts_proc = subprocess.run(pts_cmd, capture_output=True, text=True, timeout=30)
+            if pts_proc.returncode == 0:
                 pts_data = json.loads(pts_proc.stdout)
-                for fr in pts_data.get("frames") or []:
-                    ts = fr.get("best_effort_timestamp_time") or fr.get("pkt_pts_time")
+                for pkt in pts_data.get("packets") or []:
+                    ts = pkt.get("pts_time")
                     if ts is not None:
-                        pts_list.append(int(round(float(ts) * 1000)))
-            except Exception:
-                pass
-        if len(pts_list) >= 4:
-            diffs = [pts_list[i + 1] - pts_list[i] for i in range(len(pts_list) - 1)]
-            if max(diffs) - min(diffs) > 8:
-                is_vfr = True
+                        try:
+                            pts_list.append(int(round(float(ts) * 1000)))
+                        except (ValueError, TypeError):
+                            pass
+
+            # 若 packet 未能取得有效 pts（例如特殊封裝），退回前 10 秒 frame 取樣
+            if len(pts_list) < 4:
+                fallback_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "frame=best_effort_timestamp_time,pkt_pts_time",
+                    "-read_intervals",
+                    "%+10",
+                    "-of",
+                    "json",
+                    str(path),
+                ]
+                fb_proc = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=30)
+                if fb_proc.returncode == 0:
+                    fb_data = json.loads(fb_proc.stdout)
+                    for fr in fb_data.get("frames") or []:
+                        ts = fr.get("best_effort_timestamp_time") or fr.get("pkt_pts_time")
+                        if ts is not None:
+                            try:
+                                pts_list.append(int(round(float(ts) * 1000)))
+                            except (ValueError, TypeError):
+                                pass
+
+            pts_list.sort()
+            if len(pts_list) >= 4:
+                diffs = [pts_list[i + 1] - pts_list[i] for i in range(len(pts_list) - 1)]
+                if max(diffs) - min(diffs) > 8:
+                    is_vfr = True
+        except Exception:
+            # 雲端環境極限保底：若取樣逾時或解析失敗，保留由 r_fps/avg_fps 計算之 is_vfr，不中斷整體管線
+            pass
 
     return VideoMetadata(
         duration_ms=duration_ms,
