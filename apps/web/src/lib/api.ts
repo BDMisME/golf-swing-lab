@@ -1,5 +1,18 @@
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:28000";
+function resolveApiBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (envUrl && !envUrl.includes("localhost")) {
+    return envUrl;
+  }
+  if (
+    typeof window !== "undefined" &&
+    window.location.hostname.endsWith(".zeabur.app")
+  ) {
+    return "https://golf-swing-lab-api.zeabur.app";
+  }
+  return envUrl || "http://localhost:28000";
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export interface UserProfile {
   id: string;

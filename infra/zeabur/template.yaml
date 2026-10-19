@@ -1,13 +1,17 @@
+# yaml-language-server: $schema=https://schema.zeabur.app/template.json
 apiVersion: zeabur.com/v1
 kind: Template
 metadata:
   name: golf-swing-lab
 spec:
   description: Golf Swing Lab — AI 高爾夫練習場長影片自動切球、2D 動作分析與評分系統
+  icon: https://cdn.zeabur.com/marketplace/postgresql.svg
   services:
     - name: gsl-postgres
-      template: PREBUILT
+      icon: https://cdn.zeabur.com/marketplace/postgresql.svg
+      template: PREBUILT_V2
       spec:
+        id: gsl-postgres
         source:
           image: postgres:16-alpine
         ports:
@@ -20,14 +24,24 @@ spec:
         env:
           POSTGRES_USER:
             default: gsl
+            expose: true
           POSTGRES_PASSWORD:
             default: gsl_secret_password
+            expose: true
           POSTGRES_DB:
             default: golf_swing_lab
+            expose: true
+          POSTGRES_HOST:
+            default: ${CONTAINER_HOSTNAME}
+            expose: true
+          POSTGRES_PORT:
+            default: ${DATABASE_PORT}
+            expose: true
 
     - name: gsl-redis
-      template: PREBUILT
+      template: PREBUILT_V2
       spec:
+        id: gsl-redis
         source:
           image: redis:7-alpine
         ports:
@@ -37,13 +51,25 @@ spec:
         volumes:
           - id: redis-data
             dir: /data
+        env:
+          REDIS_HOST:
+            default: ${CONTAINER_HOSTNAME}
+            expose: true
+          REDIS_PORT:
+            default: ${REDIS_PORT}
+            expose: true
 
     - name: gsl-minio
-      template: PREBUILT
+      template: PREBUILT_V2
       spec:
+        id: gsl-minio
         source:
           image: minio/minio:latest
-        command: ["server", "/data", "--console-address", ":9001"]
+          command:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
         ports:
           - id: api
             port: 9000
@@ -57,71 +83,142 @@ spec:
         env:
           MINIO_ROOT_USER:
             default: minioadmin
+            expose: true
           MINIO_ROOT_PASSWORD:
             default: minioadmin123
+            expose: true
+          MINIO_HOST:
+            default: ${CONTAINER_HOSTNAME}
+            expose: true
 
     - name: gsl-api
-      template: GIT
+      icon: https://service-icons.zeabur.com/git/docker/default.svg
+      template: PREBUILT_V2
       dependencies:
         - gsl-postgres
         - gsl-redis
         - gsl-minio
       spec:
         source:
-          dockerfile: infra/docker/api.Dockerfile
+          source: GITHUB
+          repo: 1425306700
+          branch: main
+          rootDirectory: /
         ports:
-          - id: http
+          - id: web
             port: 8000
             type: HTTP
         env:
+          APP_ENV:
+            default: production
+            expose: false
+          PORT:
+            default: "8000"
+            expose: false
           DATABASE_URL:
             default: postgresql+psycopg://gsl:gsl_secret_password@gsl-postgres:5432/golf_swing_lab
+            expose: false
           REDIS_URL:
             default: redis://gsl-redis:6379/0
+            expose: false
           S3_ENDPOINT_URL:
             default: http://gsl-minio:9000
+            expose: false
+          S3_INTERNAL_ENDPOINT_URL:
+            default: http://gsl-minio:9000
+            expose: false
           S3_ACCESS_KEY_ID:
             default: minioadmin
+            expose: false
           S3_SECRET_ACCESS_KEY:
             default: minioadmin123
-          S3_BUCKET_NAME:
+            expose: false
+          S3_BUCKET:
             default: golf-swing-lab
+            expose: false
+          ALLOWED_ORIGINS:
+            default: https://golf-swing-lab.zeabur.app,http://localhost:23000
+            expose: false
+          ADMIN_EMAIL:
+            default: golfer@swinglab.local
+            expose: false
+          ADMIN_PASSWORD:
+            default: GolfSwingLab!2026
+            expose: false
           LLM_PROVIDER:
             default: none
+            expose: false
+          ZBPACK_DOCKERFILE_PATH:
+            default: infra/docker/api.Dockerfile
+            expose: false
 
     - name: gsl-worker
-      template: GIT
+      icon: https://service-icons.zeabur.com/git/docker/default.svg
+      template: PREBUILT_V2
       dependencies:
         - gsl-postgres
         - gsl-redis
         - gsl-minio
       spec:
         source:
-          dockerfile: infra/docker/worker.Dockerfile
+          source: GITHUB
+          repo: 1425306700
+          branch: main
+          rootDirectory: /
         env:
+          APP_ENV:
+            default: production
+            expose: false
           DATABASE_URL:
             default: postgresql+psycopg://gsl:gsl_secret_password@gsl-postgres:5432/golf_swing_lab
+            expose: false
           REDIS_URL:
             default: redis://gsl-redis:6379/0
+            expose: false
           S3_ENDPOINT_URL:
             default: http://gsl-minio:9000
+            expose: false
+          S3_INTERNAL_ENDPOINT_URL:
+            default: http://gsl-minio:9000
+            expose: false
           S3_ACCESS_KEY_ID:
             default: minioadmin
+            expose: false
           S3_SECRET_ACCESS_KEY:
             default: minioadmin123
-          S3_BUCKET_NAME:
+            expose: false
+          S3_BUCKET:
             default: golf-swing-lab
+            expose: false
           LLM_PROVIDER:
             default: none
+            expose: false
+          ZBPACK_DOCKERFILE_PATH:
+            default: infra/docker/worker.Dockerfile
+            expose: false
 
     - name: gsl-web
-      template: GIT
+      icon: https://service-icons.zeabur.com/git/docker/default.svg
+      template: PREBUILT_V2
       dependencies:
         - gsl-api
       spec:
         source:
-          dockerfile: infra/docker/web.Dockerfile
+          source: GITHUB
+          repo: 1425306700
+          branch: main
+          rootDirectory: /
         ports:
           - id: web
             port: 3000
             type: HTTP
+        env:
+          PORT:
+            default: "3000"
+            expose: false
+          NEXT_PUBLIC_API_BASE_URL:
+            default: https://golf-swing-lab-api.zeabur.app
+            expose: false
+          ZBPACK_DOCKERFILE_PATH:
+            default: infra/docker/web.Dockerfile
+            expose: false
