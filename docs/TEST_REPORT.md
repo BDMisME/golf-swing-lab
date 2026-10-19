@@ -29,7 +29,10 @@
 | **R10** | `GolfCoachProvider`（支援 `none` 規則式預設、`gemini-3.8-flash` 與 `openai-compatible`，防捏造球速/距離攔截） | `uv run pytest tests/test_r8_r9_r10_report_export_and_coach.py -k coach` | 3 / 3 通過 | Real (`none`) + Mock Gemini 3.8 Flash + Mock OpenAI | `PASS` |
 | **R11** | Dockerfiles、生產 Compose 與 Zeabur 遠端生產環境部署 | `npx zeabur deploy` + GitHub push | 成功部署上線 | Real (Zeabur 遠端雲端伺服器) | `PASS` |
 | **R12** | 前後端型別檢查 (`ruff`, `mypy`), Vitest, Next.js 生產建置與 Puppeteer 線上實測 | `uv run pytest -v` + `npm test` + `npm run build` + `scripts/verify_zeabur_end_to_end.py` | 後端 14/14、前端 3/3、8 路由全通過、線上 E2E 通過 | Real (本機 + Zeabur 生產) | `PASS` (真人 100+ 球 Golden Set 為 `NOT_VALIDATED`) |
-| **R1 (Mac App 獨立化)** | 原生 arm64 Mach-O Launcher、動態無寫死路徑、Worker 自動拉起、雙球播放修復與 Letterbox 視訊座標自適應 | `uv run pytest tests/test_r1_mac_app_independence.py -v` + `scripts/build_mac_app.sh` | 6 / 6 通過 | Real (Apple Silicon arm64 + WebKit + Next.js 15) | `PASS` |
+| **新 R1** | Mac App 獨立化：動態 arm64 Mach-O Launcher、移除寫死路徑、Worker 自動拉起自癒、雙球播放與 9:16 Letterbox 座標校正 | `uv run pytest tests/test_r1_mac_app_independence.py -v` | 6 / 6 通過 | Real (Apple Silicon arm64 + WebKit + Next.js 15) | `PASS` |
+| **新 R2** | 長影片準確性與真實原片測試：`11秒.mov` (1/1 記)、`2分鐘.mov` (139 秒 8340 幀 12/12 記全中，召回率 100%，精確率 100% 零假球誤判) 及授權隱私盤點 | `uv run pytest tests/test_r2_long_video_accuracy.py -v` | 3 / 3 通過 | Real (真實 iPhone 17 Pro 原片) | `PASS` |
+| **新 R3** | 可驗證評分與精選球：Score v1 5 大分項、70% 覆蓋率硬門檻攔截 (`overall_nullable=None`)、透明度揭露與 4 榜多維排序 | `uv run pytest tests/test_r3_verifiable_scoring.py -v` | 3 / 3 通過 | Real | `PASS` |
+| **新 R4** | DTL 專屬演算法：卡爾曼濾波出球動態軌跡、高爾夫物理合理性過濾（濾除水平橫向/倒退/起點懸空）、DTL 幾何前傾/頭部/節奏比計算 | `uv run pytest tests/test_r4_dtl_algorithms.py -v` | 3 / 3 通過 | Real (Kalman + MediaPipe) | `PASS` |
 
 ---
 

@@ -39,19 +39,27 @@ class DetectedEvent:
         }
 
 
+def _get_lm_xyv(lm: Any) -> tuple[float, float, float] | None:
+    if lm is None:
+        return None
+    if isinstance(lm, dict):
+        return (float(lm["x"]), float(lm["y"]), float(lm.get("visibility", 0.0)))
+    return (float(lm.x), float(lm.y), float(getattr(lm, "visibility", 0.0)))
+
+
 def _midpoint(frame: FramePoseResult, left_key: str, right_key: str) -> tuple[float, float, float] | None:
-    l_lm = frame.landmarks.get(left_key)
-    r_lm = frame.landmarks.get(right_key)
-    if l_lm and r_lm and (l_lm.visibility >= 0.4 or r_lm.visibility >= 0.4):
+    l_xyv = _get_lm_xyv(frame.landmarks.get(left_key))
+    r_xyv = _get_lm_xyv(frame.landmarks.get(right_key))
+    if l_xyv and r_xyv and (l_xyv[2] >= 0.4 or r_xyv[2] >= 0.4):
         return (
-            (l_lm.x + r_lm.x) / 2.0,
-            (l_lm.y + r_lm.y) / 2.0,
-            min(l_lm.visibility, r_lm.visibility),
+            (l_xyv[0] + r_xyv[0]) / 2.0,
+            (l_xyv[1] + r_xyv[1]) / 2.0,
+            min(l_xyv[2], r_xyv[2]),
         )
-    if r_lm and r_lm.visibility >= 0.4:
-        return (r_lm.x, r_lm.y, r_lm.visibility)
-    if l_lm and l_lm.visibility >= 0.4:
-        return (l_lm.x, l_lm.y, l_lm.visibility)
+    if r_xyv and r_xyv[2] >= 0.4:
+        return r_xyv
+    if l_xyv and l_xyv[2] >= 0.4:
+        return l_xyv
     return None
 
 
@@ -339,19 +347,20 @@ def compute_observable_metrics(
         hp = _midpoint(f_addr, "left_hip", "right_hip")
         torso_len = math.hypot(sh[0] - hp[0], sh[1] - hp[1]) if (sh and hp) else 0.22
         torso_len = max(0.08, torso_len)
-        addr_nose = f_addr.landmarks["nose"]
-        max_disp = 0.0
-        vis_vals = [addr_nose.visibility]
-        for fr in frames:
-            if f_addr.time_ms <= fr.time_ms <= f_imp.time_ms and "nose" in fr.landmarks:
-                n_lm = fr.landmarks["nose"]
-                if n_lm.visibility >= 0.50:
-                    d = math.hypot(n_lm.x - addr_nose.x, n_lm.y - addr_nose.y) / torso_len
-                    max_disp = max(max_disp, d)
-                    vis_vals.append(n_lm.visibility)
-        if len(vis_vals) >= 2 and min(vis_vals) >= 0.50:
-            head_ratio = round(max_disp, 4)
-            head_conf = round(float(np.mean(vis_vals)), 3)
+        addr_nose = _get_lm_xyv(f_addr.landmarks.get("nose"))
+        if addr_nose:
+            max_disp = 0.0
+            vis_vals = [addr_nose[2]]
+            for fr in frames:
+                if f_addr.time_ms <= fr.time_ms <= f_imp.time_ms and "nose" in fr.landmarks:
+                    n_lm = _get_lm_xyv(fr.landmarks.get("nose"))
+                    if n_lm and n_lm[2] >= 0.50:
+                        d = math.hypot(n_lm[0] - addr_nose[0], n_lm[1] - addr_nose[1]) / torso_len
+                        max_disp = max(max_disp, d)
+                        vis_vals.append(n_lm[2])
+            if len(vis_vals) >= 2 and min(vis_vals) >= 0.50:
+                head_ratio = round(max_disp, 4)
+                head_conf = round(float(np.mean(vis_vals)), 3)
 
     metrics.append(
         {
@@ -388,11 +397,12 @@ def compute_observable_metrics(
     # 4. 上下桿節奏比 (backswing_downswing_ratio)
     tempo_ratio: float | None = None
     tempo_conf = 0.0
-    if f_take and f_top and f_imp:
-        bs_ms = max(80, f_top.time_ms - f_take.time_ms)
+    f_start = f_take or f_addr
+    if f_start and f_top and f_imp:
+        bs_ms = max(80, f_top.time_ms - f_start.time_ms)
         ds_ms = max(60, f_imp.time_ms - f_top.time_ms)
         tempo_ratio = round(bs_ms / float(ds_ms), 2)
-        tempo_conf = round(min(f_take.pose_confidence, f_top.pose_confidence, f_imp.pose_confidence), 3)
+        tempo_conf = round(min(f_start.pose_confidence, f_top.pose_confidence, f_imp.pose_confidence), 3)
         metrics.append(
             {
                 "metric_key": "backswing_ms",

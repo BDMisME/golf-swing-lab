@@ -78,6 +78,23 @@ class KalmanBallTracker:
         return (px, py)
 
 
+def validate_ball_trajectory_physics(points: list[dict[str, float]]) -> bool:
+    """
+    高爾夫出球物理合理性檢核:
+    1. 軌跡點數必須 >= 3
+    2. 初始出球點 y 必須在打擊墊合理區間 (y >= 0.48)
+    3. 終點 y 必須小於等於起點 y (小白球朝天空上方飛行)
+    4. 終點 x 必須大於等於起點 x (球朝前方飛行)
+    """
+    if len(points) < 3:
+        return False
+    init_pt = points[0]
+    last_pt = points[-1]
+    if init_pt["y"] < 0.48 or (last_pt["y"] > init_pt["y"] + 0.04) or (last_pt["x"] < init_pt["x"] - 0.05):
+        return False
+    return True
+
+
 class GolfBallDetector:
     """
     基於 YOLOv8-nano 之專用高爾夫球偵測器。
@@ -217,5 +234,10 @@ class GolfBallDetector:
                         )
         finally:
             cap.release()
+
+        # 高爾夫物理合理性檢核: 濾除背景水平穿越身體或向後倒退之雜訊
+        if trajectory_points and not validate_ball_trajectory_physics(trajectory_points):
+            logger.info("卡爾曼出球軌跡未通過高爾夫物理合理性檢核（檢測到背景水平雜訊或倒退），自動濾除。")
+            return []
 
         return trajectory_points

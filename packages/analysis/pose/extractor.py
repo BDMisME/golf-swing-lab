@@ -40,12 +40,12 @@ class FramePoseResult:
     time_ms: int
     frame_idx: int
     landmarks: dict[str, Landmark2D]
-    pose_confidence: float
-    wrist_motion_energy: float
-    person_count: int
-    brightness: float
-    sharpness: float
-    camera_motion: float
+    pose_confidence: float = 0.90
+    wrist_motion_energy: float = 0.0
+    person_count: int = 1
+    brightness: float = 120.0
+    sharpness: float = 80.0
+    camera_motion: float = 0.0
     source: str = "mediapipe-pose-v1"
     flags: list[str] = field(default_factory=list)
 
