@@ -62,24 +62,16 @@ int main(int argc, char *argv[]) {
     if (custom_dir && file_exists(custom_dir)) {
         strncpy(project_dir, custom_dir, sizeof(project_dir) - 1);
     } else {
-        // 優先檢查 App Bundle 內部封裝之 Resources/app
-        char bundle_res_app[PATH_MAX];
-        char temp_exec[PATH_MAX];
-        strncpy(temp_exec, resolved_exec, sizeof(temp_exec) - 1);
-        char *macos_dir = dirname(temp_exec);
-        if (macos_dir) {
-            char *contents_dir = dirname(macos_dir);
-            if (contents_dir) {
-                snprintf(bundle_res_app, sizeof(bundle_res_app), "%s/Resources/app", contents_dir);
-                char check_internal[PATH_MAX];
-                snprintf(check_internal, sizeof(check_internal), "%s/desktop_app.py", bundle_res_app);
-                if (file_exists(check_internal)) {
-                    strncpy(project_dir, bundle_res_app, sizeof(project_dir) - 1);
-                }
-            }
+        // a. 優先檢查標準使用者專案位置 ~/Desktop/Golf_Swing_Lab
+        char standard_desktop[PATH_MAX];
+        snprintf(standard_desktop, sizeof(standard_desktop), "%s/Desktop/Golf_Swing_Lab", home);
+        char standard_script[PATH_MAX];
+        snprintf(standard_script, sizeof(standard_script), "%s/desktop_app.py", standard_desktop);
+        if (file_exists(standard_script)) {
+            strncpy(project_dir, standard_desktop, sizeof(project_dir) - 1);
         }
 
-        // 若 Bundle 內部無獨立封裝，從 resolved_exec 逐層向上探測 (最多向上 6 層)
+        // b. 若未找到，從 resolved_exec 逐層向上探測 (最多向上 6 層)
         if (project_dir[0] == '\0') {
             char current_probe[PATH_MAX];
             strncpy(current_probe, resolved_exec, sizeof(current_probe) - 1);
@@ -107,12 +99,22 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // 若仍未找到，嘗試標準位置 ~/Desktop/Golf_Swing_Lab
+        // c. 若仍未找到，檢查 App Bundle 內部封裝之 Resources/app
         if (project_dir[0] == '\0') {
-            char fallback_desktop[PATH_MAX];
-            snprintf(fallback_desktop, sizeof(fallback_desktop), "%s/Desktop/Golf_Swing_Lab", home);
-            if (file_exists(fallback_desktop)) {
-                strncpy(project_dir, fallback_desktop, sizeof(project_dir) - 1);
+            char bundle_res_app[PATH_MAX];
+            char temp_exec[PATH_MAX];
+            strncpy(temp_exec, resolved_exec, sizeof(temp_exec) - 1);
+            char *macos_dir = dirname(temp_exec);
+            if (macos_dir) {
+                char *contents_dir = dirname(macos_dir);
+                if (contents_dir) {
+                    snprintf(bundle_res_app, sizeof(bundle_res_app), "%s/Resources/app", contents_dir);
+                    char check_internal[PATH_MAX];
+                    snprintf(check_internal, sizeof(check_internal), "%s/desktop_app.py", bundle_res_app);
+                    if (file_exists(check_internal)) {
+                        strncpy(project_dir, bundle_res_app, sizeof(project_dir) - 1);
+                    }
+                }
             }
         }
     }
@@ -136,16 +138,22 @@ int main(int argc, char *argv[]) {
     if (is_executable(venv_python)) {
         strncpy(python_bin, venv_python, sizeof(python_bin) - 1);
     } else {
-        char app_support_python[PATH_MAX];
-        snprintf(app_support_python, sizeof(app_support_python), "%s/Library/Application Support/GolfSwingLab/venv/bin/python", home);
-        if (is_executable(app_support_python)) {
-            strncpy(python_bin, app_support_python, sizeof(python_bin) - 1);
-        } else if (is_executable("/opt/homebrew/bin/python3")) {
-            strncpy(python_bin, "/opt/homebrew/bin/python3", sizeof(python_bin) - 1);
-        } else if (is_executable("/usr/local/bin/python3")) {
-            strncpy(python_bin, "/usr/local/bin/python3", sizeof(python_bin) - 1);
+        char fallback_venv[PATH_MAX];
+        snprintf(fallback_venv, sizeof(fallback_venv), "%s/Desktop/Golf_Swing_Lab/.venv/bin/python", home);
+        if (is_executable(fallback_venv)) {
+            strncpy(python_bin, fallback_venv, sizeof(python_bin) - 1);
         } else {
-            strncpy(python_bin, "python3", sizeof(python_bin) - 1);
+            char app_support_python[PATH_MAX];
+            snprintf(app_support_python, sizeof(app_support_python), "%s/Library/Application Support/GolfSwingLab/venv/bin/python", home);
+            if (is_executable(app_support_python)) {
+                strncpy(python_bin, app_support_python, sizeof(python_bin) - 1);
+            } else if (is_executable("/opt/homebrew/bin/python3")) {
+                strncpy(python_bin, "/opt/homebrew/bin/python3", sizeof(python_bin) - 1);
+            } else if (is_executable("/usr/local/bin/python3")) {
+                strncpy(python_bin, "/usr/local/bin/python3", sizeof(python_bin) - 1);
+            } else {
+                strncpy(python_bin, "python3", sizeof(python_bin) - 1);
+            }
         }
     }
 

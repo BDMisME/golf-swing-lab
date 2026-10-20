@@ -56,30 +56,35 @@ cat << 'EOF' > "$CONTENTS/Info.plist"
 </plist>
 EOF
 
-# 若有圖示則拷貝
-if [ -f "$REPO_ROOT/dist_mac/AppIcon.icns" ]; then
+# 複製圖示
+if [ -f "$REPO_ROOT/assets/AppIcon.icns" ]; then
+    cp "$REPO_ROOT/assets/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+elif [ -f "$REPO_ROOT/dist_mac/AppIcon.icns" ]; then
     cp "$REPO_ROOT/dist_mac/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
-elif [ -f "/Users/mathew/Desktop/Golf Swing Lab.app/Contents/Resources/AppIcon.icns" ]; then
-    cp "/Users/mathew/Desktop/Golf Swing Lab.app/Contents/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+elif [ -f "/Applications/$APP_NAME/Contents/Resources/AppIcon.icns" ]; then
+    cp "/Applications/$APP_NAME/Contents/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 fi
-
-echo "=== [3.5/5] 封裝應用原始碼至 Resources/app 實現真可攜性 ==="
-mkdir -p "$RESOURCES_DIR/app"
-rsync -a --exclude 'node_modules' --exclude '__pycache__' --exclude '.venv' --exclude '.git' --exclude '測試影片' \
-    "$REPO_ROOT/apps" "$REPO_ROOT/packages" "$REPO_ROOT/desktop_app.py" "$REPO_ROOT/pyproject.toml" \
-    "$RESOURCES_DIR/app/"
 
 echo "=== [4/5] 執行 macOS 本地 Ad-hoc 程式碼簽名 ==="
 codesign -s - --force --deep "$APP_BUNDLE"
 
-echo "=== [5/5] 同步部署至系統 /Applications 與桌面 ==="
-rm -rf "/Applications/$APP_NAME" "$HOME/Desktop/$APP_NAME"
+echo "=== [5/5] 安裝至系統 /Applications 並清理舊版重複 APP ==="
+# 移除系統舊版與桌面上的重複 App Bundle
+rm -rf "/Applications/$APP_NAME"
 cp -R "$APP_BUNDLE" "/Applications/$APP_NAME"
-cp -R "$APP_BUNDLE" "$HOME/Desktop/$APP_NAME"
 
-# 註冊至 LaunchServices
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f -R -trusted "/Applications/$APP_NAME" "$HOME/Desktop/$APP_NAME" || true
+# 刪除桌面重複的舊實體 App
+if [ -d "$HOME/Desktop/$APP_NAME" ]; then
+    echo "清理桌面舊版 App Bundle: $HOME/Desktop/$APP_NAME"
+    rm -rf "$HOME/Desktop/$APP_NAME"
+fi
 
-echo "✅ Golf Swing Lab Mac 原生桌面 App 建置完成！"
-echo "   - 應用程式路徑: /Applications/$APP_NAME"
-echo "   - 桌面快捷路徑: $HOME/Desktop/$APP_NAME"
+# 清理 dist_mac 臨時目錄產物
+rm -rf "$DIST_DIR"
+
+# 註冊至 macOS LaunchServices
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f -R -trusted "/Applications/$APP_NAME" || true
+
+echo "✅ Golf Swing Lab Mac 原生桌面 App 安裝完成！"
+echo "   - 唯一正式應用程式路徑: /Applications/$APP_NAME"
+
