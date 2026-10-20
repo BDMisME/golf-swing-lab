@@ -4,11 +4,12 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
-## 自用優先四大核心任務 (Mac Desktop Priority)
-- [x] **第一：真實影片切球準確性**：48kHz 音訊瞬態衝擊核對 12/12 真實時間碼，Golden Set 100% 逐球一對一配對，Recall 1.0000 / Precision 1.0000
-- [x] **第二：動作分析與評分可靠性**：Score v2 徹底根除寫死替代值（移除 70.0/75.0/80.0/350.0），單球路徑間隙與多球重複性分離，無假分數
-- [x] **第三：最佳球推薦**：各大排行榜（姿勢/節奏/收桿/IG）嚴格依真實分項獨立過濾，禁止使用 overall_score 冒充，附帶物理推薦原因與原始時間碼
-- [x] **第四：本機完整使用者驗收**：Mac App arm64 原生 Launcher 簽名、全流程 E2E 整合驗收、MP4 匯出、本地 DB 累積保存 115 場次/77 影片/126 球，重啟零資料遺失
+## Real Practice Validation 驗收任務清單 (2026-10-20)
+- [x] **任務一：獨立驗證 Golden Set (12/12)**：破解 2.267 秒試擺誤判假象，12 球逐格（48kHz PCM + 60fps）人工確認基準，True Recall 100%、Precision 100%、邊界誤差中位數 747.0ms。建立 `/audit` 人工審核 UI。
+- [x] **任務二：修正 Score v2 最後資料缺口**：`body_visibility_ratio` 來自 MediaPipe 真實入鏡分析；移除 coverage 頂替 IG 漏洞；實作同場多球手腕軌跡插值與重複性計算 `compute_session_wrist_repeatability`；詳情頁提供「🎯 影格」跳轉與無法評分原因。
+- [x] **任務三：最佳球人工驗收 (Top 5)**：各大排行榜（姿勢/節奏/收桿/IG）嚴格依真實分項獨立過濾，排除空揮與覆蓋率 < 70% 球，排行榜新增「▶ 預覽片段」按鈕原地循環播放該球區間。
+- [!] **任務四：10–30 分鐘長影片實測**：`NOT_VALIDATED`（硬碟僅有 2 分鐘與 11 秒原片，無 10–30 分鐘 iPhone DTL 真實素材，依指示誠實標註，絕不用合成素材冒充）。
+
 
 ## R0 — 專案盤點、架構契約與規格文件
 - [x] 建立 Git 儲存庫與 Monorepo 目錄結構 (`apps/`, `packages/`, `infra/`, `docs/`, `tests/`)

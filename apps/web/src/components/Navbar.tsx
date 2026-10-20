@@ -25,6 +25,7 @@ export function Navbar() {
     { href: "/sessions/new", label: "新增練習上傳" },
     { href: "/exports", label: "匯出中心" },
     { href: "/settings", label: "評分與設定" },
+    { href: "/audit", label: "Golden 審核基準" },
   ];
 
   return (

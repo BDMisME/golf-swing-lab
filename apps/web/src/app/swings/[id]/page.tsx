@@ -497,6 +497,21 @@ export default function SwingDetailPage() {
     drawPoseOverlay(timeMs);
   };
 
+  const getSubscoreJumpTimeMs = (subKey: string): number | null => {
+    if (!swing || !swing.events) return null;
+    const evMap: Record<string, number> = {};
+    for (const ev of swing.events) {
+      evMap[ev.event_name] = ev.time_ms;
+    }
+    if (subKey === "spine_tilt_stability") return evMap["top"] || evMap["address"] || swing.start_ms;
+    if (subKey === "head_stability") return evMap["impact_estimated"] || evMap["impact"] || evMap["top"] || swing.start_ms;
+    if (subKey === "path_repeatability") return evMap["downswing"] || evMap["top"] || swing.start_ms;
+    if (subKey === "tempo_consistency") return evMap["top"] || swing.start_ms;
+    if (subKey === "finish_balance") return evMap["finish"] || evMap["follow_through"] || swing.end_ms;
+    return null;
+  };
+
+
   const handleSaveCalibration = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -763,6 +778,8 @@ export default function SwingDetailPage() {
                 )
                 .map(([k, sub]: [string, any]) => {
                   const isOpen = expandedSubscore === k;
+                  const jumpMs = getSubscoreJumpTimeMs(k);
+                  const isNullScore = sub.score === null || sub.score === undefined;
                   return (
                     <div
                       key={k}
@@ -783,18 +800,30 @@ export default function SwingDetailPage() {
                             %)
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-emerald-400">
-                            {typeof sub.score === "number"
-                              ? `${sub.score} 分`
-                              : "資料不足"}
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`text-sm font-bold ${
+                              isNullScore ? "text-gray-500 italic" : "text-emerald-400"
+                            }`}
+                          >
+                            {!isNullScore ? `${sub.score} 分` : "無法評分 (null)"}
                           </span>
+                          {jumpMs !== null && (
+                            <button
+                              type="button"
+                              onClick={() => jumpToEvent(jumpMs)}
+                              className="rounded border border-sky-800/60 bg-sky-950/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 hover:bg-sky-900/60 transition"
+                              title="跳轉至對應關鍵檢核影格"
+                            >
+                              🎯 影格
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() =>
                               setExpandedSubscore(isOpen ? null : k)
                             }
-                            className="rounded border border-emerald-700/60 bg-emerald-950/50 px-2 py-0.5 text-[11px] text-emerald-300 hover:bg-emerald-800"
+                            className="rounded border border-emerald-700/60 bg-emerald-950/50 px-2 py-0.5 text-[10px] text-emerald-300 hover:bg-emerald-800 transition"
                           >
                             怎麼算的？
                           </button>
@@ -802,19 +831,26 @@ export default function SwingDetailPage() {
                       </div>
 
                       {isOpen && (
-                        <div className="mt-2.5 space-y-1 border-t border-gray-800 pt-2.5 text-[11px] text-gray-300">
+                        <div className="mt-2.5 space-y-1.5 border-t border-gray-800 pt-2.5 text-[11px] text-gray-300">
                           <div>
                             <strong className="text-white">
                               計算公式與依據：
                             </strong>
-                            {sub.how_calculated}
+                            <p className="mt-0.5 text-gray-300 leading-relaxed">
+                              {sub.how_calculated}
+                            </p>
                           </div>
+                          {isNullScore && (
+                            <div className="rounded bg-amber-950/30 p-2 text-[10px] text-amber-200 border border-amber-900/40">
+                              ⚠ 依誠實原則不虛構分數：{sub.how_calculated}
+                            </div>
+                          )}
                           <div className="flex flex-wrap gap-3 text-gray-400">
                             <span>
-                              實測原始值：{sub.raw_value ?? "N/A"} {sub.unit || ""}
+                              實測原始值：{sub.raw_value !== null && sub.raw_value !== undefined ? sub.raw_value : "無可靠觀測"} {sub.unit || ""}
                             </span>
                             <span>
-                              數學公式：{sub.formula || sub.ideal_range || "score-v1"}
+                              數學公式：{sub.formula || sub.ideal_range || "score-v2"}
                             </span>
                             <span>
                               信心度：{Math.round((sub.confidence || 0) * 100)}%
@@ -829,13 +865,55 @@ export default function SwingDetailPage() {
 
             <div className="mt-3 rounded-xl border border-amber-800/40 bg-amber-950/20 p-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-amber-300">
-                  IG 視覺吸睛分 (ig_visual_score)
-                </span>
-                <span className="text-sm font-bold text-amber-300">
-                  {swing.ig_visual_score ?? "N/A"} 分
-                </span>
+                <div>
+                  <span className="font-bold text-amber-300">
+                    IG 視覺吸睛分 (ig_visual_score)
+                  </span>
+                  <span className="ml-2 text-[10px] text-gray-400">
+                    (構圖 30% · 收桿 25% · 節奏 20% · 畫質 15% · 剪輯 10%)
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-amber-300">
+                    {swing.ig_visual_score !== null && swing.ig_visual_score !== undefined
+                      ? `${swing.ig_visual_score} 分`
+                      : "資料不足 (null)"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedSubscore(expandedSubscore === "ig" ? null : "ig")
+                    }
+                    className="rounded border border-amber-700/60 bg-amber-950/50 px-2 py-0.5 text-[10px] text-amber-300 hover:bg-amber-800"
+                  >
+                    細項
+                  </button>
+                </div>
               </div>
+
+              {expandedSubscore === "ig" && (
+                <div className="mt-2.5 space-y-1.5 border-t border-amber-900/40 pt-2 text-[11px] text-gray-300">
+                  <div className="text-amber-200 font-semibold">真實 IG 構圖與視覺檢核分解：</div>
+                  {(() => {
+                    const igBk = (swing.subscores as any)?.ig_visual_breakdown;
+                    if (!igBk) return <div className="text-gray-500">尚無詳細視覺拆解資料</div>;
+                    return (
+                      <div className="space-y-1 text-gray-400">
+                        <div>· 畫面完整度 (30%)：{igBk.framing_30 ?? "無真實人體入鏡數據"} 分</div>
+                        <div>· 收桿流暢度 (25%)：{igBk.finish_25 ?? "無"} 分</div>
+                        <div>· 節奏觀感 (20%)：{igBk.tempo_20 ?? "無"} 分</div>
+                        <div>· 清晰與晃動 (15%)：{igBk.clarity_15 ?? "無"} 分</div>
+                        <div>· 剪輯緩衝 (10%)：{igBk.clip_margin_10 ?? "無"} 分</div>
+                        {igBk.details?.out_of_frame_flags?.length > 0 && (
+                          <div className="text-red-400">
+                            ⚠ 出界扣分項目：{igBk.details.out_of_frame_flags.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
               <p className="mt-1 text-[11px] text-gray-400">
                 獨立評量畫面構圖、亮度清晰度與收桿流暢度，絕不混入技術動作總分。
               </p>

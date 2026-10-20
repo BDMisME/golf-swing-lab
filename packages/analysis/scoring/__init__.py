@@ -1,6 +1,7 @@
 from packages.analysis.scoring.engine import (
     DEFAULT_WEIGHTS,
     ScoreComputeResult,
+    compute_session_wrist_repeatability,
     compute_swing_score,
     rank_session_swings,
 )
@@ -8,6 +9,8 @@ from packages.analysis.scoring.engine import (
 __all__ = [
     "DEFAULT_WEIGHTS",
     "ScoreComputeResult",
+    "compute_session_wrist_repeatability",
     "compute_swing_score",
     "rank_session_swings",
 ]
+

@@ -105,7 +105,19 @@ def test_score_v1_determinism_coverage_gate_and_rankings() -> None:
     assert s1.overall_nullable == s2.overall_nullable == 100.0
     assert s1.partial_score is False
     assert s1.coverage == 1.0
-    assert s1.ig_visual_score is not None
+    # 缺少真實入鏡 quality_metadata 時，IG 分數嚴格遵循門檻為 None (不被 coverage 頂替)
+    assert s1.ig_visual_score is None
+
+    # 提供真實入鏡與畫質 metadata 時，IG 分數正常計算
+    q_meta = {
+        "body_visibility_ratio": 0.95,
+        "mean_sharpness": 50.0,
+        "max_camera_motion": 0.01,
+        "clip_pre_margin_ms": 500,
+        "clip_post_margin_ms": 600,
+    }
+    s_with_q = compute_swing_score(full_metrics, quality_metadata=q_meta)
+    assert s_with_q.ig_visual_score is not None
 
     # 有效覆蓋率 < 70%（僅有 25% + 15% = 40% 分項有效）必須回傳 overall_nullable = None
     sparse_metrics: list[dict[str, Any]] = [

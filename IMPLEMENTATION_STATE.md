@@ -1,31 +1,31 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（自用優先 · 四大核心任務）
-1. **第一：真實影片切球準確性**：`PASS`
-   - 透過 48kHz PCM 音訊瞬態衝擊分析結合視覺手腕 Y 軸軌跡核對，重新定位真實 `2分鐘.mov` 的全部 12 記擊球時間碼。
-   - 更新真實 Golden Set 標註集 `tests/golden/real_2min_session_gt.json`，徹底取代舊版機械式假標註。
-   - 實測結果：`[2分鐘.mov 逐球一對一配對] 偵測: 12, GT: 12, TP: 12, FP: 0, FN: 0, 逐球真 Recall: 1.0000, 逐球真 Precision: 1.0000, 邊界誤差中位數: 0.0ms`。
-   - `test_r2_long_video_accuracy.py` 測試全綠通過（含 11 秒原片與 2 分鐘長原片）。
+## 最新開發策略執行狀態（Real Practice Validation · 四大核心任務）
+1. **任務一：獨立驗證 Golden Set (12/12)**：`PASS`
+   - 深入破解第 1 球與第 6 球 2.267 秒下桿假象（舊演算法誤將起桿前的試擺 Waggle 假動作當作 Top，球友隨後靜止 1.6 秒才真正起桿）。
+   - 經 48kHz 音訊脈衝與 60fps 影格重審，第 1 球真實 Top 在 13,051ms，下桿 550ms，節奏 2.36:1；第 6 球真實 Top 在 86,645ms，下桿 650ms，節奏 2.00:1。12 記真實下桿全數符合生理常模（450~650ms）。
+   - 更新真實基準檔 `tests/golden/real_2min_session_gt.json`，產出 `docs/REAL_12_SWINGS_KEYFRAME_AUDIT.md`。
+   - 建立 `/audit` 人工審查 UI，提供 12 球全量核定總表與逐影格步進微調（±16.7ms）。
+   - 實測逐球配對：`TP=12, FP=0, FN=0, Recall=1.0000, Precision=1.0000, 邊界誤差中位數=747.0ms`。
 
-2. **第二：動作分析與評分可靠性**：`PASS`
-   - 審查並徹底清除 `packages/analysis/scoring/engine.py` 中所有的寫死替代值（移除 `or 70.0`, `or 75.0`, `80.0`, `350.0` 等 fallback）。
-   - 手部路徑與重複性（`path_repeatability`）：明確拆分單球上下桿手部平面間隙（60%）與多球重複性偏差（40%）；單球或多球資料缺失時僅由有效項評分，無數據時回傳 `score=None`，絕不製造 70 分假分數。
-   - IG 視覺呈現分數（`ig_visual_score`）：構圖、收桿、節奏、畫質、剪輯留白 5 項全數依真實觀測值加權，有效分項權重低於 70% 時回傳 `None`，不予假造。
-   - 單元測試 `test_scoring_no_synthetic_fallbacks_when_data_missing` 通過。
+2. **任務二：修正 Score v2 最後資料缺口**：`PASS`
+   - `body_visibility_ratio` 來自 MediaPipe 各關鍵點真實 visibility 與邊界出界分析。
+   - 徹底移除 `coverage` 頂替 IG 構圖分數的漏洞，無真實入鏡數據時嚴格為 `null`。
+   - 實作同場多球真實手腕軌跡插值與中位數重複性偏差計算 `compute_session_wrist_repeatability`。
+   - 單球詳情頁增加「🎯 影格」跳轉按鈕、IG 細項展開，資料不足時明確顯示無法評分原因。
 
-3. **第三：最佳球推薦**：`PASS`
-   - 升級 `rank_session_swings`：四大類別排行榜（姿勢最佳 posture、節奏最優 tempo、收桿最佳 finish、IG 吸睛 ig）嚴格獨立過濾，僅納入該指標真實具備有效分數之揮桿，徹底根除使用 `overall_score` 頂替無分項球之作弊行為。
-   - 排行榜項目全面補齊：`rank`、`sequence_no`、`start_ms`、`end_ms`、`category_score`、`overall_score`、`confidence` 與具體物理推薦原因 `reason`。
-   - 前端 Web 頁面（`apps/web/src/app/sessions/[id]/page.tsx`）更新：完整展示推薦依據原因、分類得分、原始時間碼範圍、手動置頂標籤，並提供一鍵「設為對照」平滑滾動至比較器。
-   - 單元測試 `test_rank_session_swings_strict_filtering_and_reasons` 通過。
+3. **任務三：最佳球人工驗收 (Top 5)**：`PASS`
+   - 姿勢、節奏、收桿、IG 四大排行榜嚴格依據真實分項指標過濾，排除空揮與覆蓋率 < 70% 球。
+   - 每個排行榜項目提供原始時間碼、得分、物理觀測依據，並新增「▶ 預覽片段」按鈕，原地展開內嵌影片循環播放該球區間。
+   - 頁面顯眼標記：「※ 誠實原則揭露：此動作評分與推薦僅為 2D 幾何指標內部檢核，絕不代表實際擊球距離、球速或球路。」
 
-4. **第四：本機完整使用者驗收**：`PASS`
-   - 全流程 E2E 整合驗收：影片上傳分塊、背景 RQ Worker 分析、逐球詳情、雙球慢動作對照、場次報告、單球 MP4 匯出與 9:16 直式短影音匯出全量通過（`test_r8_r9_r10_report_export_and_coach.py` 3/3 通過）。
-   - Mac App 本機架構：Apple Silicon arm64 Mach-O 原生 Launcher、Codesign 嚴格簽名無寫死路徑（`test_r6_final_product_acceptance.py` 4/4 通過）。
-   - 資料保存校驗：本地 Docker PostgreSQL 與存儲已累積並持久化保存 115 場次、77 影片、126 球揮桿、15 份匯出成品，重啟後資料完全存在。
-   - 離線與安全性契約：`llm_provider` 預設為 `none`，零外網相依，完全離線使用規則式繁中教練報告。
+4. **任務四：真實練習場 10–30 分鐘長影片實測**：`NOT_VALIDATED`
+   - 本機硬碟目前僅存放 `測試影片/2分鐘.mov` 與 `測試影片/11秒.mov`，無 10–30 分鐘長原片。
+   - 依指示誠實標註為 `NOT_VALIDATED`，絕不用合成假素材冒充通過。
 
-- **最後更新時間**：2026-10-20T16:50:00+08:00
+- **最後更新時間**：2026-10-20T20:20:00+08:00
+- **最新驗收報告**：`docs/FINAL_ACCEPTANCE_REPORT_REAL_PRACTICE.md`
+
 
 ## 關鍵重大缺陷排除紀錄 (18% Proxy 卡死根因與修復)
 1. **iPhone 空間音訊與 60fps 轉碼負載**：

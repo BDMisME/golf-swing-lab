@@ -142,6 +142,27 @@ class CoarseToFineDetector:
                     pct = 50 + int((idx / total_wins) * 30)
                     progress_cb("fine_scan", pct, f"已完成第 {idx}/{len(candidate_windows)} 候選視窗精細分析")
 
+            # 計算同場多球真實手部軌跡重複性偏差 (session_path_repeatability)
+            from packages.analysis.scoring.engine import compute_session_wrist_repeatability
+
+            trajs: dict[str, list[dict[str, Any]]] = {
+                str(s.sequence_no): s.quality_metadata.get("wrist_trajectory", [])
+                for s in results
+            }
+            repeat_res = compute_session_wrist_repeatability(trajs)
+            for s in results:
+                r_info = repeat_res.get(str(s.sequence_no), {})
+                s.metrics.append(
+                    {
+                        "metric_key": "session_path_repeatability",
+                        "value": r_info.get("deviation"),
+                        "unit": "ratio",
+                        "confidence": r_info.get("confidence", 0.0),
+                        "source": self.model_version,
+                        "observability": "observed_2d",
+                    }
+                )
+
             return results, quality_summary
         finally:
             extractor.close()
@@ -199,16 +220,32 @@ class CoarseToFineDetector:
             brights: list[float] = []
             sharps: list[float] = []
             cam_motions: list[float] = []
+            vis_list: list[float] = []
+            oof_flags: set[str] = set()
 
             for fr in fine_frames:
                 confs.append(fr.pose_confidence)
                 brights.append(fr.brightness)
                 sharps.append(fr.sharpness)
                 cam_motions.append(fr.camera_motion)
+                if fr.landmarks:
+                    l_vis = [lm.visibility for lm in fr.landmarks.values()]
+                    vis_list.append(float(np.mean(l_vis)))
+                    nose = fr.landmarks.get("nose")
+                    if nose and (nose.y < 0.02 or nose.y > 0.98 or nose.x < 0.02 or nose.x > 0.98):
+                        oof_flags.add("head_out_of_frame")
+                    l_ankle = fr.landmarks.get("left_ankle")
+                    r_ankle = fr.landmarks.get("right_ankle")
+                    if (l_ankle and (l_ankle.y > 0.98 or l_ankle.y < 0.02)) or (r_ankle and (r_ankle.y > 0.98 or r_ankle.y < 0.02)):
+                        oof_flags.add("feet_out_of_frame")
+                else:
+                    vis_list.append(0.0)
+
                 for fl in fr.flags:
                     if fl != "pose_missing":
                         flags_set.add(fl)
 
+            body_vis_ratio = round(float(np.mean(vis_list)), 3) if vis_list else 0.0
             mean_conf = float(np.mean(confs)) if confs else 0.0
             if not events:
                 flags_set.add("incomplete_swing_phases")
@@ -267,13 +304,44 @@ class CoarseToFineDetector:
                 except Exception as b_exc:
                     logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
 
+            # 提取手腕 2D 軌跡點序列供多球重複性計算
+            wrist_traj: list[dict[str, Any]] = []
+            for fr in fine_frames:
+                lw = fr.landmarks.get("left_wrist")
+                rw = fr.landmarks.get("right_wrist")
+                if lw and rw:
+                    w_conf = min(lw.visibility, rw.visibility)
+                    wrist_traj.append({
+                        "time_ms": fr.time_ms,
+                        "x": round(float((lw.x + rw.x) / 2.0), 4),
+                        "y": round(float((lw.y + rw.y) / 2.0), 4),
+                        "conf": round(float(w_conf), 3),
+                    })
+                elif rw:
+                    wrist_traj.append({
+                        "time_ms": fr.time_ms,
+                        "x": round(float(rw.x), 4),
+                        "y": round(float(rw.y), 4),
+                        "conf": round(float(rw.visibility), 3),
+                    })
+                elif lw:
+                    wrist_traj.append({
+                        "time_ms": fr.time_ms,
+                        "x": round(float(lw.x), 4),
+                        "y": round(float(lw.y), 4),
+                        "conf": round(float(lw.visibility), 3),
+                    })
+
             quality_meta = {
                 "mean_brightness": round(float(np.mean(brights or [0.0])), 2),
                 "mean_sharpness": round(float(np.mean(sharps or [0.0])), 2),
                 "max_camera_motion": round(float(np.max(cam_motions or [0.0])), 4),
+                "body_visibility_ratio": body_vis_ratio,
+                "out_of_frame_flags": sorted(oof_flags),
                 "state_trace": state_trace,
                 "sampled_frame_count": len(fine_frames),
                 "ball_trajectory": ball_traj,
+                "wrist_trajectory": wrist_traj,
             }
 
             return CandidateSegmentResult(

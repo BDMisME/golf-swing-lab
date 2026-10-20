@@ -1,5 +1,8 @@
+import math
 from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 DEFAULT_WEIGHTS: dict[str, float] = {
     "spine_tilt_stability": 25.0,
@@ -342,9 +345,6 @@ def compute_swing_score(
     if vis_ratio is not None:
         base_framing = float(vis_ratio) * 100.0
         framing_score: float | None = _clip(base_framing - oof_penalty, 20.0, 100.0)
-    elif coverage > 0.0:
-        base_framing = float(coverage) * 100.0
-        framing_score = _clip(base_framing - oof_penalty, 20.0, 100.0)
     else:
         framing_score = None
 
@@ -543,3 +543,80 @@ def rank_session_swings(
             _ig_reason,
         ),
     }
+
+
+def compute_session_wrist_repeatability(
+    wrist_trajectories: dict[str, list[dict[str, Any]]],
+    num_sample_points: int = 20,
+) -> dict[str, dict[str, Any]]:
+    """
+    計算同場次多球手腕軌跡重複性 (session_path_repeatability)：
+    1. 針對每顆球，將 Takeaway/Address 到 Impact 的手腕軌跡 (x, y) 沿時間進度 [0, 1] 等距插值成 num_sample_points 個點。
+    2. 若同場具有有效手腕軌跡之球數 >= 2：
+       - 計算所有球在各點之中位數基準軌跡 (Baseline Wrist Path)。
+       - 計算每球相對於基準軌跡之平均歐氏距離偏差 (Euclidean Deviation Ratio)。
+       - 回傳每球偏差值 (ratio) 與信心度。
+    3. 若同場有效球數 < 2：
+       - 回傳每球偏差值為 None，明確標示「需同場至少 2 球方可計算重複性」。
+    """
+    valid_curves: dict[str, list[tuple[float, float]]] = {}
+    confidences: dict[str, float] = {}
+
+    for seg_id, points in wrist_trajectories.items():
+        usable_pts = [
+            p for p in points
+            if float(p.get("conf", 1.0)) >= 0.40 and "x" in p and "y" in p
+        ]
+        if len(usable_pts) < 4:
+            continue
+
+        usable_pts = sorted(usable_pts, key=lambda p: float(p.get("time_ms", 0)))
+        t_start = float(usable_pts[0].get("time_ms", 0))
+        t_end = float(usable_pts[-1].get("time_ms", 1))
+        t_span = max(1.0, t_end - t_start)
+
+        xs = [float(p["x"]) for p in usable_pts]
+        ys = [float(p["y"]) for p in usable_pts]
+        ts = [(float(p.get("time_ms", 0)) - t_start) / t_span for p in usable_pts]
+
+        target_u = np.linspace(0.0, 1.0, num_sample_points)
+        interp_x = np.interp(target_u, ts, xs)
+        interp_y = np.interp(target_u, ts, ys)
+        curve = list(zip(interp_x, interp_y, strict=False))
+
+        valid_curves[seg_id] = curve
+        confidences[seg_id] = float(np.mean([float(p.get("conf", 1.0)) for p in usable_pts]))
+
+    results: dict[str, dict[str, Any]] = {}
+    if len(valid_curves) >= 2:
+        baseline_pts: list[tuple[float, float]] = []
+        for i in range(num_sample_points):
+            pts_at_i_x = [curve[i][0] for curve in valid_curves.values()]
+            pts_at_i_y = [curve[i][1] for curve in valid_curves.values()]
+            med_x = float(np.median(pts_at_i_x))
+            med_y = float(np.median(pts_at_i_y))
+            baseline_pts.append((med_x, med_y))
+
+        for seg_id, curve in valid_curves.items():
+            deviations = [
+                math.hypot(curve[i][0] - baseline_pts[i][0], curve[i][1] - baseline_pts[i][1])
+                for i in range(num_sample_points)
+            ]
+            mean_dev = float(np.mean(deviations))
+            results[seg_id] = {
+                "deviation": round(mean_dev, 4),
+                "confidence": round(confidences.get(seg_id, 0.7), 3),
+                "valid_session_swings": len(valid_curves),
+                "reason": f"與全場 {len(valid_curves)} 球中位數基準軌跡之平均偏差為 {mean_dev:.3f}",
+            }
+    else:
+        for seg_id in wrist_trajectories.keys():
+            results[seg_id] = {
+                "deviation": None,
+                "confidence": 0.0,
+                "valid_session_swings": len(valid_curves),
+                "reason": "同場有效手部軌跡少於 2 球，無法計算重複性偏差",
+            }
+
+    return results
+
