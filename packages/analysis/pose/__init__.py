@@ -1,8 +1,13 @@
-import os
 import logging
+import os
 from typing import Any
 
-from packages.analysis.pose.extractor import FramePoseResult, Landmark2D, PoseExtractor, VideoQualitySummary
+from packages.analysis.pose.extractor import (
+    FramePoseResult,
+    Landmark2D,
+    PoseExtractor,
+    VideoQualitySummary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +18,7 @@ def create_pose_extractor(backend: str | None = None, model_name: str = "yolov8x
     若環境不支援或指定 mediapipe，則自動降級使用 Google MediaPipe。
     """
     selected = backend or os.environ.get("POSE_BACKEND", "yolov8x-pose")
-    if selected.lower() in ("mediapipe", "mp"):
+    if selected.lower() in ("mediapipe", "mp", "pose-v1"):
         logger.info("使用 MediaPipe PoseLandmarker 引擎")
         return PoseExtractor()
 

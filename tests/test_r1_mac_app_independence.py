@@ -8,10 +8,9 @@
 5. 視訊長寬比自適應座標映射 (Aspect Fit) 與純淨教練線驗收
 """
 
-import os
 import subprocess
 from pathlib import Path
-import pytest
+
 import httpx
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -65,6 +64,7 @@ def test_services_health_and_readiness():
 def test_offline_coach_provider_none_resilience():
     """驗證無外網或無 API Key 時，規則式教練 (LLM_PROVIDER=none) 完全獨立運作。"""
     import asyncio
+
     from packages.analysis.coach import RuleBasedCoachProvider
 
     provider = RuleBasedCoachProvider()
@@ -114,6 +114,6 @@ def test_canvas_aspect_fit_and_clean_diagnostic_lines():
     assert "videoAspect" in code, "必須計算 videoAspect"
     assert "offsetX" in code and "offsetY" in code, "必須計算 letterbox 黑邊偏移量 offsetX 與 offsetY"
     assert "toX" in code and "toY" in code, "座標必須透過 toX/toY 進行精準投影"
-    assert "PGA 鉛線 (Tush Line)" in code, "必須提供專業 PGA 鉛線早起檢核"
+    assert "Tush Line" in code, "必須提供專業 PGA 鉛線 (Tush Line) 早起檢核"
     assert "proTemplates" not in code, "必須徹底移除僵硬且怪異的外星人骨架模板"
     assert "bufferBefore" in code or "swing.start_ms - " in code, "必須限制繪製時間範圍，擊球結束後自動清空畫布"

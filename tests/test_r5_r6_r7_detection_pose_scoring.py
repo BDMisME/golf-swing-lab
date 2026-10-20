@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-
 from typing import Any
 
 from packages.analysis.detection.scanner import (

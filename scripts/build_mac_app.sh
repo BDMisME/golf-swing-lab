@@ -63,6 +63,12 @@ elif [ -f "/Users/mathew/Desktop/Golf Swing Lab.app/Contents/Resources/AppIcon.i
     cp "/Users/mathew/Desktop/Golf Swing Lab.app/Contents/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 fi
 
+echo "=== [3.5/5] 封裝應用原始碼至 Resources/app 實現真可攜性 ==="
+mkdir -p "$RESOURCES_DIR/app"
+rsync -a --exclude 'node_modules' --exclude '__pycache__' --exclude '.venv' --exclude '.git' --exclude '測試影片' \
+    "$REPO_ROOT/apps" "$REPO_ROOT/packages" "$REPO_ROOT/desktop_app.py" "$REPO_ROOT/pyproject.toml" \
+    "$RESOURCES_DIR/app/"
+
 echo "=== [4/5] 執行 macOS 本地 Ad-hoc 程式碼簽名 ==="
 codesign -s - --force --deep "$APP_BUNDLE"
 

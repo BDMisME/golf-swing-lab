@@ -1,5 +1,5 @@
 import logging
-import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +10,9 @@ import torch
 from packages.analysis.pose.extractor import FramePoseResult, Landmark2D
 
 logger = logging.getLogger(__name__)
+
+# 全域推論鎖：防止 macOS Metal/MPS 在多執行緒或多測試同時呼叫時引發 SIGABRT (Metal context collision)
+_YOLO_GLOBAL_LOCK = threading.Lock()
 
 # COCO 17 關鍵點到高爾夫幾何字典的對照表
 YOLO_COCO_MAP: dict[str, int] = {
@@ -139,24 +142,27 @@ class YoloPoseExtractor:
         source = f"yolov8-pose-{self.model_name.replace('.pt', '')}"
 
         try:
-            # 執行 YOLOv8-pose 推論
-            results = self.model(
-                frame_bgr,
-                device=self.device,
-                verbose=False,
-                conf=self.conf_threshold,
-            )
+            # 執行 YOLOv8-pose 推論 (加全域鎖保護 MPS/Metal 執行緒安全)
+            with _YOLO_GLOBAL_LOCK:
+                results = self.model(
+                    frame_bgr,
+                    device=self.device,
+                    verbose=False,
+                    conf=self.conf_threshold,
+                )
+            results_list = list(results) if results else []
 
-            if results and len(results) > 0:
-                res = results[0]
-                boxes = res.boxes
+            if results_list:
+                res: Any = results_list[0]
+                boxes = getattr(res, "boxes", None)
                 person_count = len(boxes) if boxes is not None else 0
                 if person_count > 1:
                     flags.append("multi_person")
 
-                if res.keypoints is not None and len(res.keypoints.data) > 0:
+                keypoints = getattr(res, "keypoints", None)
+                if keypoints is not None and getattr(keypoints, "data", None) is not None and len(keypoints.data) > 0:
                     # 選擇畫面中最顯著、置信度最高的目標選手 (Primary Golfer)
-                    kpts = res.keypoints.data[0].cpu().numpy()  # shape: [17, 3] (x, y, conf)
+                    kpts = keypoints.data[0].cpu().numpy()  # shape: [17, 3] (x, y, conf)
 
                     for name, coco_idx in YOLO_COCO_MAP.items():
                         if coco_idx < len(kpts):

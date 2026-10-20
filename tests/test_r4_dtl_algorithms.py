@@ -6,17 +6,16 @@
 3. PGA 鉛線 (Tush Line) 早起檢測邏輯
 """
 
-import numpy as np
+from packages.analysis.events.state_machine import (
+    DetectedEvent,
+    FramePoseResult,
+    compute_observable_metrics,
+)
+from packages.analysis.pose.extractor import Landmark2D
 from packages.analysis.tracking.ball_tracker import (
     KalmanBallTracker,
     validate_ball_trajectory_physics,
 )
-from packages.analysis.events.state_machine import (
-    compute_observable_metrics,
-    FramePoseResult,
-    DetectedEvent,
-)
-from packages.analysis.pose.extractor import Landmark2D
 
 
 def test_kalman_filter_smooth_trajectory():
@@ -73,6 +72,14 @@ def test_ball_physics_validation():
         {"time_ms": 1100, "x": 0.60, "y": 0.95},
     ]
     assert validate_ball_trajectory_physics(down_traj) is False, "向下入地雜訊應被拒絕"
+
+    # 案例 5: 左打者正常由打擊墊向左上方升空 (x 減小，y 減小)
+    lefty_traj = [
+        {"time_ms": 1000, "x": 0.50, "y": 0.75},
+        {"time_ms": 1050, "x": 0.40, "y": 0.50},
+        {"time_ms": 1100, "x": 0.30, "y": 0.30},
+    ]
+    assert validate_ball_trajectory_physics(lefty_traj) is True, "左打者向左上方升空軌跡應被正確接受"
 
 
 def test_dtl_metrics_computation():

@@ -153,8 +153,14 @@ export default function SwingDetailPage() {
       // 1. 專業 PGA 教練檢核線 (臀部鉛線 Tush Line & 脊柱傾角線)
       if (showProGhost) {
         const addrHip = addressLms["right_hip"] || addressLms["left_hip"];
-        if (addrHip && addrHip.visibility >= 0.3) {
-          const tushX = toX(addrHip.x);
+        const addrSh = addressLms["right_shoulder"] || addressLms["left_shoulder"];
+        if (addrHip && addrSh && addrHip.visibility >= 0.40 && addrSh.visibility >= 0.40) {
+          const torsoLength = Math.hypot(toX(addrHip.x) - toX(addrSh.x), toY(addrHip.y) - toY(addrSh.y));
+          // 骨盆背側後緣推定：DTL 視角下臀部外緣位於髖關節中心背後約 16% 軀幹長度
+          // 依據肩部相對於髖部 X 座標判斷目標朝向
+          const isFacingRight = addrSh.x > addrHip.x;
+          const buttOffset = (isFacingRight ? -1 : 1) * torsoLength * 0.16;
+          const tushX = toX(addrHip.x) + buttOffset;
           const tushTopY = toY(Math.max(0.1, addrHip.y - 0.25));
           const tushBotY = toY(Math.min(0.95, addrHip.y + 0.35));
 
@@ -169,20 +175,42 @@ export default function SwingDetailPage() {
 
           ctx.font = "bold 10px sans-serif";
           ctx.fillStyle = "#fbbf24";
-          ctx.fillText("PGA 鉛線 (Tush Line)", tushX - 105, tushTopY + 14);
+          ctx.fillText("PGA 鉛線 (Tush Line)", isFacingRight ? tushX - 125 : tushX + 8, tushTopY + 14);
 
           const currHip = lms["right_hip"] || lms["left_hip"];
-          if (currHip && currHip.visibility >= 0.3 && currentTimeMs >= topMs) {
-            const curHipX = toX(currHip.x);
-            const isEarlyExtension = (curHipX - tushX) > 12;
-            ctx.fillStyle = isEarlyExtension ? "#ef4444" : "#10b981";
-            ctx.font = "bold 9px sans-serif";
-            ctx.fillText(
-              isEarlyExtension ? "⚠ 早起 (臀部離開鉛線)" : "✓ 臀部維持在線",
-              tushX + 8,
-              toY(currHip.y)
-            );
+          if (currentTimeMs >= topMs) {
+            if (currHip && currHip.visibility >= 0.40) {
+              const curHipEstimatedButtX = toX(currHip.x) + buttOffset;
+              // 依軀幹長度歸一化之位移比例，不使用粗糙像素
+              const normDisplacement = isFacingRight
+                ? (curHipEstimatedButtX - tushX) / torsoLength
+                : (tushX - curHipEstimatedButtX) / torsoLength;
+
+              // 位移離開基準線超過 10% 軀幹長度判定為早起
+              const isEarlyExtension = normDisplacement > 0.10;
+              const isStable = normDisplacement <= 0.04;
+
+              ctx.fillStyle = isEarlyExtension ? "#ef4444" : isStable ? "#10b981" : "#fbbf24";
+              ctx.font = "bold 9px sans-serif";
+              const labelText = isEarlyExtension
+                ? `⚠ 早起 (離開鉛線 ${(normDisplacement * 100).toFixed(0)}%)`
+                : isStable
+                ? "✓ 臀部維持在線 (穩定)"
+                : "∼ 輕微位移 (在容許範圍)";
+
+              ctx.fillText(labelText, tushX + (isFacingRight ? 8 : -140), toY(currHip.y));
+            } else {
+              ctx.fillStyle = "#94a3b8";
+              ctx.font = "italic 9px sans-serif";
+              ctx.fillText("∼ 關鍵點置信度不足 (無可靠早起判定)", tushX + 8, toY(addrHip.y));
+            }
           }
+          ctx.restore();
+        } else if (addrHip) {
+          ctx.save();
+          ctx.font = "italic 9px sans-serif";
+          ctx.fillStyle = "#94a3b8";
+          ctx.fillText("Tush Line: 姿態置信度不足", toX(addrHip.x) - 40, toY(addrHip.y));
           ctx.restore();
         }
 
@@ -239,10 +267,64 @@ export default function SwingDetailPage() {
         }
       }
 
-      // 3. 小白球出球動態軌跡 (Ball Tracer) - 嚴格限制於擊球瞬間至擊球後 1.2 秒！
+      // 3. 小白球出球動態軌跡 (Ball Tracer) - 嚴格基於後端 AI 觀測資料渲染
       if (showBallTracer) {
         const timeSinceImpact = currentTimeMs - impactMs;
-        if (timeSinceImpact >= -100 && timeSinceImpact <= 1200) {
+        const realTrajectory: any[] = (swing as any).ball_trajectory || (swing as any).pose_artifact?.quality_metadata?.ball_trajectory || [];
+
+        if (realTrajectory && realTrajectory.length >= 2) {
+          // A. 真正的 AI 觀測出球軌跡渲染
+          const firstPt = realTrajectory[0];
+          const lastPt = realTrajectory[realTrajectory.length - 1];
+          const trajStartMs = firstPt.time_ms;
+          const trajEndMs = lastPt.time_ms + 400;
+
+          if (currentTimeMs >= trajStartMs - 100 && currentTimeMs <= trajEndMs) {
+            ctx.save();
+            const activePts = realTrajectory.filter((p: any) => p.time_ms <= currentTimeMs);
+
+            if (activePts.length >= 1) {
+              ctx.shadowColor = "#39ff14";
+              ctx.shadowBlur = 10;
+              ctx.lineWidth = 2.5;
+
+              ctx.beginPath();
+              for (let i = 0; i < activePts.length; i++) {
+                const px = toX(activePts[i].x);
+                const py = toY(activePts[i].y);
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+              }
+              const curPt = activePts[activePts.length - 1];
+              const curX = toX(curPt.x);
+              const curY = toY(curPt.y);
+
+              const grad = ctx.createLinearGradient(toX(firstPt.x), toY(firstPt.y), curX, curY);
+              grad.addColorStop(0, "rgba(57, 255, 20, 0.4)");
+              grad.addColorStop(1, "#39ff14");
+              ctx.strokeStyle = grad;
+              ctx.stroke();
+
+              // 繪製發光白球
+              ctx.fillStyle = "#ffffff";
+              ctx.shadowColor = "#ffffff";
+              ctx.shadowBlur = 12;
+              ctx.beginPath();
+              ctx.arc(curX, curY, 3.5, 0, Math.PI * 2);
+              ctx.fill();
+
+              ctx.font = "bold 9px sans-serif";
+              ctx.fillStyle = "#39ff14";
+              ctx.fillText(
+                curPt.point_type === "predicted" ? "AI 預測延伸" : "AI 實測出球 (Toptracer)",
+                curX + 8,
+                curY - 4
+              );
+            }
+            ctx.restore();
+          }
+        } else if (timeSinceImpact >= -100 && timeSinceImpact <= 1100) {
+          // B. 誠實降級：無可靠 AI 球體觀測時，僅顯示半透明虛線示意動畫，並明確標註免責聲明
           const addrW = addressLms["right_wrist"] || addressLms["left_wrist"];
           const addrAnk = addressLms["right_ankle"] || addressLms["left_ankle"];
           const groundY = addrAnk ? toY(addrAnk.y) : toY(0.85);
@@ -251,20 +333,18 @@ export default function SwingDetailPage() {
 
           ctx.save();
           if (timeSinceImpact < 0) {
-            ctx.fillStyle = "#ffffff";
-            ctx.shadowColor = "#39ff14";
-            ctx.shadowBlur = 8;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
             ctx.beginPath();
-            ctx.arc(ballX, ballY, 4, 0, Math.PI * 2);
+            ctx.arc(ballX, ballY, 3, 0, Math.PI * 2);
             ctx.fill();
           } else {
-            const progress = Math.min(1.0, timeSinceImpact / 1100);
-            const numSteps = 24;
+            const progress = Math.min(1.0, timeSinceImpact / 1000);
+            const numSteps = 20;
             const currentStep = Math.max(1, Math.floor(progress * numSteps));
 
-            ctx.shadowColor = "#39ff14";
-            ctx.shadowBlur = 10;
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]); // 虛線表示示意
+            ctx.strokeStyle = "rgba(160, 174, 192, 0.6)";
 
             ctx.beginPath();
             let curBallX = ballX;
@@ -272,38 +352,28 @@ export default function SwingDetailPage() {
 
             for (let step = 0; step <= currentStep; step++) {
               const t = step / numSteps;
-              const flightX = ballX + drawWidth * 0.28 * t;
+              const flightX = ballX + drawWidth * 0.25 * t;
               const parabola = 4 * t * (1 - t * 0.55);
-              const flightY = ballY - drawHeight * 0.38 * parabola;
+              const flightY = ballY - drawHeight * 0.32 * parabola;
 
-              if (step === 0) {
-                ctx.moveTo(flightX, flightY);
-              } else {
-                ctx.lineTo(flightX, flightY);
-              }
+              if (step === 0) ctx.moveTo(flightX, flightY);
+              else ctx.lineTo(flightX, flightY);
+
               if (step === currentStep) {
                 curBallX = flightX;
                 curBallY = flightY;
               }
             }
-
-            const grad = ctx.createLinearGradient(ballX, ballY, curBallX, curBallY);
-            grad.addColorStop(0, "rgba(57, 255, 20, 0.4)");
-            grad.addColorStop(0.7, "rgba(57, 255, 20, 0.95)");
-            grad.addColorStop(1, "#ffffff");
-            ctx.strokeStyle = grad;
             ctx.stroke();
 
-            ctx.fillStyle = "#ffffff";
-            ctx.shadowColor = "#ffffff";
-            ctx.shadowBlur = 12;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
             ctx.beginPath();
-            ctx.arc(curBallX, curBallY, Math.max(2.0, 4.0 * (1 - progress * 0.5)), 0, Math.PI * 2);
+            ctx.arc(curBallX, curBallY, 2.5, 0, Math.PI * 2);
             ctx.fill();
 
-            ctx.font = "bold 9px sans-serif";
-            ctx.fillStyle = "#39ff14";
-            ctx.fillText("TRACER 出球軌跡", curBallX + 8, curBallY - 4);
+            ctx.font = "italic 9px sans-serif";
+            ctx.fillStyle = "rgba(203, 213, 225, 0.85)";
+            ctx.fillText("理論出球示意 (未捕捉到實測球體)", curBallX + 8, curBallY - 4);
           }
           ctx.restore();
         }

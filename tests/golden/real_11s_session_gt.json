@@ -1,0 +1,12 @@
+{
+  "dataset_version": "golden-v1",
+  "video_id": "real_11s_session_01",
+  "fps": 60.0,
+  "duration_ms": 11458,
+  "camera_angle": "DTL",
+  "handedness": "right",
+  "note": "Human annotated Ground Truth for 測試影片/11秒.mov (1 real swing).",
+  "ground_truth_swings": [
+    {"gt_id": "gt-1", "start_ms": 2800, "end_ms": 7800, "impact_ms": 6100, "label": "valid_swing"}
+  ]
+}

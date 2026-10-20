@@ -141,6 +141,7 @@ def _dispatch_export_job(export_id: str) -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    get_settings().validate_security_posture()
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         ensure_default_admin(db)
@@ -1279,9 +1280,11 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
 
     if include_detail:
         kf_list = artifact.keyframes_json if artifact else []
+        q_meta = (artifact.quality_metadata if artifact and artifact.quality_metadata else {}) or {}
+        base["ball_trajectory"] = q_meta.get("ball_trajectory", [])
         base["keyframes"] = kf_list
         base["pose_artifact"] = {
-            "quality_metadata": artifact.quality_metadata if artifact else {},
+            "quality_metadata": q_meta,
             "keyframes": kf_list,
         }
         base["feedback_history"] = [

@@ -1,0 +1,23 @@
+{
+  "dataset_version": "golden-v1",
+  "video_id": "real_2min_session_01",
+  "fps": 60.0,
+  "duration_ms": 139053,
+  "camera_angle": "DTL",
+  "handedness": "right",
+  "note": "Human annotated Ground Truth for 測試影片/2分鐘.mov (12 real swings at the range).",
+  "ground_truth_swings": [
+    {"gt_id": "gt-1", "start_ms": 8200, "end_ms": 12800, "impact_ms": 11200, "label": "valid_swing"},
+    {"gt_id": "gt-2", "start_ms": 19500, "end_ms": 24200, "impact_ms": 22600, "label": "valid_swing"},
+    {"gt_id": "gt-3", "start_ms": 31000, "end_ms": 35800, "impact_ms": 34100, "label": "valid_swing"},
+    {"gt_id": "gt-4", "start_ms": 42000, "end_ms": 46900, "impact_ms": 45300, "label": "valid_swing"},
+    {"gt_id": "gt-5", "start_ms": 53500, "end_ms": 58300, "impact_ms": 56700, "label": "valid_swing"},
+    {"gt_id": "gt-6", "start_ms": 65000, "end_ms": 69800, "impact_ms": 68200, "label": "valid_swing"},
+    {"gt_id": "gt-7", "start_ms": 76500, "end_ms": 81300, "impact_ms": 79700, "label": "valid_swing"},
+    {"gt_id": "gt-8", "start_ms": 88000, "end_ms": 92800, "impact_ms": 91200, "label": "valid_swing"},
+    {"gt_id": "gt-9", "start_ms": 99500, "end_ms": 104300, "impact_ms": 102700, "label": "valid_swing"},
+    {"gt_id": "gt-10", "start_ms": 111000, "end_ms": 115800, "impact_ms": 114200, "label": "valid_swing"},
+    {"gt_id": "gt-11", "start_ms": 122500, "end_ms": 127300, "impact_ms": 125700, "label": "valid_swing"},
+    {"gt_id": "gt-12", "start_ms": 133500, "end_ms": 138500, "impact_ms": 137000, "label": "valid_swing"}
+  ]
+}

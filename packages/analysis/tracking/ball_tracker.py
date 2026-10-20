@@ -1,5 +1,4 @@
 import logging
-from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -78,19 +77,29 @@ class KalmanBallTracker:
         return (px, py)
 
 
-def validate_ball_trajectory_physics(points: list[dict[str, float]]) -> bool:
+def validate_ball_trajectory_physics(points: list[dict[str, Any]]) -> bool:
     """
     高爾夫出球物理合理性檢核:
     1. 軌跡點數必須 >= 3
-    2. 初始出球點 y 必須在打擊墊合理區間 (y >= 0.48)
-    3. 終點 y 必須小於等於起點 y (小白球朝天空上方飛行)
-    4. 終點 x 必須大於等於起點 x (球朝前方飛行)
+    2. 初始出球點 y 必須在打擊墊或擊球台合理區間 (y >= 0.48)
+    3. 終點 y 必須小於等於起點 y (小白球朝天空上方飛行，容許 0.04 測量誤差)
+    4. 總位移長度必須具備實質飛行向量 (hypot(dx, dy) >= 0.04)，相容左打者 (左飛) 與右打者 (右飛)
     """
     if len(points) < 3:
         return False
     init_pt = points[0]
     last_pt = points[-1]
-    if init_pt["y"] < 0.48 or (last_pt["y"] > init_pt["y"] + 0.04) or (last_pt["x"] < init_pt["x"] - 0.05):
+    if float(init_pt["y"]) < 0.48:
+        return False
+    if float(last_pt["y"]) > float(init_pt["y"]) + 0.04:
+        return False
+    dx = float(last_pt["x"]) - float(init_pt["x"])
+    dy = float(last_pt["y"]) - float(init_pt["y"])
+    if (dx * dx + dy * dy) < 0.0016:  # 總位移小於 0.04
+        return False
+    # 5. 出球升空向量檢核: 全揮桿擊球出球必有真實仰角升空 (dy <= -0.06，畫面 y 向上遞減)
+    # 排除水平穿越地面或向後平移之雜訊，同時相容左打 (dx < 0) 與右打 (dx > 0)
+    if dy > -0.06:
         return False
     return True
 
@@ -136,11 +145,15 @@ class GolfBallDetector:
 
         roi_crop = frame_bgr[ry1:ry2, rx1:rx2]
         try:
-            results = self.model(roi_crop, verbose=False, conf=self.conf_threshold)
-            if not results or len(results) == 0:
+            from packages.analysis.pose.yolo_extractor import _YOLO_GLOBAL_LOCK
+
+            with _YOLO_GLOBAL_LOCK:
+                results_list = list(self.model(roi_crop, verbose=False, conf=self.conf_threshold))
+            if not results_list:
                 return None
 
-            boxes = results[0].boxes
+            first_res: Any = results_list[0]
+            boxes = getattr(first_res, "boxes", None)
             if boxes is None or len(boxes) == 0:
                 return None
 
@@ -172,7 +185,7 @@ class GolfBallDetector:
         impact_ms: int,
         player_wrist_norm: tuple[float, float] | None = None,
         duration_ms: int = 1200,
-    ) -> list[dict[str, float]]:
+    ) -> list[dict[str, Any]]:
         """
         在擊球瞬間前後精準捕捉出球軌跡，透過卡爾曼濾波器輸出發光 Toptracer 點位列表。
         """
@@ -200,8 +213,9 @@ class GolfBallDetector:
         end_ms = impact_ms + duration_ms
         cap.set(cv2.CAP_PROP_POS_MSEC, float(start_ms))
 
-        trajectory_points: list[dict[str, float]] = []
+        trajectory_points: list[dict[str, Any]] = []
 
+        observed_count = 0
         try:
             while True:
                 ret, frame = cap.read()
@@ -221,8 +235,18 @@ class GolfBallDetector:
                     if det:
                         mx, my, conf = det
                         smooth_x, smooth_y = tracker.update(mx, my, pts_ms)
+                        p_type = "observed"
+                        p_conf = round(float(conf), 3)
+                        raw_x: float | None = round(float(mx), 4)
+                        raw_y: float | None = round(float(my), 4)
+                        observed_count += 1
                     else:
                         smooth_x, smooth_y = tracker.update(None, None, pts_ms)
+                        p_type = "predicted"
+                        lost_steps = max(1, len(trajectory_points) - observed_count)
+                        p_conf = round(max(0.15, 0.75 * (0.85 ** lost_steps)), 3)
+                        raw_x = None
+                        raw_y = None
 
                     if tracker.initialized:
                         trajectory_points.append(
@@ -230,10 +254,19 @@ class GolfBallDetector:
                                 "time_ms": float(pts_ms),
                                 "x": float(np.clip(smooth_x, 0.0, 1.0)),
                                 "y": float(np.clip(smooth_y, 0.0, 1.0)),
+                                "raw_x": raw_x,
+                                "raw_y": raw_y,
+                                "point_type": p_type,
+                                "confidence": p_conf,
                             }
                         )
         finally:
             cap.release()
+
+        # 誠信原則：若真球量測少於 2 幀，視為無法可靠觀測出球軌跡，絕不輸出純推論假球路
+        if observed_count < 2:
+            logger.info(f"真實出球觀測點不足 ({observed_count} < 2)，誠實放棄出球軌跡，不輸出推論假球路。")
+            return []
 
         # 高爾夫物理合理性檢核: 濾除背景水平穿越身體或向後倒退之雜訊
         if trajectory_points and not validate_ball_trajectory_physics(trajectory_points):

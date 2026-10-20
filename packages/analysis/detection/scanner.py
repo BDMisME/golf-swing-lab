@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,8 @@ from packages.analysis.pose import (
     PoseExtractor,
     create_pose_extractor,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def compute_time_iou(a_start: int, a_end: int, b_start: int, b_end: int) -> float:
@@ -96,7 +99,7 @@ class CoarseToFineDetector:
         duration_ms: int,
         progress_cb: Callable[[str, int, str], None] | None = None,
     ) -> tuple[list[CandidateSegmentResult], dict[str, Any]]:
-        extractor = create_pose_extractor()
+        extractor = create_pose_extractor(backend=self.model_version)
         try:
             if progress_cb:
                 progress_cb("coarse_scan", 20, "啟動低解析度稀疏掃描 (Coarse Scan)")
@@ -166,15 +169,23 @@ class CoarseToFineDetector:
 
             events, state_trace, label = self.state_machine.extract_events(fine_frames)
 
-            # 根據偵測到的 address 與 finish 微調片段邊界（保留前後緩衝）
+            # 根據偵測到的 address/takeaway 與 finish/follow_through 精細對齊揮桿片段邊界
             refined_start = start_ms
             refined_end = end_ms
             if events:
                 ev_map = {e.event_name: e.time_ms for e in events}
                 if "address" in ev_map:
-                    refined_start = max(start_ms, ev_map["address"] - 450)
+                    refined_start = max(start_ms, ev_map["address"] - 300)
+                elif "takeaway" in ev_map:
+                    refined_start = max(start_ms, ev_map["takeaway"] - 700)
+
                 if "finish" in ev_map:
-                    refined_end = min(end_ms, ev_map["finish"] + 650)
+                    refined_end = min(end_ms, ev_map["finish"] + 450)
+                elif "follow_through" in ev_map:
+                    refined_end = min(end_ms, ev_map["follow_through"] + 800)
+                elif "impact" in ev_map:
+                    refined_end = min(end_ms, ev_map["impact"] + 1200)
+
                 if refined_end - refined_start < self.min_swing_duration_ms:
                     refined_start = start_ms
                     refined_end = end_ms
@@ -357,7 +368,7 @@ class CoarseToFineDetector:
 
         for idx in active_indices[1:]:
             gap_ms = coarse_frames[idx].time_ms - coarse_frames[prev_idx].time_ms
-            if gap_ms <= 800:
+            if gap_ms <= 1200:
                 prev_idx = idx
             else:
                 clusters.append((cluster_start, prev_idx))
@@ -369,9 +380,9 @@ class CoarseToFineDetector:
         for s_idx, e_idx in clusters:
             raw_s = coarse_frames[s_idx].time_ms
             raw_e = coarse_frames[e_idx].time_ms
-            # 起手前補上 Address 準備時間緩衝，收桿末端對齊手部放回之最後活動點
-            win_s = max(0, raw_s - 650)
-            win_e = min(duration_ms, raw_e)
+            # 起手前補足 Address 準備時間緩衝 (800ms)，收桿末端補足 Finish 停留緩衝 (800ms)
+            win_s = max(0, raw_s - 800)
+            win_e = min(duration_ms, raw_e + 800)
             if win_e - win_s < self.min_swing_duration_ms:
                 pad = (self.min_swing_duration_ms - (win_e - win_s)) // 2 + 150
                 win_s = max(0, win_s - pad)

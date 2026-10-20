@@ -62,6 +62,16 @@ class Settings(BaseSettings):
             origins.append("https://golf-swing-lab.zeabur.app")
         return origins
 
+    def validate_security_posture(self) -> None:
+        """驗證生產環境安全設定，防止預設金鑰洩漏與弱密碼上線。"""
+        if self.app_env == "production":
+            if self.session_secret == "change-me-in-production-at-least-32-bytes-long-secret-key":
+                raise RuntimeError("生產環境嚴禁使用預設 session_secret，請由環境變數 SESSION_SECRET 注入至少 32 字元密鑰。")
+            if self.admin_password == "GolfSwingLab!2026":
+                raise RuntimeError("生產環境嚴禁使用預設 admin_password，請由環境變數 ADMIN_PASSWORD 注入高強度密碼。")
+            if self.s3_access_key_id == "minioadmin" or self.s3_secret_access_key == "minioadmin123":
+                raise RuntimeError("生產環境嚴禁使用預設 S3/MinIO 憑證，請由環境變數注入獨立金鑰。")
+
 
 @lru_cache
 def get_settings() -> Settings:

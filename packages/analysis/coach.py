@@ -53,6 +53,27 @@ FORBIDDEN_HALLUCINATION_TERMS = (
     "smash factor",
     "launch angle",
     "spin rate",
+    "公分",
+    "厘米",
+    "公厘",
+    "毫米",
+    "英吋",
+    "inches",
+    "桿面角",
+    "桿面開放",
+    "桿面閉合",
+    "clubface",
+    "face angle",
+    "slice",
+    "hook",
+    "draw",
+    "fade",
+    "右曲",
+    "左曲",
+    "大右曲",
+    "小右曲",
+    "大左曲",
+    "小左曲",
 )
 
 
@@ -245,7 +266,11 @@ class OpenAICompatibleCoachProvider:
             "  ],\n"
             '  "uncertainties": ["限制說明"]\n'
             "}\n"
-            "最高誠信原則：嚴禁編造或推論球速、桿頭速度、飛行距離、甜蜜點品質、桿面角度或實際球路。"
+            "最高誠信原則（Anti-Hallucination）：\n"
+            "1. 嚴禁編造或推論球速、桿頭速度、飛行距離、甜蜜點接觸品質。\n"
+            "2. 嚴禁推論未經雷達量測之真實飛行球路（如 Slice、Hook、Draw、Fade、左曲球、右曲球）。\n"
+            "3. 2D 影像未經相機物理標定，嚴禁輸出具體長度單位（如公分、厘米、cm、英吋、inches）。所有位移必須以「相對比例」（如相對於軀幹長度）或「趨勢」描述。\n"
+            "4. 嚴禁編造未感測之精確桿面角度（Clubface Angle）。"
         )
 
         # 智慧挑選代表球：最低分球（問題痛點）與最高分球（標竿球），大幅降低推理延遲
@@ -280,8 +305,9 @@ class OpenAICompatibleCoachProvider:
         )
 
         # 支援多模態圖片 (Vision API - 豆包 doubao-seed-2.1-lite)
+        user_content: str | list[dict[str, Any]]
         if keyframe_images and len(keyframe_images) > 0:
-            user_content: list[dict[str, Any]] = [
+            user_content = [
                 {
                     "type": "text",
                     "text": (
@@ -414,7 +440,8 @@ class GeminiCoachProvider:
         system_instruction = (
             "你是 Golf Swing Lab 的專業高爾夫 2D 後方視角（DTL）動作分析教練。\n"
             "請一律使用繁體中文（台灣）回答，並輸出符合 CoachReport schema 的完整 JSON 物件。\n"
-            "嚴格禁止編造或推論任何無法在 2D DTL 單相機下觀測之物理量，包含：球飛行距離、球速、桿頭速度、甜蜜點、桿面角、3D 旋轉角度或實際球路。\n"
+            "嚴格禁止編造或推論任何無法在 2D DTL 單相機下觀測之物理量，包含：球飛行距離、球速、桿頭速度、甜蜜點、桿面角、3D 旋轉角度或實際球路（如 Slice、Hook、Draw、Fade、左曲、右曲）。\n"
+            "2D 影像未經相機物理標定，嚴禁輸出具體長度單位（如公分、厘米、cm、英吋、inches），一律以相對比例或相對趨勢描述。\n"
             "每個觀察與建議都必須直接引用輸入資料中的 segment_id、time_ms 與具體 metric_key。"
         )
         prompt = (

@@ -373,7 +373,7 @@ def compute_observable_metrics(
         }
     )
 
-    # 3. 手部上下桿軌跡差距與重複性基準 (plane_gap_ratio / hand_path_deviation_ratio)
+    # 3. 手部上下桿路徑平面差距 (單球 single_swing_plane_gap_ratio) 與相容指標 (hand_path_deviation_ratio)
     plane_gap: float | None = None
     plane_conf = 0.0
     if f_back and f_down:
@@ -383,6 +383,16 @@ def compute_observable_metrics(
             plane_gap = round(math.hypot(w_back[0] - w_down[0], (w_back[1] - w_down[1]) * 0.5), 4)
             plane_conf = round(min(w_back[2], w_down[2]), 3)
 
+    metrics.append(
+        {
+            "metric_key": "single_swing_plane_gap_ratio",
+            "value": plane_gap,
+            "unit": "ratio",
+            "confidence": plane_conf,
+            "source": model_version,
+            "observability": "observed_2d",
+        }
+    )
     metrics.append(
         {
             "metric_key": "hand_path_deviation_ratio",

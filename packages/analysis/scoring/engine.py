@@ -30,17 +30,16 @@ def compute_swing_score(
     metrics: list[dict[str, Any]],
     quality_metadata: dict[str, Any] | None = None,
     weights: dict[str, float] | None = None,
-    score_version: str = "score-v1",
+    score_version: str = "score-v2",
     min_confidence: float = 0.50,
     min_coverage_gate: float = 0.70,
 ) -> ScoreComputeResult:
     """
-    計算可解釋、確定性 (deterministic) 之內部 2D DTL 動作指標分數 (score-v1)。
-    嚴格遵守：
-    1. 不虛構球速、飛行距離、甜蜜點或 3D 旋轉角。
-    2. 任一分項若缺值或 confidence < min_confidence，該分項為 None。
-    3. 有效分項權重覆蓋率 < 70% 時，overall_nullable 必為 None（「無法可靠評分」）。
-    4. 每個分項皆附帶公式、輸入值、權重、信心度與「怎麼算的？」繁體中文說明。
+    計算可解釋、確定性 (deterministic) 之內部 2D DTL 動作指標分數 (score-v2)。
+    升級項目 (score-v2)：
+    1. 將單球上下桿路徑間隙 (single_swing_plane_gap_ratio) 與多球重複性 (repeatability) 分開。
+    2. IG 視覺呈現分數改採真實關鍵點出界檢核 (framing_score) 與真實片段前後邊界緩衝 (clip_margin_score)。
+    3. 嚴格遵守最高誠信原則，不虛構球速、飛行距離或 3D 角度。
     """
     active_weights = dict(DEFAULT_WEIGHTS)
     if weights:
@@ -130,35 +129,82 @@ def compute_swing_score(
             "how_calculated": "頭部或軀幹基準長度可見度不足，不予計分。",
         }
 
-    # 3. 身體與手部軌跡重複性 (path_repeatability, 20%)
-    m_path = m_map.get("hand_path_deviation_ratio")
-    if (
-        m_path
-        and m_path.get("value") is not None
-        and float(m_path.get("confidence", 0.0)) >= min_confidence
-    ):
-        dev = float(m_path["value"])
-        c_path = float(m_path["confidence"])
-        if dev <= 0.05:
-            s_path = 100.0
+    # 3. 手部路徑與重複性 (path_repeatability, 20%)
+    # 明確分開：單球上下桿路徑間隙 (single_swing_plane_gap_ratio) 與多球重複性 (session_path_repeatability)
+    m_plane = m_map.get("single_swing_plane_gap_ratio") or m_map.get("hand_path_deviation_ratio")
+    m_repeat = m_map.get("session_path_repeatability")
+
+    has_plane = (
+        m_plane
+        and m_plane.get("value") is not None
+        and float(m_plane.get("confidence", 0.0)) >= min_confidence
+    )
+    has_repeat = (
+        m_repeat
+        and m_repeat.get("value") is not None
+        and float(m_repeat.get("confidence", 0.0)) >= min_confidence
+    )
+
+    if has_plane or has_repeat:
+        dev_plane = float(m_plane["value"]) if has_plane else None  # type: ignore
+        conf_plane = float(m_plane["confidence"]) if has_plane else 0.0  # type: ignore
+
+        if has_plane and dev_plane is not None:
+            if dev_plane <= 0.05:
+                s_plane = 100.0
+            else:
+                s_plane = _clip(100.0 - ((dev_plane - 0.05) / 0.20) * 75.0, 25.0, 100.0)
         else:
-            s_path = _clip(100.0 - ((dev - 0.05) / 0.20) * 75.0, 25.0, 100.0)
+            s_plane = 70.0
+
+        if has_repeat and m_repeat is not None:
+            dev_repeat = float(m_repeat["value"])
+            conf_repeat = float(m_repeat["confidence"])
+            s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.16) * 70.0, 30.0, 100.0)
+        else:
+            dev_repeat = None
+            conf_repeat = 0.0
+            s_repeat = None
+
+        if s_repeat is not None and has_plane:
+            final_s_path = round(s_plane * 0.60 + s_repeat * 0.40, 1)
+            final_conf = round(conf_plane * 0.60 + conf_repeat * 0.40, 3)
+            how_calc = (
+                f"融合單球上下桿手部平面差距 d={dev_plane:.3f}（佔 60%）與同場多球重複性偏差 r={dev_repeat:.3f}（佔 40%）；"
+                "僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。"
+            )
+            raw_repr = round(dev_plane, 4) if dev_plane is not None else 0.0
+        elif has_plane and dev_plane is not None:
+            final_s_path = round(s_plane, 1)
+            final_conf = round(conf_plane, 3)
+            how_calc = (
+                f"評估單球上下桿手腕 2D 平面間隙 gap={dev_plane:.3f}；"
+                "gap ≤ 0.05 得 100 分（單球路徑穩定度，未結合多球重複性）。"
+            )
+            raw_repr = round(dev_plane, 4)
+        else:
+            final_s_path = round(s_repeat or 70.0, 1)
+            final_conf = round(conf_repeat, 3)
+            how_calc = f"評估同場多球手部中位數路徑重複性偏差 r={dev_repeat:.3f}。"
+            raw_repr = round(dev_repeat or 0.0, 4)
+
         subscores["path_repeatability"] = {
-            "label": "身體與手部軌跡重複性",
-            "score": round(s_path, 1),
+            "label": "手部路徑間隙與重複性",
+            "score": final_s_path,
             "weight": active_weights["path_repeatability"],
-            "raw_value": round(dev, 4),
+            "raw_value": raw_repr,
             "unit": "ratio",
-            "confidence": round(c_path, 3),
+            "confidence": final_conf,
             "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-            "how_calculated": (
-                f"評估上下桿手腕 2D 路徑平面差距與同場中位數軌跡偏差 d={dev:.3f}；"
-                "d ≤ 0.05 得 100 分（僅衡量手部 2D 投影，不代表真實桿頭路徑）。"
-            ),
+            "how_calculated": how_calc,
+            "details": {
+                "single_swing_plane_gap": dev_plane,
+                "session_repeatability": dev_repeat,
+            },
         }
     else:
         subscores["path_repeatability"] = {
-            "label": "身體與手部軌跡重複性",
+            "label": "手部路徑間隙與重複性",
             "score": None,
             "weight": active_weights["path_repeatability"],
             "raw_value": None,
@@ -285,16 +331,35 @@ def compute_swing_score(
             )
 
     # 計算獨立之 IG 視覺呈現分數 (ig_visual_score)
-    # 畫面完整 30% + 平穩收桿 25% + 節奏觀感 20% + 清晰度 15% + 起迄剪輯完整性 10%
+    # 畫面完整 (真實入鏡檢核) 30% + 平穩收桿 25% + 節奏觀感 20% + 清晰度 15% + 起迄剪輯完整性 (真實時間碼邊界) 10%
     ig_visual_score: float | None = None
     if coverage >= min_coverage_gate:
-        framing_score = min(100.0, coverage * 100.0)
+        # 1. 畫面完整度 (framing_score, 30%): 真實檢查是否頭腳出鏡或邊界遮擋
+        oof_flags = q_meta.get("out_of_frame_flags") or []
+        oof_penalty = len(oof_flags) * 20.0
+        base_framing = float(q_meta.get("body_visibility_ratio", coverage)) * 100.0
+        framing_score = _clip(base_framing - oof_penalty, 20.0, 100.0)
+
+        # 2. 收桿平衡與節奏觀感
         fin_score = float(subscores["finish_balance"]["score"] or 70.0)
         tempo_score = float(subscores["tempo_consistency"]["score"] or 75.0)
+
+        # 3. 畫質清晰度與相機晃動 (clarity_score, 15%)
         sharpness = float(q_meta.get("mean_sharpness", 80.0))
         cam_motion = float(q_meta.get("max_camera_motion", 0.0))
         clarity_score = _clip(min(100.0, 60.0 + sharpness * 0.4) - cam_motion * 250.0, 30.0, 100.0)
-        margin_score = 95.0 if len(valid_items) >= 4 else 75.0
+
+        # 4. 起迄剪輯完整性 (clip_margin, 10%): 真實檢查準備動作前與收桿後的緩衝時間 (ms)
+        pre_m = float(q_meta.get("clip_pre_margin_ms") or (m_map.get("pre_margin_ms", {}).get("value") or 350.0))
+        post_m = float(q_meta.get("clip_post_margin_ms") or (m_map.get("post_margin_ms", {}).get("value") or 350.0))
+        min_margin = min(pre_m, post_m)
+        if min_margin >= 300.0:
+            margin_score = 100.0
+        elif min_margin <= 50.0:
+            margin_score = 30.0
+        else:
+            margin_score = _clip(30.0 + ((min_margin - 50.0) / 250.0) * 70.0, 30.0, 100.0)
+
         ig_raw = (
             framing_score * 0.30
             + fin_score * 0.25
@@ -309,7 +374,12 @@ def compute_swing_score(
             "tempo_20": round(tempo_score, 1),
             "clarity_15": round(clarity_score, 1),
             "clip_margin_10": round(margin_score, 1),
-            "note": "IG 精選分數僅評估畫面完整度、收桿平穩與視覺流暢度，不代表實際擊球距離或球速。",
+            "details": {
+                "out_of_frame_flags": oof_flags,
+                "pre_margin_ms": round(pre_m, 1),
+                "post_margin_ms": round(post_m, 1),
+            },
+            "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。",
         }
 
     return ScoreComputeResult(

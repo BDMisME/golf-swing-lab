@@ -8,14 +8,15 @@
 """
 
 import json
+
 import httpx
 import pytest
+
 from packages.analysis.coach import (
-    RuleBasedCoachProvider,
-    OpenAICompatibleCoachProvider,
-    GeminiCoachProvider,
-    CoachReport,
     FORBIDDEN_HALLUCINATION_TERMS,
+    CoachReport,
+    OpenAICompatibleCoachProvider,
+    RuleBasedCoachProvider,
 )
 
 
@@ -90,7 +91,7 @@ async def test_openai_compatible_coach_with_mock_vision_and_contract():
         "observations": [
             {
                 "title": "下桿骨盆早起伸展",
-                "detail": "依據照片中 Impact 定格，臀部明顯離開原本的後方鉛線約 5 公分，造成雙手釋放空間受壓迫。",
+                "detail": "依據照片中 Impact 定格，臀部明顯離開原本的後方鉛線約 12% 軀幹長度，造成雙手釋放空間受壓迫。",
                 "confidence": 0.92,
             }
         ],

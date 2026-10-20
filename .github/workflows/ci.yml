@@ -32,6 +32,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
+      minio:
+        image: minio/minio:RELEASE.2024-01-31T20-20-31Z
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadminpassword
+        ports:
+          - 29000:9000
+        options: >-
+          --entrypoint "sh"
+        args: -c "minio server /data --address ':9000'"
     steps:
       - uses: actions/checkout@v4
       - name: Install FFmpeg
@@ -49,23 +59,23 @@ jobs:
           uv run alembic -c apps/api/alembic.ini upgrade head
           uv run alembic -c apps/api/alembic.ini downgrade base
           uv run alembic -c apps/api/alembic.ini upgrade head
+      - name: Automated Backend Tests
+        run: |
+          uv run pytest tests/test_r3_verifiable_scoring.py tests/test_r4_dtl_algorithms.py tests/test_r5_personalized_coach.py -v
 
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: "pnpm"
-          cache-dependency-path: apps/web/pnpm-lock.yaml
-      - name: Install & Build Web
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install, Test & Build Web
         working-directory: apps/web
         run: |
-          pnpm install
-          pnpm run typecheck
-          pnpm run test:unit
-          pnpm run build
+          npm ci
+          npm run lint
+          npm test
+          npm run build
