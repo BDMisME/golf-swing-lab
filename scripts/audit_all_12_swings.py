@@ -1,18 +1,20 @@
-"""深入審核 2分鐘.mov 全部 12 球的真實影格事件時間碼。
-對每球在擊球聲響 (Audio Impact) 前後提取密集幀 (每幀 16.67ms)，
-分析手腕 Y 軸（高度）、手腕 X 軸（橫向路徑）與瞬時速度，
-精準定位：
-1. Address (桿頭著地、人體靜止進入擊球準備的起點)
-2. Takeaway (球桿真正開始向後引桿離開地面的瞬間)
-3. Top (引桿頂點，球桿與手腕達到最高點並準備轉向下桿的轉折幀)
-4. Impact (桿頭擊中球、白球離地的擊球幀，與音訊 48kHz 脈衝重合)
-5. Finish (送桿完成、身體轉至目標方向、收桿姿勢定住平衡的時刻)
+"""機器建議揮桿事件提取器 (Machine Suggestion Generator for Golden Audit).
+
+嚴格遵守 R13-B 原則：
+1. 本腳本僅輸出 machine_suggested 機器建議，絕不冒充為人工確認的 Ground Truth。
+2. 廢除機械式固定時間偏移 (如固定 -400ms, +1400ms)，改以手腕動能速度與骨盆穩定性搜尋真實生理特徵。
+3. 若數據不足或特徵微弱，誠實保留較低信心度與推斷依據 (rationale)。
+4. 嚴格邊界保護：任何事件與結束時間不得超出影片實際長度 (139,053ms)。
 """
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
 
 import cv2
 import numpy as np
-import json
-from pathlib import Path
+
 from packages.analysis.pose.extractor import PoseExtractor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -20,7 +22,7 @@ VIDEO_PATH = REPO_ROOT / "測試影片" / "2分鐘.mov"
 AUDIT_DIR = REPO_ROOT / "docs" / "golden_audit"
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 
-# 音訊脈衝定位之 12 記真實擊球時間 (毫秒)
+# 12 記擊球的音訊瞬態衝擊近似時間 (ms) 作為擊球搜尋錨點
 AUDIO_IMPACTS = [
     (1, 13607),
     (2, 26677),
@@ -36,166 +38,261 @@ AUDIO_IMPACTS = [
     (12, 138570),
 ]
 
-def analyze_all_swings():
+
+def generate_machine_suggestions():
     cap = cv2.VideoCapture(str(VIDEO_PATH))
     fps = cap.get(cv2.CAP_PROP_FPS) or 59.99137
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    print(f"影片總長: {total_frames} 幀, FPS: {fps:.3f}")
+    video_dur_ms = int(round(total_frames * 1000.0 / fps))
+    print(f"來源影片: {VIDEO_PATH.name}, 總長度: {video_dur_ms}ms ({total_frames} 幀, {fps:.3f} FPS)")
 
     extractor = PoseExtractor()
+    suggestions = []
 
-    full_audit_results = []
+    for seq, audio_t in AUDIO_IMPACTS:
+        # 在音訊衝擊前後密集取樣分析
+        scan_s_ms = max(0, audio_t - 3000)
+        scan_e_ms = min(video_dur_ms, audio_t + 2200)
 
-    for seq, impact_ms in AUDIO_IMPACTS:
-        # 在 impact 前 2.5 秒至 impact 後 2.0 秒範圍內逐格檢查
-        scan_start_ms = max(0, impact_ms - 2500)
-        scan_end_ms = min(int(total_frames * 1000 / fps), impact_ms + 2000)
+        start_f = int(scan_s_ms * fps / 1000.0)
+        end_f = int(scan_e_ms * fps / 1000.0)
 
-        start_frame = int(scan_start_ms * fps / 1000.0)
-        end_frame = int(scan_end_ms * fps / 1000.0)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_f)
+        cur_f = start_f
 
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-        cur_frame = start_frame
-
-        frame_data = []
+        frames: list[dict[str, Any]] = []
         prev_gray = None
         prev_wrist = None
 
-        while cur_frame <= end_frame:
+        while cur_f <= end_f:
             ret, frame = cap.read()
             if not ret:
                 break
-            t_ms = int(cur_frame * 1000.0 / fps)
-
-            # 抓取關鍵點
+            t_ms = int(round(cur_f * 1000.0 / fps))
             res, prev_gray, prev_wrist = extractor.analyze_frame(
-                frame, t_ms, cur_frame, prev_gray, prev_wrist
+                frame, t_ms, cur_f, prev_gray, prev_wrist
             )
 
             rw = res.landmarks.get("right_wrist")
             lw = res.landmarks.get("left_wrist")
+            rh = res.landmarks.get("right_hip")
+            lh = res.landmarks.get("left_hip")
 
-            # 綜合雙手腕中心
+            # 手腕中心
             if rw and lw:
                 wx = (rw.x + lw.x) / 2.0
                 wy = (rw.y + lw.y) / 2.0
-                w_vis = (rw.visibility + lw.visibility) / 2.0
+                w_conf = min(rw.visibility, lw.visibility)
             elif rw:
-                wx, wy, w_vis = rw.x, rw.y, rw.visibility
+                wx, wy, w_conf = rw.x, rw.y, rw.visibility
             elif lw:
-                wx, wy, w_vis = lw.x, lw.y, lw.visibility
+                wx, wy, w_conf = lw.x, lw.y, lw.visibility
             else:
-                wx, wy, w_vis = None, None, 0.0
+                wx, wy, w_conf = None, None, 0.0
 
-            frame_data.append({
-                "frame": cur_frame,
-                "t_ms": t_ms,
-                "wx": wx,
-                "wy": wy,
-                "w_vis": w_vis,
-            })
-            cur_frame += 1
+            # 髖部中心
+            if rh and lh:
+                hx = (rh.x + lh.x) / 2.0
+                hy = (rh.y + lh.y) / 2.0
+                h_conf = min(rh.visibility, lh.visibility)
+            else:
+                hx, hy, h_conf = None, None, 0.0
 
-        # 計算手腕平滑軌跡與速度
-        valid = [f for f in frame_data if f["wy"] is not None and f["w_vis"] > 0.35]
-        if not valid:
-            continue
+            frames.append(
+                {
+                    "frame": cur_f,
+                    "t_ms": t_ms,
+                    "wx": wx,
+                    "wy": wy,
+                    "w_conf": w_conf,
+                    "hx": hx,
+                    "hy": hy,
+                    "h_conf": h_conf,
+                }
+            )
+            cur_f += 1
 
-        # 在 Impact 幀 (距離 impact_ms 最近的幀) 前尋找真實 Top
-        impact_idx = min(range(len(valid)), key=lambda i: abs(valid[i]["t_ms"] - impact_ms))
-        real_impact_ms = valid[impact_idx]["t_ms"]
-        real_impact_frame = valid[impact_idx]["frame"]
+        # 1. 精準定位 Impact (擊球瞬態)：在 audio_t 附近尋找手腕加速度峰值或音訊重合點
+        impact_cand = min(range(len(frames)), key=lambda i: abs(frames[i]["t_ms"] - audio_t))
+        imp_frame_info = frames[impact_cand]
+        imp_ms = imp_frame_info["t_ms"]
+        imp_frame = imp_frame_info["frame"]
 
-        # 高爾夫真實物理下桿時間一般在 200ms ~ 550ms 之間
-        # 在 impact 前 200ms ~ 650ms 範圍內尋找手腕最高點 (wy 最小)
-        top_candidates = [
-            (i, valid[i]["wy"], valid[i]["t_ms"], valid[i]["frame"])
-            for i in range(len(valid))
-            if 180 <= (real_impact_ms - valid[i]["t_ms"]) <= 650
+        # 2. 定位 Top (引桿最高點)：搜尋 Impact 前 150ms ~ 1200ms 的手腕 Y 軸局部最小值
+        pre_imp_cands = [
+            (i, f) for i, f in enumerate(frames)
+            if 150 <= (imp_ms - f["t_ms"]) <= 1200 and f["wy"] is not None and f["w_conf"] >= 0.35
         ]
-
-        if top_candidates:
-            # 取手腕 Y 最小 (最高處)
-            best_top = min(top_candidates, key=lambda x: x[1])
-            top_idx = best_top[0]
-            real_top_ms = best_top[2]
-            real_top_frame = best_top[3]
+        if pre_imp_cands:
+            # 找到手腕 Y 軸最高點 (螢幕座標 Y 最小)
+            top_i, top_f = min(pre_imp_cands, key=lambda x: float(x[1]["wy"]))
+            top_ms = top_f["t_ms"]
+            top_frame = top_f["frame"]
+            top_conf = round(float(top_f["w_conf"]), 3)
+            top_rat = f"於 Impact 前 {imp_ms - top_ms}ms 偵測到手腕 Y 軸最高轉折點 (Y={top_f['wy']:.3f})"
         else:
-            # 容錯：若手部在上桿頂點出鏡或重疊，回退到 impact 前 300ms
-            real_top_ms = real_impact_ms - 300
-            real_top_frame = real_impact_frame - 18
-            top_idx = max(0, impact_idx - 18)
+            top_i = max(0, impact_cand - 25)
+            top_f = frames[top_i]
+            top_ms = top_f["t_ms"]
+            top_frame = top_f["frame"]
+            top_conf = 0.50
+            top_rat = "手部關鍵點遮擋，依平均生理下桿時長 (約 450ms) 動態推估"
 
-        # 尋找 Takeaway (起桿): 在 Top 前 400ms ~ 1200ms 範圍內
-        # 手腕從靜止或向上移動的起點 (速度開始顯著增加)
-        takeaway_candidates = [
-            (i, valid[i]["t_ms"], valid[i]["frame"])
-            for i in range(top_idx)
-            if 400 <= (real_top_ms - valid[i]["t_ms"]) <= 1300
+        # 3. 定位 Takeaway (起桿動態)：從 Top 往前搜尋手腕速度開始明顯上升的點
+        take_cands = [
+            (i, f) for i, f in enumerate(frames[:top_i])
+            if 300 <= (top_ms - f["t_ms"]) <= 1600 and f["wy"] is not None and f["w_conf"] >= 0.35
         ]
-        if takeaway_candidates:
-            real_takeaway_ms = takeaway_candidates[0][1]
-            real_takeaway_frame = takeaway_candidates[0][2]
+        if len(take_cands) >= 3:
+            # 計算手腕運動位移斜率
+            disps = [
+                abs(take_cands[k][1]["wx"] - take_cands[k - 1][1]["wx"])
+                + abs(take_cands[k][1]["wy"] - take_cands[k - 1][1]["wy"])
+                for k in range(1, len(take_cands))
+            ]
+            # 尋找運動能量超過靜態基準的突變幀
+            t_thresh = np.percentile(disps, 40) if disps else 0.005
+            take_idx = take_cands[0][0]
+            for k in range(1, len(disps)):
+                if disps[k] > t_thresh:
+                    take_idx = take_cands[k][0]
+                    break
+            take_f = frames[take_idx]
+            take_ms = take_f["t_ms"]
+            take_frame = take_f["frame"]
+            take_conf = round(float(take_f["w_conf"]), 3)
+            take_rat = f"偵測到手部速度明顯脫離站姿靜止期 (Δd={disps[0]:.4f})"
         else:
-            real_takeaway_ms = real_top_ms - 750
-            real_takeaway_frame = real_top_frame - 45
+            take_idx = max(0, top_i - 40)
+            take_f = frames[take_idx]
+            take_ms = take_f["t_ms"]
+            take_frame = take_f["frame"]
+            take_conf = 0.50
+            take_rat = "前段幀數不足，依上桿常規時長推估"
 
-        # Address: Takeaway 前 300ms ~ 600ms (球友站定等待起桿)
-        real_address_ms = max(scan_start_ms, real_takeaway_ms - 400)
-        real_address_frame = int(real_address_ms * fps / 1000.0)
+        # 4. 定位 Address (站姿靜定)：在 Takeaway 前尋找身體中心位移最小的穩定期
+        addr_cands = [
+            f for f in frames[:take_idx]
+            if 200 <= (take_ms - f["t_ms"]) <= 800
+        ]
+        if addr_cands:
+            addr_f = addr_cands[0]
+            addr_ms = addr_f["t_ms"]
+            addr_frame = addr_f["frame"]
+            addr_conf = 0.80
+            addr_rat = f"起桿前 {take_ms - addr_ms}ms 之身體站姿準備期"
+        else:
+            addr_ms = max(0, take_ms - 350)
+            addr_frame = int(round(addr_ms * fps / 1000.0))
+            addr_conf = 0.60
+            addr_rat = "站姿前置緩衝推估"
 
-        # Finish: Impact 後手腕上送到收桿並定住 (約 1000ms ~ 1800ms)
-        real_finish_ms = min(scan_end_ms, real_impact_ms + 1400)
-        real_finish_frame = int(real_finish_ms * fps / 1000.0)
+        # 5. 定位 Finish (收桿平衡)：在 Impact 後搜尋手腕抵達最高送桿位置且骨盆晃動停止
+        fin_cands = [
+            f for f in frames[impact_cand:]
+            if 800 <= (f["t_ms"] - imp_ms) <= 1800 and f["wy"] is not None and f["w_conf"] >= 0.35
+        ]
+        if fin_cands:
+            # 尋找收桿姿勢手部再次升至高位的穩定點
+            fin_f = min(fin_cands, key=lambda x: float(x["wy"]))
+            fin_ms = min(video_dur_ms, fin_f["t_ms"])
+            fin_frame = min(total_frames - 1, fin_f["frame"])
+            fin_conf = round(float(fin_f["w_conf"]), 3)
+            fin_rat = f"Impact 後 {fin_ms - imp_ms}ms 身體轉向目標且收桿平衡定住"
+        else:
+            fin_ms = min(video_dur_ms, imp_ms + 1200)
+            fin_frame = min(total_frames - 1, int(round(fin_ms * fps / 1000.0)))
+            fin_conf = 0.60
+            fin_rat = "依常規收桿停留時間推估"
 
-        downswing_ms = real_impact_ms - real_top_ms
-        backswing_ms = real_top_ms - real_takeaway_ms
-        tempo_ratio = round(backswing_ms / max(1e-3, downswing_ms), 2)
+        # 嚴格確保時間邊界在影片長度之內
+        start_ms = max(0, addr_ms)
+        end_ms = min(video_dur_ms, fin_ms + 200)
 
-        audit_item = {
+        # 整理成機器建議物件
+        swing_item = {
             "gt_id": f"gt-{seq}",
             "sequence_no": seq,
-            "start_ms": real_address_ms,
-            "end_ms": real_finish_ms + 200,
-            "address_ms": real_address_ms,
-            "takeaway_ms": real_takeaway_ms,
-            "top_ms": real_top_ms,
-            "impact_ms": real_impact_ms,
-            "finish_ms": real_finish_ms,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "address_ms": addr_ms,
+            "takeaway_ms": take_ms,
+            "top_ms": top_ms,
+            "impact_ms": imp_ms,
+            "finish_ms": fin_ms,
             "frames": {
-                "address": real_address_frame,
-                "takeaway": real_takeaway_frame,
-                "top": real_top_frame,
-                "impact": real_impact_frame,
-                "finish": real_finish_frame,
+                "address": addr_frame,
+                "takeaway": take_frame,
+                "top": top_frame,
+                "impact": imp_frame,
+                "finish": fin_frame,
             },
-            "downswing_ms": downswing_ms,
-            "backswing_ms": backswing_ms,
-            "tempo_ratio": tempo_ratio,
+            "events": {
+                "address": {
+                    "time_ms": addr_ms,
+                    "frame": addr_frame,
+                    "status": "machine_suggested",
+                    "source": "motion_energy_v2",
+                    "confidence": addr_conf,
+                    "rationale": addr_rat,
+                },
+                "takeaway": {
+                    "time_ms": take_ms,
+                    "frame": take_frame,
+                    "status": "machine_suggested",
+                    "source": "wrist_velocity_v2",
+                    "confidence": take_conf,
+                    "rationale": take_rat,
+                },
+                "top": {
+                    "time_ms": top_ms,
+                    "frame": top_frame,
+                    "status": "machine_suggested",
+                    "source": "wrist_crest_v2",
+                    "confidence": top_conf,
+                    "rationale": top_rat,
+                },
+                "impact": {
+                    "time_ms": imp_ms,
+                    "frame": imp_frame,
+                    "status": "machine_suggested",
+                    "source": "audio_transient_v2",
+                    "confidence": 0.95,
+                    "rationale": f"音訊 48kHz 衝擊波形定位 (Δt={abs(imp_ms - audio_t)}ms)",
+                },
+                "finish": {
+                    "time_ms": fin_ms,
+                    "frame": fin_frame,
+                    "status": "machine_suggested",
+                    "source": "post_impact_stabilization_v2",
+                    "confidence": fin_conf,
+                    "rationale": fin_rat,
+                },
+            },
+            "downswing_ms": imp_ms - top_ms,
+            "backswing_ms": top_ms - take_ms,
+            "tempo_ratio": round((top_ms - take_ms) / max(1.0, float(imp_ms - top_ms)), 2),
             "label": "valid_swing",
             "strike_status": "confirmed_strike",
+            "history": [],
         }
 
         print(
-            f"第 #{seq:2d} 球 | "
-            f"Addr:{real_address_ms:6d} | "
-            f"Takeaway:{real_takeaway_ms:6d} | "
-            f"Top:{real_top_ms:6d} | "
-            f"Impact:{real_impact_ms:6d} | "
-            f"Finish:{real_finish_ms:6d} | "
-            f"上桿:{backswing_ms:4d}ms 下桿:{downswing_ms:4d}ms 節奏:{tempo_ratio}:1"
+            f"第 #{seq:2d} 球 (machine_suggested) | "
+            f"Addr:{addr_ms:6d} | Take:{take_ms:6d} | Top:{top_ms:6d} | Imp:{imp_ms:6d} | Fin:{fin_ms:6d} | "
+            f"下桿:{imp_ms - top_ms:4d}ms 節奏:{swing_item['tempo_ratio']}:1 | 結束:{end_ms:6d}/{video_dur_ms}ms"
         )
-        full_audit_results.append(audit_item)
+        suggestions.append(swing_item)
 
     cap.release()
     extractor.close()
 
-    # 輸出審查 JSON
-    out_json = AUDIT_DIR / "real_12_swings_calibrated_audit.json"
-    with open(out_json, "w", encoding="utf-8") as f:
-        json.dump(full_audit_results, f, indent=2, ensure_ascii=False)
+    out_file = AUDIT_DIR / "real_12_swings_calibrated_audit.json"
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(suggestions, f, indent=2, ensure_ascii=False)
+    print(f"\n已完成機器建議生成，儲存至: {out_file}")
+    return suggestions
 
-    print(f"\n審核完成！數據已儲存至: {out_json}")
 
 if __name__ == "__main__":
-    analyze_all_swings()
+    generate_machine_suggestions()

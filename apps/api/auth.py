@@ -141,6 +141,14 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
+    """可選使用者驗證，若未登入則返回 None 而不拋出 401。"""
+    try:
+        return get_current_user(request, db)
+    except APIError:
+        return None
+
+
 def verify_owner(
     db: Session,
     current_user: User,

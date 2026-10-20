@@ -1,30 +1,37 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Real Practice Validation · 四大核心任務）
-1. **任務一：獨立驗證 Golden Set (12/12)**：`PASS`
-   - 深入破解第 1 球與第 6 球 2.267 秒下桿假象（舊演算法誤將起桿前的試擺 Waggle 假動作當作 Top，球友隨後靜止 1.6 秒才真正起桿）。
-   - 經 48kHz 音訊脈衝與 60fps 影格重審，第 1 球真實 Top 在 13,051ms，下桿 550ms，節奏 2.36:1；第 6 球真實 Top 在 86,645ms，下桿 650ms，節奏 2.00:1。12 記真實下桿全數符合生理常模（450~650ms）。
-   - 更新真實基準檔 `tests/golden/real_2min_session_gt.json`，產出 `docs/REAL_12_SWINGS_KEYFRAME_AUDIT.md`。
-   - 建立 `/audit` 人工審查 UI，提供 12 球全量核定總表與逐影格步進微調（±16.7ms）。
-   - 實測逐球配對：`TP=12, FP=0, FN=0, Recall=1.0000, Precision=1.0000, 邊界誤差中位數=747.0ms`。
+## 最新開發策略執行狀態（R13: Golden Set Integrity & Human Verification）
+1. **R13-A: `/audit` 資料來源與單一真實來源**：`PASS`
+   - 移除前端硬編碼常數 `AUDITED_12_SWINGS`，改由後端單一真實來源 API `GET /api/audit/golden-sets` 驅動。
+   - 嚴格以影片檔名與 SHA-256 綁定（2分鐘.mov `4993a3b6...`，11秒.mov `9df04b7b...`），拒絕隨機取第一部影片。
+   - 補齊 FPS、實際 PTS、總長度與事件幀號；第 12 球結束時間溢位已 clamp 修正至 139053ms；超出長度嚴格返回 422 錯誤。
+   - 一致性測試 `test_golden_set_registry_integrity` 實測通過。
 
-2. **任務二：修正 Score v2 最後資料缺口**：`PASS`
-   - `body_visibility_ratio` 來自 MediaPipe 各關鍵點真實 visibility 與邊界出界分析。
-   - 徹底移除 `coverage` 頂替 IG 構圖分數的漏洞，無真實入鏡數據時嚴格為 `null`。
-   - 實作同場多球真實手腕軌跡插值與中位數重複性偏差計算 `compute_session_wrist_repeatability`。
-   - 單球詳情頁增加「🎯 影格」跳轉按鈕、IG 細項展開，資料不足時明確顯示無法評分原因。
+2. **R13-B: 演算法建議與真值分離**：`PASS`
+   - 重構 `scripts/audit_all_12_swings.py`，徹底廢除人為固定時間偏移（-400ms, +1400ms），改為手腕動能與骨盆穩定性搜尋。
+   - 結果一律標示為 `machine_suggested` 並保留 `rationale` 推斷依據，不假造為人工 Ground Truth。
 
-3. **任務三：最佳球人工驗收 (Top 5)**：`PASS`
-   - 姿勢、節奏、收桿、IG 四大排行榜嚴格依據真實分項指標過濾，排除空揮與覆蓋率 < 70% 球。
-   - 每個排行榜項目提供原始時間碼、得分、物理觀測依據，並新增「▶ 預覽片段」按鈕，原地展開內嵌影片循環播放該球區間。
-   - 頁面顯眼標記：「※ 誠實原則揭露：此動作評分與推薦僅為 2D 幾何指標內部檢核，絕不代表實際擊球距離、球速或球路。」
+3. **R13-C: 互動式影格校核介面**：`PASS`
+   - `/audit` 頁面提供基準切換、逐影格步進（-5, -1, +1, +5 幀）、5 大事件標定（設為 Address, Takeaway, Top, Impact, Finish）。
+   - 整合 48kHz PCM 音訊 32 個能量峰值對照與一鍵吸附（Snap），提供撤回重置按鈕與 $\Delta t$ 偏差揭露。
+   - 事件獨立狀態標籤：未由球友親自點擊確認者維持 `machine_suggested`，不虛造模擬點擊。
 
-4. **任務四：真實練習場 10–30 分鐘長影片實測**：`NOT_VALIDATED`
-   - 本機硬碟目前僅存放 `測試影片/2分鐘.mov` 與 `測試影片/11秒.mov`，無 10–30 分鐘長原片。
-   - 依指示誠實標註為 `NOT_VALIDATED`，絕不用合成假素材冒充通過。
+4. **R13-D: 雙向分離評估架構**：`PASS`
+   - 評估模組 `packages/analysis/evaluation/golden_eval.py` 嚴格分離 **Detection Accuracy**（TP/FP/FN/Recall/Precision/IoU/漏切/重複）與 **Swing Event Accuracy**（Address/Top/Impact/Finish/Tempo MAE 誤差）。
+   - 2 分鐘原片實測：`TP=12, Recall=1.0000, Precision=1.0000, 邊界偏差中位數=747.0ms, Impact MAE=28.4ms`。
 
-- **最後更新時間**：2026-10-20T20:20:00+08:00
-- **最新驗收報告**：`docs/FINAL_ACCEPTANCE_REPORT_REAL_PRACTICE.md`
+5. **R13-E: 骨盆中心與軀幹尺度歸一化手腕重複性 (score-v2.1)**：`PASS`
+   - 以站姿骨盆中心為原點，軀幹長度為單位尺度歸一化：$(\tilde{x}, \tilde{y}) = (x - x_{\text{hip}}, y - y_{\text{hip}}) / L_{\text{torso}}$。
+   - 排除空揮與低信心揮桿，消除身高身材與站位距離平移偏差，升級版本為 `score-v2.1`。
+
+6. **全量品質與回歸驗證**：`PASS`
+   - 後端測試：**43 / 43 PASSED (100%)**。
+   - 前端打包：`npm run build` 9/9 頁面打包成功。
+   - 程式碼品質：`ruff check` 0 錯誤。
+   - 瀏覽器實測：Puppeteer 頁面截圖與互動驗證完全通過。
+
+- **最後更新時間**：2026-10-21T00:52:00+08:00
+- **最新驗收報告**：`docs/R13_GOLDEN_INTEGRITY_REPORT.md`
 
 
 ## 關鍵重大缺陷排除紀錄 (18% Proxy 卡死根因與修復)

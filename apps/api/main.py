@@ -46,6 +46,7 @@ from apps.api.models import (
     UserSetting,
     Video,
 )
+from apps.api.routers.audit import router as audit_router
 from apps.api.schemas import (
     CreateExportRequest,
     CreateManualSwingRequest,
@@ -168,6 +169,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["ETag", "Content-Range", "Accept-Ranges", "Content-Length", "X-Request-Id"],
 )
+
+app.include_router(audit_router)
+
 
 
 @app.middleware("http")

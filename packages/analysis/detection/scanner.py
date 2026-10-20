@@ -1,4 +1,5 @@
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -142,26 +143,53 @@ class CoarseToFineDetector:
                     pct = 50 + int((idx / total_wins) * 30)
                     progress_cb("fine_scan", pct, f"已完成第 {idx}/{len(candidate_windows)} 候選視窗精細分析")
 
-            # 計算同場多球真實手部軌跡重複性偏差 (session_path_repeatability)
+            # 計算同場多球真實手部軌跡重複性偏差 (session_path_repeatability - score-v2.1)
+            # 排除空揮 (practice_swing)、人工/系統拒絕 (rejected) 與低信心度 (< 0.60) 揮桿
             from packages.analysis.scoring.engine import compute_session_wrist_repeatability
 
+            eligible_swings = [
+                s for s in results
+                if s.label == "valid_swing"
+                and s.review_status != "rejected"
+                and s.confidence >= 0.60
+            ]
             trajs: dict[str, list[dict[str, Any]]] = {
                 str(s.sequence_no): s.quality_metadata.get("wrist_trajectory", [])
-                for s in results
+                for s in eligible_swings
             }
             repeat_res = compute_session_wrist_repeatability(trajs)
             for s in results:
-                r_info = repeat_res.get(str(s.sequence_no), {})
-                s.metrics.append(
-                    {
-                        "metric_key": "session_path_repeatability",
-                        "value": r_info.get("deviation"),
-                        "unit": "ratio",
-                        "confidence": r_info.get("confidence", 0.0),
-                        "source": self.model_version,
-                        "observability": "observed_2d",
-                    }
-                )
+                seq_key = str(s.sequence_no)
+                if seq_key in repeat_res:
+                    r_info = repeat_res[seq_key]
+                    s.metrics.append(
+                        {
+                            "metric_key": "session_path_repeatability",
+                            "value": r_info.get("deviation"),
+                            "unit": "ratio",
+                            "confidence": r_info.get("confidence", 0.0),
+                            "source": self.model_version,
+                            "observability": "observed_2d",
+                            "details": {
+                                "normalized_by": r_info.get("normalized_by", "none"),
+                                "valid_session_swings": r_info.get("valid_session_swings", 0),
+                            },
+                        }
+                    )
+                else:
+                    s.metrics.append(
+                        {
+                            "metric_key": "session_path_repeatability",
+                            "value": None,
+                            "unit": "ratio",
+                            "confidence": 0.0,
+                            "source": self.model_version,
+                            "observability": "observed_2d",
+                            "details": {
+                                "reason": "此揮桿為空揮或信心度不足，不計入多球重複性比較",
+                            },
+                        }
+                    )
 
             return results, quality_summary
         finally:
@@ -309,28 +337,53 @@ class CoarseToFineDetector:
             for fr in fine_frames:
                 lw = fr.landmarks.get("left_wrist")
                 rw = fr.landmarks.get("right_wrist")
+                lh = fr.landmarks.get("left_hip")
+                rh = fr.landmarks.get("right_hip")
+                ls = fr.landmarks.get("left_shoulder")
+                rs = fr.landmarks.get("right_shoulder")
+
+                hip_x: float | None = None
+                hip_y: float | None = None
+                torso_len: float | None = None
+                if lh and rh:
+                    hip_x = round(float((lh.x + rh.x) / 2.0), 4)
+                    hip_y = round(float((lh.y + rh.y) / 2.0), 4)
+                    if ls and rs:
+                        sh_x = (ls.x + rs.x) / 2.0
+                        sh_y = (ls.y + rs.y) / 2.0
+                        torso_len = round(float(math.hypot(sh_x - hip_x, sh_y - hip_y)), 4)
+
+                point_entry: dict[str, Any] | None = None
                 if lw and rw:
                     w_conf = min(lw.visibility, rw.visibility)
-                    wrist_traj.append({
+                    point_entry = {
                         "time_ms": fr.time_ms,
                         "x": round(float((lw.x + rw.x) / 2.0), 4),
                         "y": round(float((lw.y + rw.y) / 2.0), 4),
                         "conf": round(float(w_conf), 3),
-                    })
+                    }
                 elif rw:
-                    wrist_traj.append({
+                    point_entry = {
                         "time_ms": fr.time_ms,
                         "x": round(float(rw.x), 4),
                         "y": round(float(rw.y), 4),
                         "conf": round(float(rw.visibility), 3),
-                    })
+                    }
                 elif lw:
-                    wrist_traj.append({
+                    point_entry = {
                         "time_ms": fr.time_ms,
                         "x": round(float(lw.x), 4),
                         "y": round(float(lw.y), 4),
                         "conf": round(float(lw.visibility), 3),
-                    })
+                    }
+
+                if point_entry is not None:
+                    if hip_x is not None and hip_y is not None:
+                        point_entry["hip_x"] = hip_x
+                        point_entry["hip_y"] = hip_y
+                    if torso_len is not None and torso_len > 0.05:
+                        point_entry["torso_len"] = torso_len
+                    wrist_traj.append(point_entry)
 
             quality_meta = {
                 "mean_brightness": round(float(np.mean(brights or [0.0])), 2),

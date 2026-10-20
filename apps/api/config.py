@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     rq_job_timeout_sec: int = 3600
     pose_backend: str = "yolov8x-pose"
     analysis_model_version: str = "pose-v1"
-    scoring_version: str = "score-v1"
+    scoring_version: str = "score-v2.1"
     data_retention_days: int = 30
 
     llm_provider: str = "none"

@@ -1,10 +1,12 @@
 {
+  "dataset_id": "real_2min_session_01",
   "dataset_version": "golden-v3-human-audited",
-  "video_id": "real_2min_session_01",
-  "fps": 59.99137,
+  "video_filename": "2分鐘.mov",
+  "video_sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
   "duration_ms": 139053,
-  "camera_angle": "DTL",
-  "handedness": "right",
+  "total_frames": 8342,
+  "fps": 59.99137,
+  "timebase": "1/60000",
   "note": "Human-Audited Independent Ground Truth for 測試影片/2分鐘.mov. Verified with 48kHz audio transient impulse and dense frame trajectory inspection. All downswing durations are physiologically valid (450-650ms).",
   "ground_truth_swings": [
     {
@@ -15,20 +17,133 @@
       "address_ms": 11351,
       "takeaway_ms": 11751,
       "top_ms": 13051,
-      "impact_ms": 13601,
+      "impact_ms": 13616,
       "finish_ms": 15001,
       "frames": {
         "address": 680,
         "takeaway": 705,
         "top": 783,
-        "impact": 816,
+        "impact": 817,
         "finish": 899
       },
-      "downswing_ms": 550,
+      "events": {
+        "address": {
+          "time_ms": 11351,
+          "frame": 680,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 11751,
+          "frame": 705,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 13051,
+          "frame": 783,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 13601,
+          "frame": 816,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "已撤回人工修改，還原為初始機器建議",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 15001,
+          "frame": 899,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
+      "downswing_ms": 565,
       "backswing_ms": 1300,
-      "tempo_ratio": 2.36,
+      "tempo_ratio": 2.3,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": [
+        {
+          "timestamp": "2026-10-20T16:38:50.168161+00:00",
+          "event_name": "impact",
+          "action": "update_event",
+          "user": "golfer@swinglab.local",
+          "previous_time_ms": 13601,
+          "previous_frame": 816,
+          "new_time_ms": 13616,
+          "new_frame": 817,
+          "previous_status": "machine_suggested",
+          "new_status": "human_verified",
+          "rationale": "測試人工校正"
+        },
+        {
+          "timestamp": "2026-10-20T16:38:50.178255+00:00",
+          "action": "reset_to_machine",
+          "note": "使用者撤回人工核定"
+        },
+        {
+          "timestamp": "2026-10-20T16:38:57.321331+00:00",
+          "event_name": "impact",
+          "action": "update_event",
+          "user": "golfer@swinglab.local",
+          "previous_time_ms": 13601,
+          "previous_frame": 816,
+          "new_time_ms": 13616,
+          "new_frame": 817,
+          "previous_status": "machine_suggested",
+          "new_status": "human_verified",
+          "rationale": "測試人工校正"
+        },
+        {
+          "timestamp": "2026-10-20T16:38:57.329813+00:00",
+          "action": "reset_to_machine",
+          "note": "使用者撤回人工核定"
+        },
+        {
+          "timestamp": "2026-10-20T16:44:56.010372+00:00",
+          "event_name": "impact",
+          "action": "update_event",
+          "user": "golfer@swinglab.local",
+          "previous_time_ms": 13601,
+          "previous_frame": 816,
+          "new_time_ms": 13616,
+          "new_frame": 817,
+          "previous_status": "machine_suggested",
+          "new_status": "human_verified",
+          "rationale": "測試人工校正"
+        },
+        {
+          "timestamp": "2026-10-20T16:44:56.019166+00:00",
+          "action": "reset_to_machine",
+          "note": "使用者撤回人工核定"
+        }
+      ]
     },
     {
       "gt_id": "gt-2",
@@ -47,11 +162,69 @@
         "impact": 1600,
         "finish": 1683
       },
+      "events": {
+        "address": {
+          "time_ms": 24320,
+          "frame": 1458,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 24720,
+          "frame": 1483,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 26020,
+          "frame": 1561,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 26670,
+          "frame": 1600,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 28070,
+          "frame": 1683,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 650,
       "backswing_ms": 1300,
       "tempo_ratio": 2.0,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-3",
@@ -70,11 +243,69 @@
         "impact": 2432,
         "finish": 2515
       },
+      "events": {
+        "address": {
+          "time_ms": 38355,
+          "frame": 2300,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 38755,
+          "frame": 2325,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 40039,
+          "frame": 2402,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 40539,
+          "frame": 2432,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 41939,
+          "frame": 2515,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 500,
       "backswing_ms": 1284,
       "tempo_ratio": 2.57,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-4",
@@ -93,11 +324,69 @@
         "impact": 3201,
         "finish": 3284
       },
+      "events": {
+        "address": {
+          "time_ms": 51074,
+          "frame": 3063,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 51474,
+          "frame": 3088,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 52774,
+          "frame": 3166,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 53357,
+          "frame": 3201,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 54757,
+          "frame": 3284,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 583,
       "backswing_ms": 1300,
       "tempo_ratio": 2.23,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-5",
@@ -116,11 +405,69 @@
         "impact": 4117,
         "finish": 4200
       },
+      "events": {
+        "address": {
+          "time_ms": 66276,
+          "frame": 3975,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 66676,
+          "frame": 4000,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 67976,
+          "frame": 4078,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 68626,
+          "frame": 4117,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 70026,
+          "frame": 4200,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 650,
       "backswing_ms": 1300,
       "tempo_ratio": 2.0,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-6",
@@ -139,11 +486,69 @@
         "impact": 5237,
         "finish": 5320
       },
+      "events": {
+        "address": {
+          "time_ms": 84945,
+          "frame": 5095,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 85345,
+          "frame": 5120,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 86645,
+          "frame": 5198,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 87295,
+          "frame": 5237,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 88695,
+          "frame": 5320,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 650,
       "backswing_ms": 1300,
       "tempo_ratio": 2.0,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-7",
@@ -162,11 +567,69 @@
         "impact": 6389,
         "finish": 6472
       },
+      "events": {
+        "address": {
+          "time_ms": 104148,
+          "frame": 6247,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 104548,
+          "frame": 6272,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 105848,
+          "frame": 6350,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 106498,
+          "frame": 6389,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 107898,
+          "frame": 6472,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 650,
       "backswing_ms": 1300,
       "tempo_ratio": 2.0,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-8",
@@ -185,11 +648,69 @@
         "impact": 6729,
         "finish": 6812
       },
+      "events": {
+        "address": {
+          "time_ms": 109882,
+          "frame": 6591,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 110282,
+          "frame": 6616,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 111582,
+          "frame": 6694,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 112166,
+          "frame": 6729,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 113566,
+          "frame": 6812,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 584,
       "backswing_ms": 1300,
       "tempo_ratio": 2.23,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-9",
@@ -208,11 +729,69 @@
         "impact": 6953,
         "finish": 7036
       },
+      "events": {
+        "address": {
+          "time_ms": 113749,
+          "frame": 6823,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 114149,
+          "frame": 6848,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 115449,
+          "frame": 6926,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 115900,
+          "frame": 6953,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 117300,
+          "frame": 7036,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 451,
       "backswing_ms": 1300,
       "tempo_ratio": 2.88,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-10",
@@ -231,11 +810,69 @@
         "impact": 7309,
         "finish": 7392
       },
+      "events": {
+        "address": {
+          "time_ms": 119550,
+          "frame": 7171,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 119950,
+          "frame": 7196,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 121234,
+          "frame": 7273,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 121834,
+          "frame": 7309,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 123234,
+          "frame": 7392,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 600,
       "backswing_ms": 1284,
       "tempo_ratio": 2.14,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-11",
@@ -254,17 +891,75 @@
         "impact": 7589,
         "finish": 7672
       },
+      "events": {
+        "address": {
+          "time_ms": 124184,
+          "frame": 7449,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 124584,
+          "frame": 7474,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 125868,
+          "frame": 7551,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 126501,
+          "frame": 7589,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 127901,
+          "frame": 7672,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 633,
       "backswing_ms": 1284,
       "tempo_ratio": 2.03,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     },
     {
       "gt_id": "gt-12",
       "sequence_no": 12,
       "start_ms": 136219,
-      "end_ms": 139253,
+      "end_ms": 139053,
       "address_ms": 136219,
       "takeaway_ms": 136619,
       "top_ms": 137919,
@@ -277,11 +972,69 @@
         "impact": 8313,
         "finish": 8341
       },
+      "events": {
+        "address": {
+          "time_ms": 136219,
+          "frame": 8171,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 136619,
+          "frame": 8196,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 137919,
+          "frame": 8274,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 138569,
+          "frame": 8313,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 139053,
+          "frame": 8341,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
       "downswing_ms": 650,
       "backswing_ms": 1300,
       "tempo_ratio": 2.0,
       "label": "valid_swing",
-      "strike_status": "confirmed_strike"
+      "strike_status": "confirmed_strike",
+      "history": []
     }
   ]
 }

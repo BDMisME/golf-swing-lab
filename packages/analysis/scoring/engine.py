@@ -33,15 +33,15 @@ def compute_swing_score(
     metrics: list[dict[str, Any]],
     quality_metadata: dict[str, Any] | None = None,
     weights: dict[str, float] | None = None,
-    score_version: str = "score-v2",
+    score_version: str = "score-v2.1",
     min_confidence: float = 0.50,
     min_coverage_gate: float = 0.70,
 ) -> ScoreComputeResult:
     """
-    計算可解釋、確定性 (deterministic) 之內部 2D DTL 動作指標分數 (score-v2)。
-    升級項目 (score-v2)：
-    1. 將單球上下桿路徑間隙 (single_swing_plane_gap_ratio) 與多球重複性 (repeatability) 分開。
-    2. IG 視覺呈現分數改採真實關鍵點出界檢核 (framing_score) 與真實片段前後邊界緩衝 (clip_margin_score)。
+    計算可解釋、確定性 (deterministic) 之內部 2D DTL 動作指標分數 (score-v2.1)。
+    升級項目 (score-v2.1)：
+    1. 將單球上下桿路徑間隙與多球重複性分開，多球重複性經站姿骨盆與軀幹尺度歸一化。
+    2. IG 視覺呈現分數改採真實關鍵點出界檢核與真實片段前後邊界緩衝。
     3. 嚴格遵守最高誠信原則，不虛構球速、飛行距離或 3D 角度。
     """
     active_weights = dict(DEFAULT_WEIGHTS)
@@ -550,17 +550,21 @@ def compute_session_wrist_repeatability(
     num_sample_points: int = 20,
 ) -> dict[str, dict[str, Any]]:
     """
-    計算同場次多球手腕軌跡重複性 (session_path_repeatability)：
-    1. 針對每顆球，將 Takeaway/Address 到 Impact 的手腕軌跡 (x, y) 沿時間進度 [0, 1] 等距插值成 num_sample_points 個點。
-    2. 若同場具有有效手腕軌跡之球數 >= 2：
-       - 計算所有球在各點之中位數基準軌跡 (Baseline Wrist Path)。
-       - 計算每球相對於基準軌跡之平均歐氏距離偏差 (Euclidean Deviation Ratio)。
+    計算同場次多球手腕軌跡重複性 (session_path_repeatability) - score-v2.1:
+    1. 針對每顆球，將 Takeaway/Address 到 Impact 的手腕軌跡 (x, y) 經站姿骨盆中心與軀幹尺度歸一化：
+       (x_norm, y_norm) = ((x - hip_x) / torso_len, (y - hip_y) / torso_len)
+       消除身材身型與鏡頭距離、站位平移之影響。
+    2. 沿時間進度 [0, 1] 等距插值成 num_sample_points 個標準化點。
+    3. 若同場具有有效手腕軌跡之球數 >= 2：
+       - 計算所有球在各採樣點之中位數基準軌跡 (Baseline Wrist Path)。
+       - 計算每球相對於基準軌跡之平均歐氏距離偏差 (以軀幹長度為單位之比率)。
        - 回傳每球偏差值 (ratio) 與信心度。
-    3. 若同場有效球數 < 2：
+    4. 若同場有效球數 < 2：
        - 回傳每球偏差值為 None，明確標示「需同場至少 2 球方可計算重複性」。
     """
     valid_curves: dict[str, list[tuple[float, float]]] = {}
     confidences: dict[str, float] = {}
+    normalization_meta: dict[str, str] = {}
 
     for seg_id, points in wrist_trajectories.items():
         usable_pts = [
@@ -575,13 +579,44 @@ def compute_session_wrist_repeatability(
         t_end = float(usable_pts[-1].get("time_ms", 1))
         t_span = max(1.0, t_end - t_start)
 
-        xs = [float(p["x"]) for p in usable_pts]
-        ys = [float(p["y"]) for p in usable_pts]
+        # 估算站姿基準骨盆中心 (hip_x, hip_y) 與軀幹長度 (torso_len)
+        # 優先取前 30% 時間點（代表 Address/Takeaway 準備姿勢）
+        cutoff_ms = t_start + t_span * 0.30
+        early_pts = [p for p in usable_pts if float(p.get("time_ms", 0)) <= cutoff_ms]
+        ref_pool = early_pts if len(early_pts) >= 2 else usable_pts
+
+        hip_xs = [float(p["hip_x"]) for p in ref_pool if "hip_x" in p and p["hip_x"] is not None]
+        hip_ys = [float(p["hip_y"]) for p in ref_pool if "hip_y" in p and p["hip_y"] is not None]
+        torso_lens = [
+            float(p["torso_len"]) for p in ref_pool
+            if "torso_len" in p and p["torso_len"] is not None and float(p["torso_len"]) > 0.05
+        ]
+
+        # 若無 early_pts 的資料，退回到全區間
+        if not hip_xs:
+            hip_xs = [float(p["hip_x"]) for p in usable_pts if "hip_x" in p and p["hip_x"] is not None]
+            hip_ys = [float(p["hip_y"]) for p in usable_pts if "hip_y" in p and p["hip_y"] is not None]
+        if not torso_lens:
+            torso_lens = [
+                float(p["torso_len"]) for p in usable_pts
+                if "torso_len" in p and p["torso_len"] is not None and float(p["torso_len"]) > 0.05
+            ]
+
+        ref_hip_x = float(np.median(hip_xs)) if hip_xs else 0.0
+        ref_hip_y = float(np.median(hip_ys)) if hip_ys else 0.0
+        ref_torso_len = float(np.median(torso_lens)) if torso_lens else 1.0
+
+        is_normalized = bool(hip_xs and torso_lens)
+        normalization_meta[seg_id] = "pelvis_and_torso" if is_normalized else "image_coords"
+
+        # 將手腕座標標準化
+        norm_xs = [(float(p["x"]) - ref_hip_x) / ref_torso_len for p in usable_pts]
+        norm_ys = [(float(p["y"]) - ref_hip_y) / ref_torso_len for p in usable_pts]
         ts = [(float(p.get("time_ms", 0)) - t_start) / t_span for p in usable_pts]
 
         target_u = np.linspace(0.0, 1.0, num_sample_points)
-        interp_x = np.interp(target_u, ts, xs)
-        interp_y = np.interp(target_u, ts, ys)
+        interp_x = np.interp(target_u, ts, norm_xs)
+        interp_y = np.interp(target_u, ts, norm_ys)
         curve = list(zip(interp_x, interp_y, strict=False))
 
         valid_curves[seg_id] = curve
@@ -603,11 +638,14 @@ def compute_session_wrist_repeatability(
                 for i in range(num_sample_points)
             ]
             mean_dev = float(np.mean(deviations))
+            norm_type = normalization_meta.get(seg_id, "image_coords")
+            unit_label = "軀幹長度" if norm_type == "pelvis_and_torso" else "畫面比例"
             results[seg_id] = {
                 "deviation": round(mean_dev, 4),
                 "confidence": round(confidences.get(seg_id, 0.7), 3),
                 "valid_session_swings": len(valid_curves),
-                "reason": f"與全場 {len(valid_curves)} 球中位數基準軌跡之平均偏差為 {mean_dev:.3f}",
+                "normalized_by": norm_type,
+                "reason": f"與全場 {len(valid_curves)} 球基準軌跡平均偏差為 {mean_dev:.3f} {unit_label}（經骨盆原點與軀幹長度歸一化）",
             }
     else:
         for seg_id in wrist_trajectories.keys():
@@ -615,6 +653,7 @@ def compute_session_wrist_repeatability(
                 "deviation": None,
                 "confidence": 0.0,
                 "valid_session_swings": len(valid_curves),
+                "normalized_by": "none",
                 "reason": "同場有效手部軌跡少於 2 球，無法計算重複性偏差",
             }
 

@@ -1,12 +1,94 @@
 {
+  "dataset_id": "real_11s_session_01",
   "dataset_version": "golden-v1",
-  "video_id": "real_11s_session_01",
-  "fps": 60.0,
+  "video_filename": "11秒.mov",
+  "video_sha256": "9df04b7b244f56788bdfaf8edd95d7233b807ef87f0bc9ddeab599b5bee15ead",
   "duration_ms": 11458,
-  "camera_angle": "DTL",
-  "handedness": "right",
+  "total_frames": 688,
+  "fps": 60.044,
+  "timebase": "1/60000",
   "note": "Human annotated Ground Truth for 測試影片/11秒.mov (1 real swing).",
   "ground_truth_swings": [
-    {"gt_id": "gt-1", "start_ms": 2800, "end_ms": 7800, "impact_ms": 6100, "label": "valid_swing"}
+    {
+      "gt_id": "gt-1",
+      "sequence_no": 1,
+      "start_ms": 2800,
+      "end_ms": 7800,
+      "address_ms": 2800,
+      "takeaway_ms": 3200,
+      "top_ms": 4500,
+      "impact_ms": 6100,
+      "finish_ms": 7500,
+      "frames": {
+        "address": 168,
+        "takeaway": 192,
+        "top": 270,
+        "impact": 366,
+        "finish": 450
+      },
+      "events": {
+        "address": {
+          "time_ms": 2800,
+          "frame": 168,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "takeaway": {
+          "time_ms": 3200,
+          "frame": 192,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "top": {
+          "time_ms": 4500,
+          "frame": 270,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "impact": {
+          "time_ms": 6100,
+          "frame": 366,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        },
+        "finish": {
+          "time_ms": 7500,
+          "frame": 450,
+          "status": "machine_suggested",
+          "source": "machine_heuristic_v1",
+          "confidence": 0.85,
+          "rationale": "機器演算法初始推算",
+          "verified_by": null,
+          "verified_at": null,
+          "previous_value": null
+        }
+      },
+      "downswing_ms": 1600,
+      "backswing_ms": 1300,
+      "tempo_ratio": 0.81,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "history": []
+    }
   ]
 }

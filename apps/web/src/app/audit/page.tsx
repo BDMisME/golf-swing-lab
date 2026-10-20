@@ -1,499 +1,640 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, API_BASE_URL, getAuthToken } from "@/lib/api";
 
-interface GoldenSwingAudit {
+interface SwingEventRecord {
+  time_ms: number;
+  frame_idx: number;
+  source: "machine_suggested" | "human_verified" | "uncertain";
+  machine_suggested_ms?: number;
+  confidence: number;
+  rationale?: string;
+  updated_at?: string;
+}
+
+interface GoldenSetSwing {
   gt_id: string;
   sequence_no: number;
   start_ms: number;
   end_ms: number;
-  address_ms: number;
-  takeaway_ms: number;
-  top_ms: number;
-  impact_ms: number;
-  finish_ms: number;
-  frames: {
-    address: number;
-    takeaway: number;
-    top: number;
-    impact: number;
-    finish: number;
+  events: {
+    address: SwingEventRecord;
+    takeaway: SwingEventRecord;
+    top: SwingEventRecord;
+    impact: SwingEventRecord;
+    finish: SwingEventRecord;
+    [key: string]: SwingEventRecord;
   };
-  downswing_ms: number;
-  backswing_ms: number;
-  tempo_ratio: number;
-  label: string;
   strike_status: string;
+  label: string;
   note?: string;
 }
 
-const AUDITED_12_SWINGS: GoldenSwingAudit[] = [
-  {
-    gt_id: "gt-1",
-    sequence_no: 1,
-    start_ms: 11351,
-    end_ms: 15201,
-    address_ms: 11351,
-    takeaway_ms: 11751,
-    top_ms: 13051,
-    impact_ms: 13601,
-    finish_ms: 15001,
-    frames: { address: 680, takeaway: 705, top: 783, impact: 816, finish: 899 },
-    downswing_ms: 550,
-    backswing_ms: 1300,
-    tempo_ratio: 2.36,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-    note: "破解 2.267 秒假象：前段 11,340ms 為試擺 (Waggle) 假動作，靜止 1.6 秒後於 13,051ms 起桿至 Top，下桿 550ms 擊球",
-  },
-  {
-    gt_id: "gt-2",
-    sequence_no: 2,
-    start_ms: 24320,
-    end_ms: 28270,
-    address_ms: 24320,
-    takeaway_ms: 24720,
-    top_ms: 26020,
-    impact_ms: 26670,
-    finish_ms: 28070,
-    frames: { address: 1458, takeaway: 1483, top: 1561, impact: 1600, finish: 1683 },
-    downswing_ms: 650,
-    backswing_ms: 1300,
-    tempo_ratio: 2.0,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-3",
-    sequence_no: 3,
-    start_ms: 38355,
-    end_ms: 42139,
-    address_ms: 38355,
-    takeaway_ms: 38755,
-    top_ms: 40039,
-    impact_ms: 40539,
-    finish_ms: 41939,
-    frames: { address: 2300, takeaway: 2325, top: 2402, impact: 2432, finish: 2515 },
-    downswing_ms: 500,
-    backswing_ms: 1284,
-    tempo_ratio: 2.57,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-4",
-    sequence_no: 4,
-    start_ms: 51074,
-    end_ms: 54957,
-    address_ms: 51074,
-    takeaway_ms: 51474,
-    top_ms: 52774,
-    impact_ms: 53357,
-    finish_ms: 54757,
-    frames: { address: 3063, takeaway: 3088, top: 3166, impact: 3201, finish: 3284 },
-    downswing_ms: 583,
-    backswing_ms: 1300,
-    tempo_ratio: 2.23,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-5",
-    sequence_no: 5,
-    start_ms: 63654,
-    end_ms: 67355,
-    address_ms: 63654,
-    takeaway_ms: 64054,
-    top_ms: 65271,
-    impact_ms: 65788,
-    finish_ms: 67155,
-    frames: { address: 3818, takeaway: 3842, top: 3915, impact: 3946, finish: 4028 },
-    downswing_ms: 517,
-    backswing_ms: 1217,
-    tempo_ratio: 2.35,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-6",
-    sequence_no: 6,
-    start_ms: 85023,
-    end_ms: 88895,
-    address_ms: 85023,
-    takeaway_ms: 85323,
-    top_ms: 86645,
-    impact_ms: 87295,
-    finish_ms: 88695,
-    frames: { address: 5098, takeaway: 5118, top: 5198, impact: 5237, finish: 5320 },
-    downswing_ms: 650,
-    backswing_ms: 1322,
-    tempo_ratio: 2.0,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-    note: "破解 2.267 秒假象：前段 85,023ms 為站位調整，86,645ms 抵達真實 Top，下桿 650ms 擊球",
-  },
-  {
-    gt_id: "gt-7",
-    sequence_no: 7,
-    start_ms: 94824,
-    end_ms: 98691,
-    address_ms: 94824,
-    takeaway_ms: 95224,
-    top_ms: 96524,
-    impact_ms: 97124,
-    finish_ms: 98491,
-    frames: { address: 5687, takeaway: 5711, top: 5789, impact: 5825, finish: 5908 },
-    downswing_ms: 600,
-    backswing_ms: 1300,
-    tempo_ratio: 2.17,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-8",
-    sequence_no: 8,
-    start_ms: 104044,
-    end_ms: 107693,
-    address_ms: 104044,
-    takeaway_ms: 104444,
-    top_ms: 105611,
-    impact_ms: 106128,
-    finish_ms: 107493,
-    frames: { address: 6240, takeaway: 6264, top: 6334, impact: 6365, finish: 6448 },
-    downswing_ms: 517,
-    backswing_ms: 1167,
-    tempo_ratio: 2.26,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-9",
-    sequence_no: 9,
-    start_ms: 112104,
-    end_ms: 115788,
-    address_ms: 112104,
-    takeaway_ms: 112504,
-    top_ms: 113704,
-    impact_ms: 114221,
-    finish_ms: 115588,
-    frames: { address: 6723, takeaway: 6747, top: 6819, impact: 6850, finish: 6932 },
-    downswing_ms: 517,
-    backswing_ms: 1200,
-    tempo_ratio: 2.32,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-10",
-    sequence_no: 10,
-    start_ms: 119561,
-    end_ms: 123161,
-    address_ms: 119561,
-    takeaway_ms: 119961,
-    top_ms: 121127,
-    impact_ms: 121578,
-    finish_ms: 122961,
-    frames: { address: 7170, takeaway: 7194, top: 7264, impact: 7291, finish: 7374 },
-    downswing_ms: 451,
-    backswing_ms: 1166,
-    tempo_ratio: 2.59,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-11",
-    sequence_no: 11,
-    start_ms: 126938,
-    end_ms: 130706,
-    address_ms: 126938,
-    takeaway_ms: 127338,
-    top_ms: 128572,
-    impact_ms: 129122,
-    finish_ms: 130506,
-    frames: { address: 7613, takeaway: 7637, top: 7711, impact: 7744, finish: 7827 },
-    downswing_ms: 550,
-    backswing_ms: 1234,
-    tempo_ratio: 2.24,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-  {
-    gt_id: "gt-12",
-    sequence_no: 12,
-    start_ms: 134106,
-    end_ms: 138073,
-    address_ms: 134106,
-    takeaway_ms: 134506,
-    top_ms: 135806,
-    impact_ms: 136423,
-    finish_ms: 137873,
-    frames: { address: 8043, takeaway: 8067, top: 8145, impact: 8182, finish: 8269 },
-    downswing_ms: 617,
-    backswing_ms: 1300,
-    tempo_ratio: 2.11,
-    label: "valid_swing",
-    strike_status: "confirmed_strike",
-  },
-];
+interface GoldenSetMeta {
+  golden_set_id: string;
+  name: string;
+  description: string;
+  video_filename: string;
+  video_sha256: string;
+  video_duration_ms: number;
+  fps: number;
+  total_frames: number;
+  total_swings: number;
+  matched_video_id: string | null;
+  swings: GoldenSetSwing[];
+}
+
+interface AudioPeak {
+  time_ms: number;
+  energy: number;
+  frame_idx: number;
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  address: "Address 站姿",
+  takeaway: "Takeaway 起桿",
+  top: "Top 上桿頂點",
+  impact: "Impact 擊球瞬間",
+  finish: "Finish 收桿完成",
+};
 
 export default function GoldenAuditPage() {
-  const [selectedSwing, setSelectedSwing] = useState<GoldenSwingAudit>(AUDITED_12_SWINGS[0]);
-  const [activeEvent, setActiveEvent] = useState<string>("impact");
-  const [videoId, setVideoId] = useState<string | null>(null);
+  const [goldenSets, setGoldenSets] = useState<GoldenSetMeta[]>([]);
+  const [activeSetId, setActiveSetId] = useState<string>("real_2min_session");
+  const [selectedSwingIndex, setSelectedSwingIndex] = useState<number>(0);
+  const [audioPeaks, setAudioPeaks] = useState<AudioPeak[]>([]);
+  const [currentVideoTimeMs, setCurrentVideoTimeMs] = useState<number>(0);
+  const [currentFrame, setCurrentFrame] = useState<number>(0);
+  const [activeEventKey, setActiveEventKey] = useState<string>("impact");
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  useEffect(() => {
-    // 嘗試從最近的場次取得 video_id
-    apiFetch<any>("/api/sessions")
-      .then((res) => {
-        const list = res.items || [];
-        for (const s of list) {
-          if (s.videos && s.videos.length > 0) {
-            setVideoId(s.videos[0].id);
-            break;
-          }
-        }
-      })
-      .catch(() => {});
-  }, []);
+  const activeSet = goldenSets.find((g) => g.golden_set_id === activeSetId) || goldenSets[0];
+  const swings = activeSet?.swings || [];
+  const selectedSwing = swings[selectedSwingIndex] || swings[0];
 
-  const jumpToMs = (ms: number, evName: string) => {
-    setActiveEvent(evName);
+  const fetchGoldenSets = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await apiFetch<any>("/api/audit/golden-sets");
+      const list = Array.isArray(res) ? res : res.golden_sets || [];
+      const normalized = list.map((g: any) => ({
+        ...g,
+        golden_set_id: g.golden_set_id || g.dataset_id,
+        video_duration_ms: g.video_duration_ms || g.duration_ms || 0,
+        swings: g.swings || g.ground_truth_swings || [],
+      }));
+      setGoldenSets(normalized);
+      if (normalized.length > 0) {
+        const found =
+          normalized.find((g: any) => g.golden_set_id === activeSetId) || normalized[0];
+        setActiveSetId(found.golden_set_id);
+      }
+    } catch (err: any) {
+      setMessage({ text: `無法載入 Golden Sets: ${err.message || err}`, type: "error" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSetId]);
+
+  useEffect(() => {
+    fetchGoldenSets();
+  }, [fetchGoldenSets]);
+
+  // 載入當前 Golden Set 音訊峰值
+  useEffect(() => {
+    if (!activeSetId) return;
+    apiFetch<any>(`/api/audit/golden-sets/${activeSetId}/audio-peaks`)
+      .then((res) => {
+        const list = Array.isArray(res) ? res : res.peaks || [];
+        const norm = list.map((p: any) => ({
+          time_ms: p.time_ms,
+          energy: p.rms_energy ?? p.energy ?? 0.0,
+          frame_idx: p.frame_idx ?? Math.round((p.time_ms / 1000) * (activeSet?.fps || 60)),
+        }));
+        setAudioPeaks(norm);
+      })
+      .catch(() => {
+        setAudioPeaks([]);
+      });
+  }, [activeSetId, activeSet?.fps]);
+
+  // 監聽播放器時間更新
+  const handleTimeUpdate = () => {
+    if (!videoRef.current || !activeSet) return;
+    const ms = Math.round(videoRef.current.currentTime * 1000);
+    setCurrentVideoTimeMs(ms);
+    const frame = Math.round((ms / 1000) * (activeSet.fps || 60));
+    setCurrentFrame(frame);
+  };
+
+  const jumpToMs = (ms: number, evKey?: string) => {
+    if (evKey) setActiveEventKey(evKey);
     if (videoRef.current) {
-      videoRef.current.currentTime = ms / 1000;
+      videoRef.current.currentTime = Math.max(0, ms / 1000);
+      setCurrentVideoTimeMs(ms);
+      if (activeSet) {
+        setCurrentFrame(Math.round((ms / 1000) * (activeSet.fps || 60)));
+      }
     }
   };
 
   const stepFrame = (deltaFrames: number) => {
-    if (!videoRef.current) return;
-    // 假設 60 fps (約 16.67ms/frame)
-    const deltaSec = deltaFrames * (1.0 / 59.99);
-    videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime + deltaSec);
+    if (!videoRef.current || !activeSet) return;
+    const fps = activeSet.fps || 59.99;
+    const deltaSec = deltaFrames / fps;
+    const targetSec = Math.max(0, Math.min(activeSet.video_duration_ms / 1000, videoRef.current.currentTime + deltaSec));
+    videoRef.current.currentTime = targetSec;
   };
+
+  // 將當前播放影格設定為選定事件
+  const handleSetCurrentFrameAsEvent = async (eventName: string) => {
+    if (!activeSet || !selectedSwing) return;
+    const fps = activeSet.fps || 60.0;
+    const targetMs = currentVideoTimeMs;
+
+    // 前端防呆：檢核不得超出影片長度
+    if (targetMs < 0 || targetMs > activeSet.video_duration_ms) {
+      setMessage({ text: `時間碼 ${targetMs}ms 超出影片合法長度 [0, ${activeSet.video_duration_ms}]ms`, type: "error" });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setMessage(null);
+      const res = await apiFetch<any>(
+        `/api/audit/golden-sets/${activeSet.golden_set_id}/swings/${selectedSwing.gt_id}/events/${eventName}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            time_ms: targetMs,
+            source: "human_verified",
+            rationale: `人工逐格校正於 ${new Date().toLocaleTimeString()}（第 ${currentFrame} 幀）`,
+          }),
+        }
+      );
+      setMessage({
+        text: `已成功將第 #${selectedSwing.sequence_no} 球之 ${EVENT_LABELS[eventName]} 校正為 ${targetMs}ms（第 ${res.event.frame_idx} 幀）`,
+        type: "success",
+      });
+      // 重新整理資料
+      await fetchGoldenSets();
+    } catch (err: any) {
+      setMessage({ text: `儲存校正失敗: ${err.message || err}`, type: "error" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 撤回修改：恢復為演算法建議值
+  const handleResetToMachine = async () => {
+    if (!activeSet || !selectedSwing) return;
+    if (!confirm(`確定要撤回第 #${selectedSwing.sequence_no} 球的所有人工校正，恢復為演算法原始建議值嗎？`)) {
+      return;
+    }
+    try {
+      setIsSaving(true);
+      await apiFetch<any>(
+        `/api/audit/golden-sets/${activeSet.golden_set_id}/swings/${selectedSwing.gt_id}/reset`,
+        { method: "POST" }
+      );
+      setMessage({ text: `已撤回第 #${selectedSwing.sequence_no} 球的人工修改，恢復為演算法建議值。`, type: "info" });
+      await fetchGoldenSets();
+    } catch (err: any) {
+      setMessage({ text: `撤回失敗: ${err.message || err}`, type: "error" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 計算選定球與最近音訊峰值的差距
+  const impactMs = selectedSwing?.events?.impact?.time_ms || 0;
+  const closestAudioPeak = audioPeaks
+    .filter((p) => Math.abs(p.time_ms - impactMs) < 1500)
+    .sort((a, b) => Math.abs(a.time_ms - impactMs) - Math.abs(b.time_ms - impactMs))[0];
+
+  // 吸附至音訊峰值
+  const snapToAudioPeak = () => {
+    if (!closestAudioPeak) return;
+    jumpToMs(closestAudioPeak.time_ms, "impact");
+    setMessage({
+      text: `已跳轉至最接近音訊撞擊峰值: ${closestAudioPeak.time_ms}ms（能量強度 ${closestAudioPeak.energy.toFixed(3)}）`,
+      type: "info",
+    });
+  };
+
+  // 節奏計算 (Backswing / Downswing)
+  const calcTempoRatio = (sw: GoldenSetSwing) => {
+    const top = sw.events?.top?.time_ms;
+    const impact = sw.events?.impact?.time_ms;
+    const address = sw.events?.address?.time_ms || sw.events?.takeaway?.time_ms;
+    if (top && impact && address && top > address && impact > top) {
+      const bs = top - address;
+      const ds = impact - top;
+      if (ds > 10) return (bs / ds).toFixed(2);
+    }
+    return "N/A";
+  };
+
+  if (isLoading && goldenSets.length === 0) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-gray-400">
+        正在載入 Golden Set 基準資料...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+      {/* 標題與基準切換 */}
+      <div className="flex flex-col justify-between gap-4 border-b border-gray-800 pb-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-white">
-            Golden Set 獨立人工影格校核基準 (12/12 Swings)
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">Golden Set 人工校核與時間碼真值確認</h1>
+            <span className="rounded bg-sky-950 px-2 py-0.5 text-xs font-semibold text-sky-400 border border-sky-800">
+              R13-C 互動校核
+            </span>
+          </div>
           <p className="mt-1 text-xs text-gray-400">
-            嚴格拒絕將模型輸出直接複製為 Ground Truth。由音訊 48kHz PCM 衝擊波形與 60fps 影格逐幀獨立審核確認。
+            拒絕將演算法預測直接當作 Ground Truth。每球事件具備獨立狀態（machine_suggested / human_verified），嚴格驗證真實揮桿特徵。
           </p>
         </div>
+
+        {/* 基準資料集選擇器 */}
         <div className="flex items-center gap-2">
-          <span className="rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-3 py-1.5 text-xs font-bold text-emerald-300">
-            逐球 True Recall: 100% (12/12)
+          <label className="text-xs text-gray-400">基準影片：</label>
+          <select
+            value={activeSetId}
+            onChange={(e) => {
+              setActiveSetId(e.target.value);
+              setSelectedSwingIndex(0);
+            }}
+            className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+          >
+            {goldenSets.map((gs) => (
+              <option key={gs.golden_set_id} value={gs.golden_set_id}>
+                {gs.name} ({gs.total_swings} 球)
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* 提示訊息 */}
+      {message && (
+        <div
+          className={`rounded-xl border p-3 text-xs ${
+            message.type === "success"
+              ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-300"
+              : message.type === "error"
+              ? "border-rose-500/40 bg-rose-950/40 text-rose-300"
+              : "border-sky-500/40 bg-sky-950/40 text-sky-300"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      {/* 影片元數據卡片 */}
+      <div className="grid grid-cols-2 gap-3 rounded-xl border border-gray-800 bg-[#0d141a] p-3 text-xs sm:grid-cols-4">
+        <div>
+          <span className="text-gray-500">影片檔名：</span>
+          <span className="font-semibold text-gray-200 ml-1">{activeSet?.video_filename}</span>
+        </div>
+        <div>
+          <span className="text-gray-500">FPS / 總影格：</span>
+          <span className="font-semibold text-gray-200 ml-1">
+            {activeSet?.fps?.toFixed(2)} fps / {activeSet?.total_frames} 幀
           </span>
-          <span className="rounded-lg border border-emerald-500/40 bg-emerald-950/60 px-3 py-1.5 text-xs font-bold text-emerald-300">
-            邊界誤差中位數: 747.0ms
+        </div>
+        <div>
+          <span className="text-gray-500">總時長：</span>
+          <span className="font-semibold text-gray-200 ml-1">
+            {(activeSet?.video_duration_ms / 1000).toFixed(2)} 秒 ({activeSet?.video_duration_ms}ms)
+          </span>
+        </div>
+        <div>
+          <span className="text-gray-500">SHA-256：</span>
+          <span className="font-mono text-[10px] text-gray-400 ml-1" title={activeSet?.video_sha256}>
+            {activeSet?.video_sha256?.substring(0, 16)}...
           </span>
         </div>
       </div>
 
-      {/* 2.267 秒異常破解卡片 */}
-      <div className="rounded-2xl border border-amber-600/50 bg-amber-950/20 p-4 text-xs text-amber-200 space-y-2">
-        <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
-          <span>🔍 核心診斷破解：第 1 球與第 6 球「Top→Impact 2.267 秒」之假象根因</span>
-        </div>
-        <p className="leading-relaxed text-amber-200/90">
-          <strong>【根因診斷】</strong>：先前的舊評估曾回報第 1 球與第 6 球之下桿時間恰好均為 2.267 秒，且邊界誤差為 0ms。經逐格檢驗發現：<strong>先前曾誤將模型預測輸出直接拷貝當作 Ground Truth</strong>，且模型將球友站定前的起桿試擺 (Waggle) 假動作當作 Top，球友試擺後在 Address 站姿停留了整整 1.6 秒後才真正起桿！
-        </p>
-        <p className="leading-relaxed text-amber-200/90">
-          <strong>【真實數據】</strong>：經人工影格重審，第 1 球真實 Top 在第 783 幀 (13,051ms)，Impact 在第 816 幀 (13,601ms)，下桿時間為生理合理的 <strong>550ms</strong>，節奏比 <strong>2.36:1</strong>；第 6 球真實 Top 在第 5198 幀 (86,645ms)，下桿時間為 <strong>650ms</strong>，節奏比 <strong>2.00:1</strong>。12 記真實揮桿的下桿時間完全落於 450~650ms 生理常模！
-        </p>
-      </div>
-
-      {/* 逐影格播放與驗證器 */}
+      {/* 主工作區：左側影格播放與校正控制，右側揮桿列表與事件細節 */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-7 space-y-3">
+        {/* 左側：影格級播放器與標定操作 */}
+        <div className="lg:col-span-7 space-y-4">
           <div className="relative overflow-hidden rounded-2xl border border-gray-800 bg-black">
-            {videoId ? (
+            {activeSet?.matched_video_id ? (
               <video
                 ref={videoRef}
                 controls
                 playsInline
                 preload="metadata"
+                onTimeUpdate={handleTimeUpdate}
                 className="aspect-video w-full"
-                src={`${API_BASE_URL}/api/videos/${videoId}/stream?token=${encodeURIComponent(getAuthToken() || "")}#t=${(selectedSwing.start_ms / 1000).toFixed(2)},${(selectedSwing.end_ms / 1000).toFixed(2)}`}
+                src={`${API_BASE_URL}/api/videos/${activeSet.matched_video_id}/stream?token=${encodeURIComponent(
+                  getAuthToken() || ""
+                )}#t=${(selectedSwing.start_ms / 1000).toFixed(2)},${(selectedSwing.end_ms / 1000).toFixed(2)}`}
               />
             ) : (
-              <div className="flex aspect-video w-full items-center justify-center text-xs text-gray-500">
-                （請先於首頁上傳或選取場次影片以啟動串流）
+              <div className="flex aspect-video w-full flex-col items-center justify-center p-6 text-center text-xs text-gray-400">
+                <span className="text-amber-400 font-bold mb-1">未串流匹配之原始影片</span>
+                <span>資料庫中尚未找到 SHA-256 完全符合 {activeSet?.video_filename} 的影片記錄。</span>
+                <span className="text-gray-500 mt-2">（請至首頁或場次頁面上傳同檔名原始影片以啟動串流）</span>
               </div>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-800 bg-[#0d141a] p-3 text-xs">
+          {/* 播放器時間與微調控制 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-800 bg-[#0d141a] p-3 text-xs">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-white">第 #{selectedSwing.sequence_no} 球影格跳轉：</span>
-              <button
-                type="button"
-                onClick={() => jumpToMs(selectedSwing.address_ms, "address")}
-                className={`rounded px-2 py-1 font-semibold transition ${
-                  activeEvent === "address" ? "bg-emerald-600 text-white" : "bg-black/50 text-gray-300 hover:text-white"
-                }`}
-              >
-                Address ({selectedSwing.frames.address} 幀)
-              </button>
-              <button
-                type="button"
-                onClick={() => jumpToMs(selectedSwing.top_ms, "top")}
-                className={`rounded px-2 py-1 font-semibold transition ${
-                  activeEvent === "top" ? "bg-emerald-600 text-white" : "bg-black/50 text-gray-300 hover:text-white"
-                }`}
-              >
-                Top ({selectedSwing.frames.top} 幀)
-              </button>
-              <button
-                type="button"
-                onClick={() => jumpToMs(selectedSwing.impact_ms, "impact")}
-                className={`rounded px-2 py-1 font-semibold transition ${
-                  activeEvent === "impact" ? "bg-red-600 text-white" : "bg-black/50 text-gray-300 hover:text-white"
-                }`}
-              >
-                Impact 擊球 ({selectedSwing.frames.impact} 幀)
-              </button>
-              <button
-                type="button"
-                onClick={() => jumpToMs(selectedSwing.finish_ms, "finish")}
-                className={`rounded px-2 py-1 font-semibold transition ${
-                  activeEvent === "finish" ? "bg-emerald-600 text-white" : "bg-black/50 text-gray-300 hover:text-white"
-                }`}
-              >
-                Finish ({selectedSwing.frames.finish} 幀)
-              </button>
+              <span className="text-gray-400">當前位置：</span>
+              <span className="font-mono text-sm font-bold text-white">
+                {(currentVideoTimeMs / 1000).toFixed(3)}s
+              </span>
+              <span className="font-mono text-xs text-emerald-400">({currentVideoTimeMs}ms)</span>
+              <span className="rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-300">
+                第 {currentFrame} 幀
+              </span>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => stepFrame(-5)}
+                className="rounded bg-gray-800 px-2 py-1 text-gray-200 hover:bg-gray-700"
+                title="後退 5 幀"
+              >
+                -5 幀
+              </button>
               <button
                 type="button"
                 onClick={() => stepFrame(-1)}
-                className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-gray-300 hover:text-white"
-                title="後退 1 幀 (16.7ms)"
+                className="rounded bg-gray-800 px-2 py-1 font-bold text-gray-200 hover:bg-gray-700"
+                title="後退 1 幀"
               >
-                ◀ -1 幀
+                ◀ -1
               </button>
               <button
                 type="button"
                 onClick={() => stepFrame(1)}
-                className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-gray-300 hover:text-white"
-                title="前進 1 幀 (16.7ms)"
+                className="rounded bg-gray-800 px-2 py-1 font-bold text-gray-200 hover:bg-gray-700"
+                title="前進 1 幀"
               >
-                +1 幀 ▶
+                +1 ▶
+              </button>
+              <button
+                type="button"
+                onClick={() => stepFrame(5)}
+                className="rounded bg-gray-800 px-2 py-1 text-gray-200 hover:bg-gray-700"
+                title="前進 5 幀"
+              >
+                +5 幀
               </button>
             </div>
           </div>
-        </div>
 
-        {/* 右側：選定球的詳細檢驗數據 */}
-        <div className="lg:col-span-5 space-y-3">
-          <div className="rounded-2xl border border-gray-800 bg-[#0d141a] p-4 text-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-              <h2 className="font-bold text-white text-sm">
-                第 #{selectedSwing.sequence_no} 球人工核定規格
-              </h2>
-              <span className="rounded bg-emerald-950 px-2 py-0.5 text-[10px] text-emerald-300 border border-emerald-700/50">
-                {selectedSwing.strike_status}
+          {/* 核心校核按鈕：將目前影格設為指定事件 */}
+          <div className="rounded-xl border border-emerald-600/30 bg-emerald-950/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-emerald-300 text-xs">
+                🎯 影格標定操作（將目前播放位置設定為第 #{selectedSwing?.sequence_no} 球關鍵事件）：
               </span>
+              <button
+                type="button"
+                onClick={handleResetToMachine}
+                disabled={isSaving}
+                className="text-[11px] text-amber-400 underline hover:text-amber-300 disabled:opacity-50"
+              >
+                撤回本球修改（恢復建議值）
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-gray-300">
-              <div className="rounded-lg bg-black/40 p-2.5">
-                <div className="text-[10px] text-gray-500">真實區間</div>
-                <div className="font-semibold text-white">
-                  {selectedSwing.start_ms} – {selectedSwing.end_ms} ms
-                </div>
-                <div className="text-[10px] text-gray-400">時長 {selectedSwing.end_ms - selectedSwing.start_ms} ms</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {(["address", "takeaway", "top", "impact", "finish"] as const).map((evKey) => {
+                const evData = selectedSwing?.events?.[evKey];
+                const isVerified = evData?.source === "human_verified";
+                return (
+                  <button
+                    key={evKey}
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => handleSetCurrentFrameAsEvent(evKey)}
+                    className={`flex flex-col items-center justify-center rounded-lg border p-2 text-center transition ${
+                      isVerified
+                        ? "border-emerald-500 bg-emerald-900/40 text-emerald-200 hover:bg-emerald-900/60"
+                        : "border-gray-700 bg-gray-900/60 text-gray-200 hover:border-emerald-500"
+                    }`}
+                  >
+                    <span className="text-[11px] font-bold">
+                      📌 設為 {evKey.toUpperCase()}
+                    </span>
+                    <span className="text-[10px] text-gray-400 mt-0.5">
+                      {EVENT_LABELS[evKey]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 音訊衝擊能量波形對照 */}
+          <div className="rounded-xl border border-gray-800 bg-[#0d141a] p-4 text-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-white">🎵 48kHz PCM 音訊衝擊能量候選峰值：</span>
+                <span className="rounded bg-sky-950 px-2 py-0.5 text-[10px] text-sky-400 border border-sky-800">
+                  共 {audioPeaks.length} 個峰值
+                </span>
               </div>
-              <div className="rounded-lg bg-black/40 p-2.5">
-                <div className="text-[10px] text-gray-500">下桿時間 (Top→Impact)</div>
-                <div className="font-semibold text-emerald-400">
-                  {selectedSwing.downswing_ms} ms
-                </div>
-                <div className="text-[10px] text-gray-400">生理合理常模 (450~650ms)</div>
-              </div>
-              <div className="rounded-lg bg-black/40 p-2.5">
-                <div className="text-[10px] text-gray-500">上桿時間 (Start→Top)</div>
-                <div className="font-semibold text-white">
-                  {selectedSwing.backswing_ms} ms
-                </div>
-                <div className="text-[10px] text-gray-400">起桿到頂點停留</div>
-              </div>
-              <div className="rounded-lg bg-black/40 p-2.5">
-                <div className="text-[10px] text-gray-500">節奏比 (Tempo Ratio)</div>
-                <div className="font-semibold text-amber-300">
-                  {selectedSwing.tempo_ratio.toFixed(2)} : 1
-                </div>
-                <div className="text-[10px] text-gray-400">PGA 標準約 3.0:1</div>
-              </div>
+              {closestAudioPeak && (
+                <button
+                  type="button"
+                  onClick={snapToAudioPeak}
+                  className="rounded bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500"
+                >
+                  ⚡ 吸附至最接近峰值 ({closestAudioPeak.time_ms}ms)
+                </button>
+              )}
             </div>
 
-            {selectedSwing.note && (
-              <div className="rounded-lg bg-amber-950/40 p-2.5 text-[11px] text-amber-200 border border-amber-900/50">
-                {selectedSwing.note}
+            {closestAudioPeak ? (
+              <div className="flex items-center justify-between rounded-lg bg-black/40 p-2.5 border border-gray-800">
+                <div>
+                  <span className="text-gray-400">目前 Impact ({impactMs}ms) 最近音訊撞擊：</span>
+                  <span className="font-mono font-bold text-emerald-400 ml-1">
+                    {closestAudioPeak.time_ms}ms (第 {closestAudioPeak.frame_idx} 幀)
+                  </span>
+                  <span className="text-gray-500 text-[10px] ml-2">
+                    能量強度: {closestAudioPeak.energy.toFixed(3)}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-gray-400">時間差：</span>
+                  <span
+                    className={`font-mono font-bold ml-1 ${
+                      Math.abs(impactMs - closestAudioPeak.time_ms) <= 50
+                        ? "text-emerald-400"
+                        : "text-amber-400"
+                    }`}
+                  >
+                    {(impactMs - closestAudioPeak.time_ms > 0 ? "+" : "") +
+                      (impactMs - closestAudioPeak.time_ms)}
+                    ms
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-gray-500 text-[11px]">
+                Impact 附近 1.5 秒內未偵測到顯著音訊脈衝能量。
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* 12 球全量核定總表 */}
-      <div className="rounded-2xl border border-gray-800 bg-[#0d141a] p-5 space-y-4">
-        <h2 className="text-base font-bold text-white">
-          真實 2 分鐘訓練 12 球人工標註核定總表
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-gray-800 text-[11px] text-gray-400">
-                <th className="py-2.5 px-3">序號</th>
-                <th className="py-2.5 px-3">時間區間 (ms)</th>
-                <th className="py-2.5 px-3">Address 影格</th>
-                <th className="py-2.5 px-3">Top 影格</th>
-                <th className="py-2.5 px-3">Impact 影格 (音訊脈衝)</th>
-                <th className="py-2.5 px-3">Finish 影格</th>
-                <th className="py-2.5 px-3">下桿 (ms)</th>
-                <th className="py-2.5 px-3">節奏比</th>
-                <th className="py-2.5 px-3">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/60 text-gray-300">
-              {AUDITED_12_SWINGS.map((sw) => {
-                const isCur = selectedSwing.gt_id === sw.gt_id;
+        {/* 右側：12 球列表與逐球事件檢視 */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="rounded-2xl border border-gray-800 bg-[#0d141a] p-4 text-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+              <span className="font-bold text-white text-sm">
+                第 #{selectedSwing?.sequence_no} 球事件細節
+              </span>
+              <span className="rounded bg-gray-800 px-2 py-0.5 text-[11px] text-gray-300">
+                節奏比: {selectedSwing ? calcTempoRatio(selectedSwing) : "N/A"}:1
+              </span>
+            </div>
+
+            {selectedSwing?.note && (
+              <div className="rounded-lg bg-amber-950/30 border border-amber-800/40 p-2 text-amber-200 text-[11px] leading-relaxed">
+                {selectedSwing.note}
+              </div>
+            )}
+
+            {/* 各事件表格 */}
+            <div className="space-y-2">
+              {(["address", "takeaway", "top", "impact", "finish"] as const).map((evKey) => {
+                const evData = selectedSwing?.events?.[evKey];
+                const isVerified = evData?.source === "human_verified";
+                const machineMs = evData?.machine_suggested_ms ?? evData?.time_ms;
+                const deltaMs = evData ? evData.time_ms - machineMs : 0;
+
                 return (
-                  <tr
-                    key={sw.gt_id}
-                    className={`hover:bg-white/5 transition ${isCur ? "bg-emerald-950/30" : ""}`}
+                  <div
+                    key={evKey}
+                    className={`flex items-center justify-between rounded-lg border p-2.5 transition ${
+                      activeEventKey === evKey
+                        ? "border-emerald-500/80 bg-emerald-950/30"
+                        : "border-gray-800 bg-gray-900/40"
+                    }`}
                   >
-                    <td className="py-2 px-3 font-bold text-white">#{sw.sequence_no}</td>
-                    <td className="py-2 px-3 text-gray-400">{sw.start_ms} – {sw.end_ms}</td>
-                    <td className="py-2 px-3">#{sw.frames.address} ({sw.address_ms}ms)</td>
-                    <td className="py-2 px-3 font-semibold text-sky-300">#{sw.frames.top} ({sw.top_ms}ms)</td>
-                    <td className="py-2 px-3 font-bold text-red-400">#{sw.frames.impact} ({sw.impact_ms}ms)</td>
-                    <td className="py-2 px-3">#{sw.frames.finish} ({sw.finish_ms}ms)</td>
-                    <td className="py-2 px-3 font-semibold text-emerald-400">{sw.downswing_ms}ms</td>
-                    <td className="py-2 px-3 font-semibold text-amber-300">{sw.tempo_ratio.toFixed(2)}:1</td>
-                    <td className="py-2 px-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedSwing(sw);
-                          jumpToMs(sw.impact_ms, "impact");
-                        }}
-                        className="rounded border border-emerald-700/60 bg-emerald-950/50 px-2 py-0.5 text-[11px] text-emerald-300 hover:bg-emerald-800"
-                      >
-                        檢驗此球
-                      </button>
-                    </td>
-                  </tr>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => evData && jumpToMs(evData.time_ms, evKey)}
+                          className="font-bold text-white hover:text-emerald-400 underline"
+                        >
+                          {EVENT_LABELS[evKey]}
+                        </button>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                            isVerified
+                              ? "bg-emerald-900/80 text-emerald-300 border border-emerald-700"
+                              : "bg-sky-950 text-sky-400 border border-sky-800"
+                          }`}
+                        >
+                          {isVerified ? "人工已確認" : "演算法建議"}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-1">
+                        依據: {evData?.rationale || "運動學動能峰值"}
+                      </div>
+                      {isVerified && evData?.updated_at && (
+                        <div className="text-[9px] text-gray-500">
+                          校核時間: {new Date(evData.updated_at).toLocaleTimeString()}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-right">
+                      <div className="font-mono text-xs font-bold text-emerald-300">
+                        {evData?.time_ms}ms
+                      </div>
+                      <div className="text-[10px] text-gray-400">
+                        第 {evData?.frame_idx} 幀
+                      </div>
+                      {isVerified && deltaMs !== 0 && (
+                        <div className="font-mono text-[9px] text-amber-400">
+                          Δ {deltaMs > 0 ? `+${deltaMs}` : deltaMs}ms
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          {/* 全場次揮桿切換選單 */}
+          <div className="rounded-2xl border border-gray-800 bg-[#0d141a] p-4 text-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-white">全場揮桿列表 ({swings.length} 球)：</span>
+              <span className="text-[10px] text-gray-400">點擊選取進行逐格校核</span>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+              {swings.map((sw, idx) => {
+                const isSelected = idx === selectedSwingIndex;
+                const verifiedCount = Object.values(sw.events || {}).filter(
+                  (e) => e.source === "human_verified"
+                ).length;
+                return (
+                  <button
+                    key={sw.gt_id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSwingIndex(idx);
+                      jumpToMs(sw.start_ms, "impact");
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition ${
+                      isSelected
+                        ? "border-emerald-500 bg-emerald-950/40 text-white"
+                        : "border-gray-800 bg-gray-900/40 text-gray-300 hover:border-gray-700"
+                    }`}
+                  >
+                    <div>
+                      <span className="font-bold">第 #{sw.sequence_no} 球</span>
+                      <span className="text-gray-500 text-[10px] ml-2">
+                        {sw.start_ms}ms - {sw.end_ms}ms
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-gray-400">
+                        {calcTempoRatio(sw)}:1
+                      </span>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                          verifiedCount > 0
+                            ? "bg-emerald-900/60 text-emerald-300"
+                            : "bg-gray-800 text-gray-400"
+                        }`}
+                      >
+                        {verifiedCount}/5 確認
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
