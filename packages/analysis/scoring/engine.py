@@ -145,49 +145,50 @@ def compute_swing_score(
         and float(m_repeat.get("confidence", 0.0)) >= min_confidence
     )
 
-    if has_plane or has_repeat:
-        dev_plane = float(m_plane["value"]) if has_plane else None  # type: ignore
-        conf_plane = float(m_plane["confidence"]) if has_plane else 0.0  # type: ignore
+    if has_plane and has_repeat:
+        dev_plane = float(m_plane["value"])  # type: ignore
+        conf_plane = float(m_plane["confidence"])  # type: ignore
+        dev_repeat = float(m_repeat["value"])  # type: ignore
+        conf_repeat = float(m_repeat["confidence"])  # type: ignore
+        s_plane = 100.0 if dev_plane <= 0.05 else _clip(100.0 - ((dev_plane - 0.05) / 0.20) * 75.0, 25.0, 100.0)
+        s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.16) * 70.0, 30.0, 100.0)
+        final_s_path = round(s_plane * 0.60 + s_repeat * 0.40, 1)
+        final_conf = round(conf_plane * 0.60 + conf_repeat * 0.40, 3)
+        how_calc = (
+            f"融合單球上下桿手部平面差距 d={dev_plane:.3f}（佔 60%）與同場多球重複性偏差 r={dev_repeat:.3f}（佔 40%）；"
+            "僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。"
+        )
+        raw_repr = round(dev_plane, 4)
+    elif has_plane:
+        dev_plane = float(m_plane["value"])  # type: ignore
+        conf_plane = float(m_plane["confidence"])  # type: ignore
+        s_plane = 100.0 if dev_plane <= 0.05 else _clip(100.0 - ((dev_plane - 0.05) / 0.20) * 75.0, 25.0, 100.0)
+        final_s_path = round(s_plane, 1)
+        final_conf = round(conf_plane, 3)
+        how_calc = (
+            f"評估單球上下桿手腕 2D 平面間隙 gap={dev_plane:.3f}；"
+            "gap ≤ 0.05 得 100 分（單球路徑穩定度，未結合多球重複性）。"
+        )
+        raw_repr = round(dev_plane, 4)
+        dev_repeat = None
+    elif has_repeat:
+        dev_repeat = float(m_repeat["value"])  # type: ignore
+        conf_repeat = float(m_repeat["confidence"])  # type: ignore
+        s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.16) * 70.0, 30.0, 100.0)
+        final_s_path = round(s_repeat, 1)
+        final_conf = round(conf_repeat, 3)
+        how_calc = f"評估同場多球手部中位數路徑重複性偏差 r={dev_repeat:.3f}（缺乏單球平面數據）。"
+        raw_repr = round(dev_repeat, 4)
+        dev_plane = None
+    else:
+        final_s_path = None
+        final_conf = 0.0
+        how_calc = "上下桿手腕關鍵點可見度不足，不予計分。"
+        raw_repr = None
+        dev_plane = None
+        dev_repeat = None
 
-        if has_plane and dev_plane is not None:
-            if dev_plane <= 0.05:
-                s_plane = 100.0
-            else:
-                s_plane = _clip(100.0 - ((dev_plane - 0.05) / 0.20) * 75.0, 25.0, 100.0)
-        else:
-            s_plane = 70.0
-
-        if has_repeat and m_repeat is not None:
-            dev_repeat = float(m_repeat["value"])
-            conf_repeat = float(m_repeat["confidence"])
-            s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.16) * 70.0, 30.0, 100.0)
-        else:
-            dev_repeat = None
-            conf_repeat = 0.0
-            s_repeat = None
-
-        if s_repeat is not None and has_plane:
-            final_s_path = round(s_plane * 0.60 + s_repeat * 0.40, 1)
-            final_conf = round(conf_plane * 0.60 + conf_repeat * 0.40, 3)
-            how_calc = (
-                f"融合單球上下桿手部平面差距 d={dev_plane:.3f}（佔 60%）與同場多球重複性偏差 r={dev_repeat:.3f}（佔 40%）；"
-                "僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。"
-            )
-            raw_repr = round(dev_plane, 4) if dev_plane is not None else 0.0
-        elif has_plane and dev_plane is not None:
-            final_s_path = round(s_plane, 1)
-            final_conf = round(conf_plane, 3)
-            how_calc = (
-                f"評估單球上下桿手腕 2D 平面間隙 gap={dev_plane:.3f}；"
-                "gap ≤ 0.05 得 100 分（單球路徑穩定度，未結合多球重複性）。"
-            )
-            raw_repr = round(dev_plane, 4)
-        else:
-            final_s_path = round(s_repeat or 70.0, 1)
-            final_conf = round(conf_repeat, 3)
-            how_calc = f"評估同場多球手部中位數路徑重複性偏差 r={dev_repeat:.3f}。"
-            raw_repr = round(dev_repeat or 0.0, 4)
-
+    if final_s_path is not None:
         subscores["path_repeatability"] = {
             "label": "手部路徑間隙與重複性",
             "score": final_s_path,
@@ -333,26 +334,44 @@ def compute_swing_score(
     # 計算獨立之 IG 視覺呈現分數 (ig_visual_score)
     # 畫面完整 (真實入鏡檢核) 30% + 平穩收桿 25% + 節奏觀感 20% + 清晰度 15% + 起迄剪輯完整性 (真實時間碼邊界) 10%
     ig_visual_score: float | None = None
-    if coverage >= min_coverage_gate:
-        # 1. 畫面完整度 (framing_score, 30%): 真實檢查是否頭腳出鏡或邊界遮擋
-        oof_flags = q_meta.get("out_of_frame_flags") or []
-        oof_penalty = len(oof_flags) * 20.0
-        base_framing = float(q_meta.get("body_visibility_ratio", coverage)) * 100.0
+
+    # 1. 畫面完整度 (framing, 30%): 真實檢查是否頭腳出鏡或邊界遮擋
+    oof_flags = q_meta.get("out_of_frame_flags") or []
+    oof_penalty = len(oof_flags) * 20.0
+    vis_ratio = q_meta.get("body_visibility_ratio")
+    if vis_ratio is not None:
+        base_framing = float(vis_ratio) * 100.0
+        framing_score: float | None = _clip(base_framing - oof_penalty, 20.0, 100.0)
+    elif coverage > 0.0:
+        base_framing = float(coverage) * 100.0
         framing_score = _clip(base_framing - oof_penalty, 20.0, 100.0)
+    else:
+        framing_score = None
 
-        # 2. 收桿平衡與節奏觀感
-        fin_score = float(subscores["finish_balance"]["score"] or 70.0)
-        tempo_score = float(subscores["tempo_consistency"]["score"] or 75.0)
+    # 2. 收桿平衡 (finish, 25%) 與 3. 節奏觀感 (tempo, 20%)
+    fin_score = subscores["finish_balance"]["score"]
+    tempo_score = subscores["tempo_consistency"]["score"]
 
-        # 3. 畫質清晰度與相機晃動 (clarity_score, 15%)
-        sharpness = float(q_meta.get("mean_sharpness", 80.0))
+    # 4. 畫質清晰度與相機晃動 (clarity, 15%)
+    if q_meta.get("mean_sharpness") is not None:
+        sharpness = float(q_meta["mean_sharpness"])
         cam_motion = float(q_meta.get("max_camera_motion", 0.0))
-        clarity_score = _clip(min(100.0, 60.0 + sharpness * 0.4) - cam_motion * 250.0, 30.0, 100.0)
+        clarity_score: float | None = _clip(min(100.0, 60.0 + sharpness * 0.4) - cam_motion * 250.0, 30.0, 100.0)
+    else:
+        clarity_score = None
 
-        # 4. 起迄剪輯完整性 (clip_margin, 10%): 真實檢查準備動作前與收桿後的緩衝時間 (ms)
-        pre_m = float(q_meta.get("clip_pre_margin_ms") or (m_map.get("pre_margin_ms", {}).get("value") or 350.0))
-        post_m = float(q_meta.get("clip_post_margin_ms") or (m_map.get("post_margin_ms", {}).get("value") or 350.0))
-        min_margin = min(pre_m, post_m)
+    # 5. 起迄剪輯完整性 (clip_margin, 10%): 真實檢查準備動作前與收桿後的緩衝時間 (ms)
+    pre_m_raw = q_meta.get("clip_pre_margin_ms") or (m_map.get("pre_margin_ms", {}).get("value"))
+    post_m_raw = q_meta.get("clip_post_margin_ms") or (m_map.get("post_margin_ms", {}).get("value"))
+    pre_m: float | None = None
+    post_m: float | None = None
+    margin_score: float | None = None
+    if pre_m_raw is not None and post_m_raw is not None:
+        p_pre = float(pre_m_raw)
+        p_post = float(post_m_raw)
+        pre_m = p_pre
+        post_m = p_post
+        min_margin = min(p_pre, p_post)
         if min_margin >= 300.0:
             margin_score = 100.0
         elif min_margin <= 50.0:
@@ -360,27 +379,33 @@ def compute_swing_score(
         else:
             margin_score = _clip(30.0 + ((min_margin - 50.0) / 250.0) * 70.0, 30.0, 100.0)
 
-        ig_raw = (
-            framing_score * 0.30
-            + fin_score * 0.25
-            + tempo_score * 0.20
-            + clarity_score * 0.15
-            + margin_score * 0.10
-        )
-        ig_visual_score = round(ig_raw, 1)
-        subscores["ig_visual_breakdown"] = {
-            "framing_30": round(framing_score, 1),
-            "finish_25": round(fin_score, 1),
-            "tempo_20": round(tempo_score, 1),
-            "clarity_15": round(clarity_score, 1),
-            "clip_margin_10": round(margin_score, 1),
-            "details": {
-                "out_of_frame_flags": oof_flags,
-                "pre_margin_ms": round(pre_m, 1),
-                "post_margin_ms": round(post_m, 1),
-            },
-            "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。",
-        }
+    ig_components: list[tuple[str, float | None, float]] = [
+        ("framing_30", framing_score, 0.30),
+        ("finish_25", fin_score, 0.25),
+        ("tempo_20", tempo_score, 0.20),
+        ("clarity_15", clarity_score, 0.15),
+        ("clip_margin_10", margin_score, 0.10),
+    ]
+
+    valid_ig_weight = sum(w for _, s, w in ig_components if s is not None)
+    if valid_ig_weight >= 0.70:
+        ig_weighted_sum = sum(float(s) * w for _, s, w in ig_components if s is not None)
+        ig_visual_score = round(ig_weighted_sum / valid_ig_weight, 1)
+
+    subscores["ig_visual_breakdown"] = {
+        "framing_30": round(framing_score, 1) if framing_score is not None else None,
+        "finish_25": round(fin_score, 1) if fin_score is not None else None,
+        "tempo_20": round(tempo_score, 1) if tempo_score is not None else None,
+        "clarity_15": round(clarity_score, 1) if clarity_score is not None else None,
+        "clip_margin_10": round(margin_score, 1) if margin_score is not None else None,
+        "valid_weight_coverage": round(valid_ig_weight, 2),
+        "details": {
+            "out_of_frame_flags": oof_flags,
+            "pre_margin_ms": round(pre_m, 1) if pre_m is not None else None,
+            "post_margin_ms": round(post_m, 1) if post_m is not None else None,
+        },
+        "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。",
+    }
 
     return ScoreComputeResult(
         score_version=score_version,
@@ -406,27 +431,65 @@ def rank_session_swings(
     - finish (收桿最佳：依 finish_balance 分數)
     - ig (IG 視覺呈現最佳：依 ig_visual_score)
     支援使用者手動排除 (category='excluded') 與手動置頂/指定排名 (rank_override)。
+    嚴格過濾：各分類排行榜僅納入具有真實分項數據之球，禁止使用替代分數冒充。
     """
     favs = favorites or []
     excluded_ids = {f["segment_id"] for f in favs if f.get("category") == "excluded"}
 
-    eligible = [
+    base_eligible = [
         s
         for s in swing_items
         if s.get("id") not in excluded_ids
         and s.get("label") == "valid_swing"
         and s.get("review_status") != "rejected"
-        and s.get("overall_score") is not None
     ]
 
+    def _posture_reason(s: dict[str, Any], score: float | None) -> str:
+        spine = ((s.get("subscores") or {}).get("spine_tilt_stability") or {})
+        delta = spine.get("raw_value")
+        if delta is not None:
+            return f"軀幹前傾穩定 Δ={delta:.1f}°，動作總分 {score or 'N/A'} 分"
+        return f"綜合動作檢核評定 {score or 'N/A'} 分"
+
+    def _tempo_reason(s: dict[str, Any], score: float | None) -> str:
+        tempo = ((s.get("subscores") or {}).get("tempo_consistency") or {})
+        ratio = tempo.get("raw_value")
+        if ratio is not None:
+            return f"上下桿時間比 {ratio:.2f}:1（標準 3.0:1），節奏得分 {score or 'N/A'} 分"
+        return f"揮桿節奏得分 {score or 'N/A'} 分"
+
+    def _finish_reason(s: dict[str, Any], score: float | None) -> str:
+        fin = ((s.get("subscores") or {}).get("finish_balance") or {})
+        hold = fin.get("hold_ms")
+        sway = fin.get("raw_value")
+        if hold is not None and sway is not None:
+            return f"收桿停頓 {hold:.0f}ms、晃動比 {sway:.3f}，收桿得分 {score or 'N/A'} 分"
+        return f"收桿姿勢得分 {score or 'N/A'} 分"
+
+    def _ig_reason(s: dict[str, Any], score: float | None) -> str:
+        bd = ((s.get("subscores") or {}).get("ig_visual_breakdown") or {})
+        frm = bd.get("framing_30")
+        if frm is not None:
+            return f"畫面完整度 {frm} 分、收桿平穩，IG 吸睛分 {score or 'N/A'} 分"
+        return f"IG 社群短影音推薦分 {score or 'N/A'} 分"
+
     def _build_category_rank(
-        cat_name: str, score_getter: Any
+        cat_name: str,
+        score_getter: Any,
+        reason_builder: Any,
     ) -> list[dict[str, Any]]:
         manual_overrides = {
             f["segment_id"]: (f.get("rank_override") or 1)
             for f in favs
             if f.get("category") == cat_name
         }
+
+        # 嚴格過濾：該球在此分類必須具有真實有效分數 (not None)，或有手動置頂
+        cat_candidates = [
+            s
+            for s in base_eligible
+            if score_getter(s) is not None or str(s.get("id")) in manual_overrides
+        ]
 
         def sort_key(item: dict[str, Any]) -> tuple[int, int, float, float, int]:
             seg_id = str(item["id"])
@@ -438,9 +501,10 @@ def rank_session_swings(
             seq = int(item.get("sequence_no") or 9999)
             return (is_manual, manual_rank, -primary_score, -conf, seq)
 
-        ranked = sorted(eligible, key=sort_key)
+        ranked = sorted(cat_candidates, key=sort_key)
         output: list[dict[str, Any]] = []
         for idx, it in enumerate(ranked[:top_k], start=1):
+            score_val = score_getter(it)
             output.append(
                 {
                     "rank": idx,
@@ -448,25 +512,34 @@ def rank_session_swings(
                     "sequence_no": it.get("sequence_no"),
                     "start_ms": it.get("start_ms"),
                     "end_ms": it.get("end_ms"),
-                    "category_score": score_getter(it),
+                    "category_score": score_val,
                     "overall_score": it.get("overall_score"),
                     "confidence": it.get("confidence"),
-                    "manual_pinned": it["id"] in manual_overrides,
+                    "reason": reason_builder(it, score_val),
+                    "manual_pinned": str(it["id"]) in manual_overrides,
                 }
             )
         return output
 
     return {
-        "posture": _build_category_rank("posture", lambda x: x.get("overall_score")),
+        "posture": _build_category_rank(
+            "posture",
+            lambda x: x.get("overall_score"),
+            _posture_reason,
+        ),
         "tempo": _build_category_rank(
             "tempo",
-            lambda x: ((x.get("subscores") or {}).get("tempo_consistency") or {}).get("score")
-            or x.get("overall_score"),
+            lambda x: ((x.get("subscores") or {}).get("tempo_consistency") or {}).get("score"),
+            _tempo_reason,
         ),
         "finish": _build_category_rank(
             "finish",
-            lambda x: ((x.get("subscores") or {}).get("finish_balance") or {}).get("score")
-            or x.get("overall_score"),
+            lambda x: ((x.get("subscores") or {}).get("finish_balance") or {}).get("score"),
+            _finish_reason,
         ),
-        "ig": _build_category_rank("ig", lambda x: x.get("ig_visual_score") or x.get("overall_score")),
+        "ig": _build_category_rank(
+            "ig",
+            lambda x: x.get("ig_visual_score"),
+            _ig_reason,
+        ),
     }

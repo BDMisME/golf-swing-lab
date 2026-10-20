@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     scoring_version: str = "score-v1"
     data_retention_days: int = 30
 
-    llm_provider: str = "openai-compatible"
+    llm_provider: str = "none"
     llm_api_key: str = ""
     llm_base_url: str = "https://ark.cn-beijing.volces.com/api/plan/v3"
     llm_model: str = "doubao-seed-2.1-lite"

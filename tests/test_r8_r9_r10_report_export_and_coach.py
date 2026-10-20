@@ -29,6 +29,7 @@ def _auth_headers() -> dict[str, str]:
 
 def test_full_pipeline_report_manual_calibration_and_mp4_exports(tmp_path: Path) -> None:
     headers = _auth_headers()
+    client.put("/api/settings", headers=headers, json={"llm_provider": "none"})
     sess = client.post(
         "/api/sessions",
         headers=headers,

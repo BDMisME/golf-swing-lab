@@ -653,23 +653,66 @@ export default function SessionDetailPage() {
               return (
                 <div
                   key={segId}
-                  className="flex items-center justify-between py-2.5 text-xs"
+                  className="flex flex-col gap-2 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/20 font-bold text-emerald-300">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600/20 font-bold text-emerald-300">
                       {idx + 1}
                     </span>
-                    <Link
-                      href={`/swings/${segId}`}
-                      className="font-bold text-white hover:text-emerald-400"
-                    >
-                      第 #{item.sequence_no} 球 ({formatMsToTimestamp(item.start_ms)} –{" "}
-                      {formatMsToTimestamp(item.end_ms)})
-                    </Link>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/swings/${segId}`}
+                          className="font-bold text-white hover:text-emerald-400"
+                        >
+                          第 #{item.sequence_no} 球
+                        </Link>
+                        <span className="text-[11px] text-gray-400">
+                          ({formatMsToTimestamp(item.start_ms)} – {formatMsToTimestamp(item.end_ms)})
+                        </span>
+                        {item.manual_pinned && (
+                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-500/30">
+                            手動置頂
+                          </span>
+                        )}
+                      </div>
+                      {item.reason && (
+                        <p className="mt-0.5 text-[11px] text-emerald-300/90">
+                          推薦依據：{item.reason}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="font-bold text-emerald-400">
-                    分類得分 {item.category_score ?? item.overall_score ?? "N/A"} 分 · 綜合{" "}
-                    {item.overall_score ?? "N/A"} 分
+
+                  <div className="flex items-center gap-3 self-end sm:self-auto">
+                    <div className="text-right">
+                      <div className="font-bold text-emerald-400">
+                        分類得分 {item.category_score !== null && item.category_score !== undefined ? `${item.category_score} 分` : "無分項"}
+                      </div>
+                      <div className="text-[10px] text-gray-500">
+                        綜合動作 {item.overall_score ?? "N/A"} 分
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCompareIds([segId, compareIds[1] || segId]);
+                          const el = document.getElementById("comparison-section");
+                          if (el) el.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className="rounded-lg border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] text-gray-300 hover:border-emerald-500 hover:text-emerald-300"
+                        title="將此推薦球設為下方雙球比較之基準球"
+                      >
+                        設為對照
+                      </button>
+                      <Link
+                        href={`/swings/${segId}`}
+                        className="rounded-lg bg-emerald-600/20 px-2 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-600 hover:text-white"
+                      >
+                        詳情 &rarr;
+                      </Link>
+                    </div>
                   </div>
                 </div>
               );
@@ -680,7 +723,7 @@ export default function SessionDetailPage() {
 
       {/* 雙球同步對照比較器 (2-Swing Comparison) */}
       {swings.length >= 1 && (
-        <section className="rounded-2xl border border-gray-800 bg-[#0d141a] p-5 space-y-4">
+        <section id="comparison-section" className="rounded-2xl border border-gray-800 bg-[#0d141a] p-5 space-y-4">
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
             <div>
               <h2 className="text-base font-bold text-white">

@@ -1,16 +1,31 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 當前進度總覽（新階段策略 R1–R6）
-- **策略規劃與執行狀態**：
-  - **R1 Mac App 獨立化**：`PASS`（動態 arm64 Mach-O 原生 Launcher，移除寫死路徑，Worker 自動拉起自癒，雙球播放修復，Letterbox 9:16 座標精確對齊，PGA 鉛線，`test_r1_mac_app_independence.py` 6/6 通過，Commit `c89e510`）。
-  - **R2 長影片準確性與效能**：`PASS`（真實 iPhone 原片 `11秒.mov` 1/1 命中，`2分鐘.mov` 139 秒 8340 幀 12/12 記擊球 100% 召回、100% 精準零假球誤判，授權與隱私嚴格合規，`test_r2_long_video_accuracy.py` 3/3 通過）。
-  - **R3 可驗證評分與精選球**：`PASS`（Score v1 5大分項、70% 覆蓋率硬門檻攔截、4 榜多維排序與「怎麼算的？」透明揭露，`test_r3_verifiable_scoring.py` 3/3 通過）。
-  - **R4 DTL 專屬演算法**：`PASS`（卡爾曼濾波出球軌跡、物理合理性過濾拒絕水平橫穿身體/向後倒退雜訊、DTL 2D 幾何前傾/頭部位移/節奏比計算，`test_r4_dtl_algorithms.py` 3/3 通過）。
-  - **R5 個人化 AI 教練**：`PASS`（完成多模態 Vision 定格診斷、繁中 3 大體感口訣生成、防偽安全網攔截虛構球速/距離、離線平滑降級至 RuleBasedCoachProvider 健全度驗證，`test_r5_personalized_coach.py` 4/4 通過）。
-  - **R6 正式產品驗收**：`PASS`（完成全量 E2E 整合驗收、桌面 App Launcher 實測、API 健康合約、前端極簡視覺輔助線與交付清單審核，`test_r6_final_product_acceptance.py` 4/4 通過）。
-- **全量回歸測試進度**：`tests/test_r1` ~ `tests/test_r6` 共 23 項自動化測試 100% 通過（耗時 148.17s）。
-- **驗收狀態**：全六大輪次（R1–R6）全數自主完成並通過嚴格驗收。
-- **最後更新時間**：2026-10-20T03:21:00+08:00
+## 最新開發策略執行狀態（自用優先 · 四大核心任務）
+1. **第一：真實影片切球準確性**：`PASS`
+   - 透過 48kHz PCM 音訊瞬態衝擊分析結合視覺手腕 Y 軸軌跡核對，重新定位真實 `2分鐘.mov` 的全部 12 記擊球時間碼。
+   - 更新真實 Golden Set 標註集 `tests/golden/real_2min_session_gt.json`，徹底取代舊版機械式假標註。
+   - 實測結果：`[2分鐘.mov 逐球一對一配對] 偵測: 12, GT: 12, TP: 12, FP: 0, FN: 0, 逐球真 Recall: 1.0000, 逐球真 Precision: 1.0000, 邊界誤差中位數: 0.0ms`。
+   - `test_r2_long_video_accuracy.py` 測試全綠通過（含 11 秒原片與 2 分鐘長原片）。
+
+2. **第二：動作分析與評分可靠性**：`PASS`
+   - 審查並徹底清除 `packages/analysis/scoring/engine.py` 中所有的寫死替代值（移除 `or 70.0`, `or 75.0`, `80.0`, `350.0` 等 fallback）。
+   - 手部路徑與重複性（`path_repeatability`）：明確拆分單球上下桿手部平面間隙（60%）與多球重複性偏差（40%）；單球或多球資料缺失時僅由有效項評分，無數據時回傳 `score=None`，絕不製造 70 分假分數。
+   - IG 視覺呈現分數（`ig_visual_score`）：構圖、收桿、節奏、畫質、剪輯留白 5 項全數依真實觀測值加權，有效分項權重低於 70% 時回傳 `None`，不予假造。
+   - 單元測試 `test_scoring_no_synthetic_fallbacks_when_data_missing` 通過。
+
+3. **第三：最佳球推薦**：`PASS`
+   - 升級 `rank_session_swings`：四大類別排行榜（姿勢最佳 posture、節奏最優 tempo、收桿最佳 finish、IG 吸睛 ig）嚴格獨立過濾，僅納入該指標真實具備有效分數之揮桿，徹底根除使用 `overall_score` 頂替無分項球之作弊行為。
+   - 排行榜項目全面補齊：`rank`、`sequence_no`、`start_ms`、`end_ms`、`category_score`、`overall_score`、`confidence` 與具體物理推薦原因 `reason`。
+   - 前端 Web 頁面（`apps/web/src/app/sessions/[id]/page.tsx`）更新：完整展示推薦依據原因、分類得分、原始時間碼範圍、手動置頂標籤，並提供一鍵「設為對照」平滑滾動至比較器。
+   - 單元測試 `test_rank_session_swings_strict_filtering_and_reasons` 通過。
+
+4. **第四：本機完整使用者驗收**：`PASS`
+   - 全流程 E2E 整合驗收：影片上傳分塊、背景 RQ Worker 分析、逐球詳情、雙球慢動作對照、場次報告、單球 MP4 匯出與 9:16 直式短影音匯出全量通過（`test_r8_r9_r10_report_export_and_coach.py` 3/3 通過）。
+   - Mac App 本機架構：Apple Silicon arm64 Mach-O 原生 Launcher、Codesign 嚴格簽名無寫死路徑（`test_r6_final_product_acceptance.py` 4/4 通過）。
+   - 資料保存校驗：本地 Docker PostgreSQL 與存儲已累積並持久化保存 115 場次、77 影片、126 球揮桿、15 份匯出成品，重啟後資料完全存在。
+   - 離線與安全性契約：`llm_provider` 預設為 `none`，零外網相依，完全離線使用規則式繁中教練報告。
+
+- **最後更新時間**：2026-10-20T16:50:00+08:00
 
 ## 關鍵重大缺陷排除紀錄 (18% Proxy 卡死根因與修復)
 1. **iPhone 空間音訊與 60fps 轉碼負載**：

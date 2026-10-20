@@ -94,3 +94,85 @@ def test_rank_session_swings_four_boards():
     assert ranked["posture"][0]["segment_id"] == "swing-1", "姿勢最佳應為第 1 球"
     assert ranked["tempo"][0]["segment_id"] == "swing-2", "最佳節奏應為第 2 球"
     assert ranked["finish"][0]["segment_id"] == "swing-1", "收桿最佳應為第 1 球"
+
+
+def test_scoring_no_synthetic_fallbacks_when_data_missing():
+    """驗證當關鍵可觀測資料缺失時，嚴禁使用 70.0/75.0 假分數，IG 分數如實為 None。"""
+    # 僅有軀幹前傾和頭部位移（共 40% 權重），缺少路徑、節奏與收桿
+    partial_metrics = [
+        {"metric_key": "spine_tilt_delta_deg", "value": 2.1, "confidence": 0.95},
+        {"metric_key": "head_displacement_ratio", "value": 0.04, "confidence": 0.90},
+    ]
+    res = compute_swing_score(metrics=partial_metrics, min_coverage_gate=0.70)
+    assert res.overall_nullable is None, "未達 70% 動作門檻不得給總分"
+    assert res.subscores["path_repeatability"]["score"] is None
+    assert res.subscores["tempo_consistency"]["score"] is None
+    assert res.subscores["finish_balance"]["score"] is None
+    # 由於缺少收桿與節奏，IG 視覺有效權重僅 30%（低於 70% 門檻），IG 分數必須為 None
+    assert res.ig_visual_score is None, "IG 分數缺少足夠觀測數據時必須為 None，絕不使用 fallback"
+    assert res.subscores["ig_visual_breakdown"]["valid_weight_coverage"] < 0.70
+
+
+def test_rank_session_swings_strict_filtering_and_reasons():
+    """驗證排行榜各榜單只納入具備該指標真實數據之片段，絕不拿 overall_score 頂替，且包含詳細 reason 與時間碼。"""
+    swings = [
+        {
+            "id": "swing-a",
+            "sequence_no": 1,
+            "start_ms": 1000,
+            "end_ms": 4000,
+            "label": "valid_swing",
+            "overall_score": 90.0,
+            "confidence": 0.95,
+            "subscores": {
+                "spine_tilt_stability": {"score": 95.0, "raw_value": 2.1},
+                # tempo_consistency 缺失 (None)
+                "tempo_consistency": {"score": None, "raw_value": None},
+                "finish_balance": {"score": 85.0, "hold_ms": 1200, "raw_value": 0.03},
+                "ig_visual_breakdown": {"framing_30": 90.0},
+            },
+            "ig_visual_score": 88.0,
+        },
+        {
+            "id": "swing-b",
+            "sequence_no": 2,
+            "start_ms": 5000,
+            "end_ms": 8000,
+            "label": "valid_swing",
+            "overall_score": 75.0,
+            "confidence": 0.90,
+            "subscores": {
+                "spine_tilt_stability": {"score": 70.0, "raw_value": 4.5},
+                # 具備真實 tempo 分數
+                "tempo_consistency": {"score": 98.0, "raw_value": 2.98},
+                "finish_balance": {"score": None, "hold_ms": None, "raw_value": None},
+            },
+            "ig_visual_score": None,
+        },
+    ]
+
+    ranked = rank_session_swings(swings)
+
+    # 1. 姿勢榜：兩者都有 overall_score，swing-a (90) > swing-b (75)
+    assert len(ranked["posture"]) == 2
+    assert ranked["posture"][0]["segment_id"] == "swing-a"
+    assert "軀幹前傾穩定" in ranked["posture"][0]["reason"]
+    assert ranked["posture"][0]["start_ms"] == 1000
+
+    # 2. 節奏榜：swing-a 的 tempo_consistency 為 None，絕對不能被納入 tempo 榜！
+    assert len(ranked["tempo"]) == 1, "swing-a 缺少節奏數據，不得被 overall_score 頂替入榜"
+    assert ranked["tempo"][0]["segment_id"] == "swing-b"
+    assert ranked["tempo"][0]["category_score"] == 98.0
+    assert "2.98:1" in ranked["tempo"][0]["reason"]
+
+    # 3. 收桿榜：swing-b 的 finish_balance 為 None，不能入榜
+    assert len(ranked["finish"]) == 1
+    assert ranked["finish"][0]["segment_id"] == "swing-a"
+    assert ranked["finish"][0]["category_score"] == 85.0
+    assert "1200ms" in ranked["finish"][0]["reason"]
+
+    # 4. IG 榜：swing-b 的 ig_visual_score 為 None，不能入榜
+    assert len(ranked["ig"]) == 1
+    assert ranked["ig"][0]["segment_id"] == "swing-a"
+    assert ranked["ig"][0]["category_score"] == 88.0
+

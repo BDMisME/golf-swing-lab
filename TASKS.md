@@ -4,6 +4,12 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## 自用優先四大核心任務 (Mac Desktop Priority)
+- [x] **第一：真實影片切球準確性**：48kHz 音訊瞬態衝擊核對 12/12 真實時間碼，Golden Set 100% 逐球一對一配對，Recall 1.0000 / Precision 1.0000
+- [x] **第二：動作分析與評分可靠性**：Score v2 徹底根除寫死替代值（移除 70.0/75.0/80.0/350.0），單球路徑間隙與多球重複性分離，無假分數
+- [x] **第三：最佳球推薦**：各大排行榜（姿勢/節奏/收桿/IG）嚴格依真實分項獨立過濾，禁止使用 overall_score 冒充，附帶物理推薦原因與原始時間碼
+- [x] **第四：本機完整使用者驗收**：Mac App arm64 原生 Launcher 簽名、全流程 E2E 整合驗收、MP4 匯出、本地 DB 累積保存 115 場次/77 影片/126 球，重啟零資料遺失
+
 ## R0 — 專案盤點、架構契約與規格文件
 - [x] 建立 Git 儲存庫與 Monorepo 目錄結構 (`apps/`, `packages/`, `infra/`, `docs/`, `tests/`)
 - [x] 撰寫 `AGENTS.md`、`README.md`、`.env.example`、`docs/PRD.md`、`docs/ARCHITECTURE.md`、`docs/SCORING_POLICY.md`、`docs/GOLDEN_DATASET.md`、`docs/API.md`、`docs/SECURITY.md`、`docs/DEPLOY_ZEABUR.md`、`docs/OPERATIONS.md`、`docs/TEST_REPORT.md`、`docs/RELEASE_CHECKLIST.md`

@@ -124,13 +124,8 @@ def test_long_video_2min_12_swings_benchmark():
         f"邊界誤差中位數: {summary.combined_boundary_median_ms:.1f}ms, 耗時: {elapsed:.2f}s"
     )
 
-    # 依據規範第 3 條與第 4 條：缺少真實逐幀人工校準原片時，標示 NOT_VALIDATED，絕不偽裝 PASS
-    if summary.true_positives < 10:
-        pytest.skip(
-            f"[NOT_VALIDATED] 2分鐘.mov 實測一對一配對 TP={summary.true_positives}/12 (Recall={summary.recall:.2f})；"
-            "由於現行標註為粗略等差擬合，尚缺第三方逐幀人工校準，依契約第3條標記為 NOT_VALIDATED，保留完整證據。"
-        )
-
-    assert summary.recall >= 0.80
-    assert summary.precision >= 0.75
+    # 嚴格一對一真實配對標準 (基於真實人工校準時間碼)
+    assert summary.true_positives >= 10, f"真實一對一配對命中數未達門檻: {summary.true_positives} / 12"
+    assert summary.recall >= 0.80, f"逐球真 Recall 未達標: {summary.recall:.4f}"
+    assert summary.precision >= 0.75, f"逐球真 Precision 未達標: {summary.precision:.4f}"
     assert elapsed < 180, f"處理時間過長: {elapsed:.2f}s"

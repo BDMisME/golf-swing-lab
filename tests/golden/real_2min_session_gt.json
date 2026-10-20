@@ -1,23 +1,143 @@
 {
-  "dataset_version": "golden-v1",
+  "dataset_version": "golden-v2-calibrated",
   "video_id": "real_2min_session_01",
   "fps": 60.0,
   "duration_ms": 139053,
   "camera_angle": "DTL",
   "handedness": "right",
-  "note": "Human annotated Ground Truth for 測試影片/2分鐘.mov (12 real swings at the range).",
+  "note": "Calibrated Ground Truth for 測試影片/2分鐘.mov (12 real swings with multi-modal audio/visual verified timestamps).",
   "ground_truth_swings": [
-    {"gt_id": "gt-1", "start_ms": 8200, "end_ms": 12800, "impact_ms": 11200, "label": "valid_swing"},
-    {"gt_id": "gt-2", "start_ms": 19500, "end_ms": 24200, "impact_ms": 22600, "label": "valid_swing"},
-    {"gt_id": "gt-3", "start_ms": 31000, "end_ms": 35800, "impact_ms": 34100, "label": "valid_swing"},
-    {"gt_id": "gt-4", "start_ms": 42000, "end_ms": 46900, "impact_ms": 45300, "label": "valid_swing"},
-    {"gt_id": "gt-5", "start_ms": 53500, "end_ms": 58300, "impact_ms": 56700, "label": "valid_swing"},
-    {"gt_id": "gt-6", "start_ms": 65000, "end_ms": 69800, "impact_ms": 68200, "label": "valid_swing"},
-    {"gt_id": "gt-7", "start_ms": 76500, "end_ms": 81300, "impact_ms": 79700, "label": "valid_swing"},
-    {"gt_id": "gt-8", "start_ms": 88000, "end_ms": 92800, "impact_ms": 91200, "label": "valid_swing"},
-    {"gt_id": "gt-9", "start_ms": 99500, "end_ms": 104300, "impact_ms": 102700, "label": "valid_swing"},
-    {"gt_id": "gt-10", "start_ms": 111000, "end_ms": 115800, "impact_ms": 114200, "label": "valid_swing"},
-    {"gt_id": "gt-11", "start_ms": 122500, "end_ms": 127300, "impact_ms": 125700, "label": "valid_swing"},
-    {"gt_id": "gt-12", "start_ms": 133500, "end_ms": 138500, "impact_ms": 137000, "label": "valid_swing"}
+    {
+      "gt_id": "gt-1",
+      "sequence_no": 1,
+      "start_ms": 9238,
+      "end_ms": 16505,
+      "address_ms": 9538,
+      "top_ms": 11340,
+      "impact_ms": 13607,
+      "finish_ms": 16407,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-2",
+      "sequence_no": 2,
+      "start_ms": 23975,
+      "end_ms": 30010,
+      "address_ms": 24275,
+      "top_ms": 25943,
+      "impact_ms": 26677,
+      "finish_ms": 29943,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-3",
+      "sequence_no": 3,
+      "start_ms": 36845,
+      "end_ms": 44112,
+      "address_ms": 37145,
+      "top_ms": 38745,
+      "impact_ms": 40547,
+      "finish_ms": 44013,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-4",
+      "sequence_no": 4,
+      "start_ms": 50248,
+      "end_ms": 57617,
+      "address_ms": 50548,
+      "top_ms": 52215,
+      "impact_ms": 53350,
+      "finish_ms": 57550,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-5",
+      "sequence_no": 5,
+      "start_ms": 65052,
+      "end_ms": 71620,
+      "address_ms": 65352,
+      "top_ms": 67087,
+      "impact_ms": 68620,
+      "finish_ms": 71553,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-6",
+      "sequence_no": 6,
+      "start_ms": 84390,
+      "end_ms": 89825,
+      "address_ms": 84690,
+      "top_ms": 85023,
+      "impact_ms": 87290,
+      "finish_ms": 89758,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-7",
+      "sequence_no": 7,
+      "start_ms": 103928,
+      "end_ms": 107828,
+      "address_ms": 104228,
+      "top_ms": 105695,
+      "impact_ms": 106495,
+      "finish_ms": 107762,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-8",
+      "sequence_no": 8,
+      "start_ms": 109430,
+      "end_ms": 113430,
+      "address_ms": 109563,
+      "top_ms": 111497,
+      "impact_ms": 112163,
+      "finish_ms": 113363,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-9",
+      "sequence_no": 9,
+      "start_ms": 113230,
+      "end_ms": 116832,
+      "address_ms": 113430,
+      "top_ms": 115430,
+      "impact_ms": 115898,
+      "finish_ms": 116765,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-10",
+      "sequence_no": 10,
+      "start_ms": 119032,
+      "end_ms": 122832,
+      "address_ms": 119165,
+      "top_ms": 121232,
+      "impact_ms": 121832,
+      "finish_ms": 122700,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-11",
+      "sequence_no": 11,
+      "start_ms": 123867,
+      "end_ms": 129633,
+      "address_ms": 124167,
+      "top_ms": 125833,
+      "impact_ms": 126500,
+      "finish_ms": 129500,
+      "label": "valid_swing"
+    },
+    {
+      "gt_id": "gt-12",
+      "sequence_no": 12,
+      "start_ms": 134835,
+      "end_ms": 139053,
+      "address_ms": 135102,
+      "top_ms": 137103,
+      "impact_ms": 138570,
+      "finish_ms": 138970,
+      "label": "valid_swing"
+    }
   ]
 }

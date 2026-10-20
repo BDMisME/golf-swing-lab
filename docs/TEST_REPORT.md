@@ -35,6 +35,10 @@
 | **新 R4** | DTL 專屬演算法：卡爾曼濾波出球動態軌跡、高爾夫物理合理性過濾（濾除水平橫向/倒退/起點懸空）、DTL 幾何前傾/頭部/節奏比計算 | `uv run pytest tests/test_r4_dtl_algorithms.py -v` | 3 / 3 通過 | Real (Kalman + MediaPipe) | `PASS` |
 | **新 R5** | 個人化 AI 教練：多模態 Vision 定格截圖診斷、繁中 3 大體感口訣生成、防偽安全網攔截虛構球速/距離、離線降級至 RuleBasedCoachProvider 健全度驗證 | `uv run pytest tests/test_r5_personalized_coach.py -v` | 4 / 4 通過 | Real (`none`) + Mock Vision | `PASS` |
 | **新 R6** | 正式產品驗收：桌面 App Bundle 結構與 arm64 原生 Mach-O 嚴格簽名、無寫死路徑、API 健康與登入合約、前端輔助線落地驗收 | `uv run pytest tests/test_r6_final_product_acceptance.py -v` | 4 / 4 通過 | Real (桌面 App + 伺服器) | `PASS` |
+| **自用專項 1** | 真實影片切球準確性：音訊 PCM 衝擊波形核對 12 記真實擊球，`real_2min_session_gt.json` 逐球一對一配對（TP=12, FP=0, FN=0, Recall 1.0000, Precision 1.0000） | `uv run pytest tests/test_r2_long_video_accuracy.py -v` | 3 / 3 通過 | Real (真實 iPhone 17 Pro 2分鐘原片) | `PASS` |
+| **自用專項 2** | 動作分析與評分可靠性：徹底移除 70.0/75.0 替代值，路徑間隙與重複性分離，IG 視覺評分無假分數，70% 覆蓋率硬門檻攔截 | `uv run pytest tests/test_r3_verifiable_scoring.py -v` | 5 / 5 通過 | Real | `PASS` |
+| **自用專項 3** | 最佳球推薦：四大排行榜（姿勢/節奏/收桿/IG）嚴格依真實分項獨立過濾（禁止 overall_score 冒充），附帶推薦物理原因與原始時間碼 | `uv run pytest tests/test_r3_verifiable_scoring.py -k rank` + 前端 UI 驗證 | 通過 | Real | `PASS` |
+| **自用專項 4** | 本機完整使用者驗收：Mac App 啟動、全流程 E2E 整合驗收、單球/雙球合輯 MP4 匯出、本地 DB 累積保存 115 場次/77 影片/126 球持久化 | `uv run pytest tests/test_r8_r9_r10_report_export_and_coach.py -v` | 3 / 3 通過 | Real (本地 Docker PG + MinIO + Redis) | `PASS` |
 
 ---
 
