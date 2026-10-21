@@ -192,7 +192,7 @@ class RuleBasedCoachProvider:
                 drills.append(
                     CoachDrill(
                         focus_area=f"強化{slabel}（參考第 #{w_swing.get('sequence_no')} 球 @ {ref_time}ms）",
-                        action_cue="收桿後維持平衡停留 2 秒，檢視重心是否完全轉移至前腳",
+                        action_cue="收桿後維持平衡停留 2 秒，檢視身體收桿軸線是否穩定站定",
                         drill_steps="每球擊出後強制保持收桿姿勢默數 2 秒不移動雙腳，連續完成 10 球。",
                         target_metric=f"{mkey} 穩定度提升",
                     )

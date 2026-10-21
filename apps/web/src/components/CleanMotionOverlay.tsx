@@ -150,6 +150,11 @@ export function CleanMotionOverlay({
       const lms = currentKf.landmarks || {};
       const addrLms = addressKf?.landmarks || {};
 
+      // 揮桿時間區間防殘留保護：超出當前揮桿有效範圍 (address 前 500ms 至 finish 後 500ms) 立即清空不繪製
+      if (currentTimeMs < addressMs - 500 || currentTimeMs > finishMs + 600) {
+        return;
+      }
+
       // 判定當前動作階段
       let phase = "address";
       let tip = "站姿設定：確認脊柱前傾與頭部穩定基準";
@@ -171,7 +176,7 @@ export function CleanMotionOverlay({
         tip = "擊球瞬間：頭部留在球後，力量向目標線完整釋放";
       } else {
         phase = "finish";
-        tip = "收桿平衡：重心完全轉移至前腳，維持平衡收桿姿勢";
+        tip = "收桿平衡：前腳支撐站定，維持身體垂直軸線平衡";
       }
 
       setCurrentPhase(phase);
@@ -353,7 +358,7 @@ export function CleanMotionOverlay({
             ctx.stroke();
             ctx.restore();
           }
-          // 標記 2: 收桿重心光點
+          // 標記 2: 收桿前腳支撐點 (青綠色)
           if (curAnkle) {
             ctx.save();
             ctx.fillStyle = "#10b981";
@@ -640,7 +645,7 @@ export function CleanMotionOverlay({
                 : "border border-gray-700 bg-black/40 text-gray-400"
             }`}
           >
-            {proShowSkeleton ? "✓ 人體 33 點骨架" : "人體骨架"}
+            {proShowSkeleton ? "✓ MediaPipe 33 點骨架" : "MediaPipe 33 點骨架"}
           </button>
           <button
             type="button"

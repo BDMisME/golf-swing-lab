@@ -274,3 +274,41 @@ class GolfBallDetector:
             return []
 
         return trajectory_points
+
+    def track_swing_launch_with_feedback(
+        self,
+        video_path: str | Path,
+        impact_ms: int,
+        player_wrist_norm: tuple[float, float] | None = None,
+        duration_ms: int = 1200,
+    ) -> dict[str, Any]:
+        """
+        在擊球瞬間前後精準捕捉出球軌跡，並回傳最早可靠真球觀測出發時間 (observed_launch_ms)，
+        供狀態機與擊球事件進行閉環精修定位。
+        """
+        traj = self.track_swing_launch(
+            video_path=video_path,
+            impact_ms=impact_ms,
+            player_wrist_norm=player_wrist_norm,
+            duration_ms=duration_ms,
+        )
+        if not traj:
+            return {
+                "trajectory_points": [],
+                "observed_launch_ms": None,
+                "observed_count": 0,
+                "is_valid": False,
+            }
+
+        # 尋找最初被真實觀測到的出球點
+        first_obs = next((p for p in traj if p.get("point_type") == "observed"), None)
+        launch_ms = int(round(first_obs["time_ms"])) if first_obs else None
+        obs_count = sum(1 for p in traj if p.get("point_type") == "observed")
+
+        return {
+            "trajectory_points": traj,
+            "observed_launch_ms": launch_ms,
+            "observed_count": obs_count,
+            "is_valid": True,
+        }
+

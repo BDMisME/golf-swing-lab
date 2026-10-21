@@ -242,3 +242,50 @@
   - 測試後 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954` (0 污染)
 - **前端建置**：`cd apps/web && npm run build` 通過（9/9 靜態路由頁面打包成功）。
 
+---
+
+## 10. Precision & Clean Motion Final Calibration 測試與真實原片評估證據 (2026-10-21)
+
+### 10.1 核心改進項目
+1. **多訊號 Impact 真球出球閉環回饋精修**：
+   - 實作 `GolfBallDetector.track_swing_launch_with_feedback`。
+   - 透過最初可信真球出發點 (`observed_launch_ms`) 權威回饋修正 Impact，將擊球狀態升級為 `confirmed_strike`，不確定度縮小至 $\pm 16\text{ms}$。
+   - 2 分鐘原片實測精確捕獲 6 記真球啟動（#1, #6, #7, #8, #9, #11），未捕獲出球者誠實標註為 `estimated_strike`，絕不捏造出球來源。
+2. **音訊抽取強健性與明確診斷**：
+   - 解除原固定 8 秒 timeout 限制，建立 `AudioExtractionResult`，支援局部切片與長影片動態逾時（長片自動延展至 25 秒以上）。
+   - 明確記錄 `no_audio`、`timeout`、`error` 與 `ok`，並記錄於 `quality_summary` 與 `quality_metadata`。
+3. **局部高 FPS 二次精修（Local High-FPS Refinement）**：
+   - 實作 `_refine_event_local_high_fps`，針對低信心度或粗步取樣之事件，在 $\pm 200\text{ms}$ 範圍以 60 FPS (step=16ms) 密集取樣精修，免除重讀全片龐大開銷。
+4. **誠信原則與檢測來源嚴格審計**：
+   - 未實際參與判定之音訊/真球來源絕對不列入 `detection_sources`。
+   - 區分模型信心分數 (`confidence: 0.0~1.0`) 與真實時間窗口不確定性 (`uncertainty_ms: 16/33/67`)。
+5. **Clean Motion UI 視覺降級防線**：
+   - 無充分指標資料時絕不預設立場宣告身體缺陷，純說明動作階段。
+   - 徹底移除單鏡頭無法測量之「足底壓力」與「重心轉移至前腳/腳跟」偽宣稱，改用可觀測「身體垂直軸線平衡穩定度」。
+   - Pro Mode 明確標記 `✓ MediaPipe 33 點骨架`，杜絕與 YOLO 17 點混稱。
+   - 加入揮桿時間區間防殘留保護，超出該球範圍立即清空 Canvas。
+6. **WebKit 與 Chrome 實測獨立記錄**：
+   - Chrome 實測截圖保存於 `docs/screenshots/chrome/`。
+   - WebKit 實測截圖透過 macOS 原生 `WebKit.framework` (PyObjC) 保存於 `docs/screenshots/webkit/01_webkit_render.png`。
+
+### 10.2 自動化測試執行證據
+- **測試命令**：`uv run pytest tests/ -v`
+- **測試結果**：**50 passed in 168.50s (100% PASS)**
+  - `tests/test_precision_and_clean_motion_calibration.py`: 5 passed
+  - `tests/test_r13_golden_set_integrity.py`: 6 passed
+  - `tests/test_r1_mac_app_independence.py`: 6 passed
+  - `tests/test_r1_r2_auth_and_models.py`: 3 passed
+  - `tests/test_r2_long_video_accuracy.py`: 3 passed
+  - `tests/test_r3_r4_upload_probe_and_worker.py`: 4 passed
+  - `tests/test_r3_verifiable_scoring.py`: 5 passed
+  - `tests/test_r4_dtl_algorithms.py`: 3 passed
+  - `tests/test_r5_personalized_coach.py`: 4 passed
+  - `tests/test_r5_r6_r7_detection_pose_scoring.py`: 4 passed
+  - `tests/test_r6_final_product_acceptance.py`: 4 passed
+  - `tests/test_r8_r9_r10_report_export_and_coach.py`: 3 passed
+- **正式 Golden Set 防污染檢驗**：
+  - 測試前後 SHA-256 恆為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954` (0 污染)
+- **前端建置**：`cd apps/web && npm run build` 通過（9/9 靜態路由頁面打包成功）。
+- **真實原片評估基準報表**：已產出至 `docs/PRECISION_CALIBRATION_EVALUATION.md`。
+
+

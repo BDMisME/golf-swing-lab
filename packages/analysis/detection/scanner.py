@@ -55,15 +55,45 @@ def merge_overlapping_windows(
     return merged
 
 
-def extract_audio_transients(video_path: str | Path) -> list[int]:
-    """快速從影片音訊軌抽取短時能量脈衝時間碼 (ms)，耗時小於 0.2 秒。若無音訊則優雅降級為空清單。"""
+@dataclass
+class AudioExtractionResult:
+    transients: list[int] = field(default_factory=list)
+    status: str = "ok"  # "ok", "no_audio", "timeout", "error", "too_short"
+    error_message: str | None = None
+
+    def __iter__(self):
+        return iter(self.transients)
+
+    def __len__(self):
+        return len(self.transients)
+
+    def __getitem__(self, index):
+        return self.transients[index]
+
+
+def extract_audio_transients(
+    video_path: str | Path,
+    start_ms: int | None = None,
+    duration_ms: int | None = None,
+    timeout: int | None = None,
+) -> AudioExtractionResult:
+    """
+    從影片音訊軌抽取短時能量脈衝時間碼 (ms)。
+    支援：
+    1. 局部時間區間快速抽取 (start_ms, duration_ms)
+    2. 動態逾時機制，避免長影片受固定 timeout 影響中斷
+    3. 明確回傳解碼狀態與失敗原因 (no_audio, timeout, ffmpeg_error, ok)
+    """
     try:
         import subprocess
 
-        cmd = [
-            "ffmpeg",
-            "-v",
-            "error",
+        cmd = ["ffmpeg", "-v", "error"]
+        if start_ms is not None and start_ms > 0:
+            cmd.extend(["-ss", f"{start_ms / 1000.0:.3f}"])
+        if duration_ms is not None and duration_ms > 0:
+            cmd.extend(["-t", f"{duration_ms / 1000.0:.3f}"])
+
+        cmd.extend([
             "-i",
             str(video_path),
             "-vn",
@@ -74,24 +104,45 @@ def extract_audio_transients(video_path: str | Path) -> list[int]:
             "-f",
             "s16le",
             "-",
-        ]
-        proc = subprocess.run(cmd, capture_output=True, timeout=8)
-        if proc.returncode != 0 or not proc.stdout:
-            return []
+        ])
+
+        # 動態計算逾時時間：至少 15 秒，若是局部區間則 8 秒，長片則給予充足餘裕
+        actual_timeout = timeout
+        if actual_timeout is None:
+            if duration_ms is not None:
+                actual_timeout = max(8, int(duration_ms / 1000.0 * 0.5) + 5)
+            else:
+                actual_timeout = 25  # 預設長片全量抽取上限提高至 25 秒
+
+        proc = subprocess.run(cmd, capture_output=True, timeout=actual_timeout)
+        if proc.returncode != 0:
+            stderr_str = proc.stderr.decode("utf-8", errors="ignore")
+            if "does not contain any stream" in stderr_str or "matches no streams" in stderr_str:
+                return AudioExtractionResult([], status="no_audio", error_message="影片無音訊軌道")
+            return AudioExtractionResult([], status="error", error_message=f"FFmpeg 解碼失敗: {stderr_str.strip()[:120]}")
+
+        if not proc.stdout:
+            return AudioExtractionResult([], status="no_audio", error_message="未讀取到音訊數據")
+
         audio_data = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32)
-        if len(audio_data) < 8000 * 0.2:
-            return []
+        if len(audio_data) < 8000 * 0.15:
+            return AudioExtractionResult([], status="too_short", error_message="音訊數據長度過短 (<150ms)")
+
         window_size = int(8000 * 0.05)  # 50ms
         hop_size = int(8000 * 0.02)  # 20ms
         energies: list[float] = []
         timestamps: list[int] = []
+        time_offset_ms = start_ms if start_ms is not None else 0
+
         for i in range(0, len(audio_data) - window_size, hop_size):
             chunk = audio_data[i : i + window_size]
             rms = float(np.sqrt(np.mean(chunk**2)))
             energies.append(rms)
-            timestamps.append(int(round(i * 1000.0 / 8000.0)))
+            timestamps.append(time_offset_ms + int(round(i * 1000.0 / 8000.0)))
+
         if not energies:
-            return []
+            return AudioExtractionResult([], status="ok", error_message=None)
+
         arr_e = np.array(energies)
         diff_e = np.diff(arr_e, prepend=arr_e[0])
         thresh = float(np.percentile(diff_e, 94))
@@ -99,9 +150,15 @@ def extract_audio_transients(video_path: str | Path) -> list[int]:
         for k in range(1, len(diff_e) - 1):
             if diff_e[k] > thresh and diff_e[k] > diff_e[k - 1] and diff_e[k] > diff_e[k + 1]:
                 transients.append(timestamps[k])
-        return transients
-    except Exception:
-        return []
+
+        return AudioExtractionResult(transients, status="ok", error_message=None)
+    except subprocess.TimeoutExpired:
+        logger.warning(f"音訊抽取逾時 ({actual_timeout}s): {video_path}")
+        return AudioExtractionResult([], status="timeout", error_message=f"音訊解碼逾時超過 {actual_timeout} 秒")
+    except Exception as exc:
+        logger.warning(f"音訊抽取異常: {exc}")
+        return AudioExtractionResult([], status="error", error_message=str(exc))
+
 
 
 
@@ -175,6 +232,9 @@ class CoarseToFineDetector:
                 )
 
             all_audio_transients = extract_audio_transients(video_path)
+            quality_summary["audio_status"] = all_audio_transients.status
+            quality_summary["audio_error"] = all_audio_transients.error_message
+            quality_summary["audio_transients_count"] = len(all_audio_transients.transients)
 
             results: list[CandidateSegmentResult] = []
             total_wins = max(1, len(candidate_windows))
@@ -190,6 +250,8 @@ class CoarseToFineDetector:
                     sequence_no=seq_counter,
                     extractor=extractor,
                     audio_transients_ms=win_transients,
+                    audio_status=all_audio_transients.status,
+                    audio_error=all_audio_transients.error_message,
                 )
                 if seg is not None and len(seg.events) >= 4:
                     seg.sequence_no = seq_counter
@@ -260,6 +322,8 @@ class CoarseToFineDetector:
         extractor: PoseExtractor | None = None,
         audio_transients_ms: list[int] | None = None,
         ball_strike_ms: int | None = None,
+        audio_status: str = "ok",
+        audio_error: str | None = None,
     ) -> CandidateSegmentResult | None:
         own_extractor = extractor is None
         ext = extractor or create_pose_extractor()
@@ -379,7 +443,10 @@ class CoarseToFineDetector:
 
             # 若為有效擊球，啟動小白球專用模型與卡爾曼濾波器捕獲出球飛行彈道
             ball_traj: list[dict[str, float]] = []
+            ball_feedback_info: dict[str, Any] = {"applied": False, "observed_count": 0}
             imp_ev = next((e for e in events if "impact" in e.event_name), None)
+            top_ev = next((e for e in events if e.event_name == "top"), None)
+
             if imp_ev and label == "valid_swing":
                 try:
                     from packages.analysis.tracking.ball_tracker import GolfBallDetector
@@ -391,14 +458,86 @@ class CoarseToFineDetector:
                             if rw:
                                 ref_wrist = (rw.x, rw.y)
                                 break
-                    ball_traj = b_det.track_swing_launch(
+                    ball_res = b_det.track_swing_launch_with_feedback(
                         video_path=video_path,
                         impact_ms=imp_ev.time_ms,
                         player_wrist_norm=ref_wrist,
                         duration_ms=1200,
                     )
+                    ball_traj = ball_res.get("trajectory_points", [])
+                    obs_launch = ball_res.get("observed_launch_ms")
+                    obs_count = ball_res.get("observed_count", 0)
+                    ball_feedback_info["observed_count"] = obs_count
+
+                    # 若可靠偵測到真球啟動出球，回饋修正 Impact 事件
+                    if ball_res.get("is_valid") and obs_launch is not None:
+                        diff = abs(obs_launch - imp_ev.time_ms)
+                        if diff <= 180:
+                            orig_imp = imp_ev.time_ms
+                            imp_ev.time_ms = obs_launch
+                            imp_ev.uncertainty_ms = 16
+                            imp_ev.confidence = min(0.98, max(imp_ev.confidence, 0.92))
+                            if "ball_flight_observed_launch" not in imp_ev.detection_sources:
+                                imp_ev.detection_sources.append("ball_flight_observed_launch")
+                            imp_ev.rationale = f"真球出發點 (ball_launch_onset @ {obs_launch}ms) 權威觀測定位擊球瞬間"
+                            ball_strike_status = "confirmed_strike"
+                            ball_feedback_info["applied"] = True
+                            ball_feedback_info["original_impact_ms"] = orig_imp
+                            ball_feedback_info["refined_impact_ms"] = obs_launch
+                            ball_feedback_info["delta_ms"] = obs_launch - orig_imp
                 except Exception as b_exc:
                     logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
+
+            # 局部高 FPS 二次精修 (針對信心度偏低之 Top 或未被球體鎖定之 Impact)
+            local_refinements: dict[str, Any] = {}
+            if top_ev and top_ev.confidence < 0.75:
+                top_ref = self._refine_event_local_high_fps(
+                    video_path=video_path,
+                    extractor=ext,
+                    event_name="top",
+                    center_ms=top_ev.time_ms,
+                    window_radius_ms=200,
+                    high_fps_step_ms=16,
+                )
+                if top_ref:
+                    top_ev.time_ms = top_ref["refined_ms"]
+                    top_ev.confidence = top_ref["confidence"]
+                    top_ev.uncertainty_ms = top_ref["uncertainty_ms"]
+                    for s in top_ref["sources"]:
+                        if s not in top_ev.detection_sources:
+                            top_ev.detection_sources.append(s)
+                    local_refinements["top"] = top_ref
+
+            if imp_ev and not ball_feedback_info.get("applied") and imp_ev.confidence < 0.75:
+                imp_ref = self._refine_event_local_high_fps(
+                    video_path=video_path,
+                    extractor=ext,
+                    event_name="impact",
+                    center_ms=imp_ev.time_ms,
+                    window_radius_ms=200,
+                    high_fps_step_ms=16,
+                )
+                if imp_ref:
+                    imp_ev.time_ms = imp_ref["refined_ms"]
+                    imp_ev.confidence = imp_ref["confidence"]
+                    imp_ev.uncertainty_ms = imp_ref["uncertainty_ms"]
+                    for s in imp_ref["sources"]:
+                        if s not in imp_ev.detection_sources:
+                            imp_ev.detection_sources.append(s)
+                    local_refinements["impact"] = imp_ref
+
+            # 誠實檢查 detection_sources：未實際發生的來源絕不保留
+            if imp_ev:
+                if not ball_feedback_info.get("applied") and "ball_flight_observed_launch" in imp_ev.detection_sources:
+                    imp_ev.detection_sources.remove("ball_flight_observed_launch")
+                if audio_transients_ms:
+                    closest_aud = min(audio_transients_ms, key=lambda a: abs(a - imp_ev.time_ms))
+                    if abs(closest_aud - imp_ev.time_ms) > 60 and "audio_transient_consensus" in imp_ev.detection_sources:
+                        imp_ev.detection_sources.remove("audio_transient_consensus")
+                else:
+                    if "audio_transient_consensus" in imp_ev.detection_sources:
+                        imp_ev.detection_sources.remove("audio_transient_consensus")
+
 
             # 提取手腕 2D 軌跡點序列供多球重複性計算
             wrist_traj: list[dict[str, Any]] = []
@@ -463,6 +602,10 @@ class CoarseToFineDetector:
                 "sampled_frame_count": len(fine_frames),
                 "ball_trajectory": ball_traj,
                 "wrist_trajectory": wrist_traj,
+                "ball_strike_feedback": ball_feedback_info,
+                "local_refinements": local_refinements,
+                "audio_status": audio_status,
+                "audio_error": audio_error,
             }
 
             return CandidateSegmentResult(
@@ -581,6 +724,84 @@ class CoarseToFineDetector:
 
         return windows
 
+    def _refine_event_local_high_fps(
+        self,
+        video_path: str | Path,
+        extractor: PoseExtractor,
+        event_name: str,
+        center_ms: int,
+        window_radius_ms: int = 200,
+        high_fps_step_ms: int = 16,
+    ) -> dict[str, Any] | None:
+        """
+        針對特定關鍵事件 (Top 或 Impact) 進行局部高幀率 (~60 FPS) 取樣精修。
+        僅讀取 [center_ms - window_radius_ms, center_ms + window_radius_ms] 短暫視窗，
+        無需重新解碼整部影片。
+        """
+        start_ms = max(0, center_ms - window_radius_ms)
+        end_ms = center_ms + window_radius_ms
+        local_frames = self._sample_video_window(
+            video_path=video_path,
+            extractor=extractor,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            step_ms=high_fps_step_ms,
+        )
+        if len(local_frames) < 3:
+            return None
+
+        times = [f.time_ms for f in local_frames]
+        wrist_ys = []
+        wrist_confs = []
+        for f in local_frames:
+            w = f.landmarks.get("right_wrist") or f.landmarks.get("left_wrist")
+            if w:
+                wrist_ys.append(float(w.y))
+                wrist_confs.append(float(w.visibility))
+            else:
+                wrist_ys.append(1.0)
+                wrist_confs.append(0.0)
+
+        dt_arr = np.diff(times).astype(float)
+        dt_arr[dt_arr <= 0] = 16.6
+        v_y = np.gradient(wrist_ys, times)
+
+        if event_name == "top":
+            # 搜尋手腕最高點與零交越點
+            zero_crossings = [i for i in range(len(v_y) - 1) if v_y[i] <= 0 and v_y[i + 1] > 0]
+            y_min_idx = int(np.argmin(wrist_ys))
+            refined_idx = y_min_idx
+            sources = ["wrist_y_local_minimum", "local_high_fps_refinement"]
+            if zero_crossings:
+                best_zc = min(zero_crossings, key=lambda i: abs(i - y_min_idx))
+                refined_idx = best_zc
+                sources = ["wrist_velocity_zero_crossing", "local_high_fps_refinement"]
+
+            refined_time_ms = times[refined_idx]
+            return {
+                "refined_ms": refined_time_ms,
+                "confidence": min(0.96, max(0.75, wrist_confs[refined_idx])),
+                "uncertainty_ms": 16,
+                "sources": sources,
+                "delta_ms": refined_time_ms - center_ms,
+            }
+
+        elif event_name == "impact":
+            # 搜尋下桿速度劇烈制動點 (減速峰值)
+            speeds = np.abs(v_y)
+            accels = np.diff(speeds, prepend=speeds[0])
+            decel_idx = int(np.argmin(accels))
+            refined_time_ms = times[decel_idx]
+            return {
+                "refined_ms": refined_time_ms,
+                "confidence": min(0.95, max(0.72, wrist_confs[decel_idx])),
+                "uncertainty_ms": 16,
+                "sources": ["wrist_kinematic_deceleration", "local_high_fps_refinement"],
+                "delta_ms": refined_time_ms - center_ms,
+            }
+
+        return None
+
     def _summarize_quality(self, frames: list[FramePoseResult]) -> dict[str, Any]:
         if not frames:
             return {
@@ -612,3 +833,4 @@ class CoarseToFineDetector:
             "multi_person_detected": "multi_person" in flags,
             "flags": flags,
         }
+

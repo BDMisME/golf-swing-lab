@@ -109,9 +109,38 @@ export default function SwingDetailPage() {
   };
 
   // 根據此球 5 大分項自動推導最值得改善的 1~2 個具體動作與推薦訓練 Drill
+  // 最高誠信原則：嚴格基於實際影像指標證據；缺乏足夠證據時不宣告身體問題，亦不宣稱測量足底壓力/重心
   const coachInsights = useMemo(() => {
-    if (!swing?.subscores) return null;
+    if (!swing?.subscores) {
+      return [
+        {
+          title: "動作階段客觀檢視",
+          desc: "本球可觀測指標資料不足，系統依誠信原則不預設立場推斷身體問題，請參考 Clean Motion 逐格畫面檢視各動作階段。",
+          drill: {
+            name: "完整入鏡節奏確認 (Frame & Rhythm Check)",
+            action: "確認 iPhone 鏡頭完整涵蓋站姿頭部至雙腳打擊區，維持穩定流暢的揮桿節奏。",
+          },
+        },
+      ];
+    }
     const sub = swing.subscores;
+
+    // 計算有效評分數量
+    const validScores = Object.values(sub).filter(
+      (v) => typeof v?.score === "number"
+    );
+    if (validScores.length < 2) {
+      return [
+        {
+          title: "動作階段客觀檢視",
+          desc: "本球有效可觀測指標覆蓋率不足，系統依誠信原則不宣告身體問題，僅提供動作階段影像回放。",
+          drill: {
+            name: "基礎站姿平衡維持 (Basic Stance Drill)",
+            action: "維持起桿時脊柱前傾與收桿穩定站定，進行自我揮桿節奏感知。",
+          },
+        },
+      ];
+    }
 
     const issues: Array<{ title: string; desc: string; drill: { name: string; action: string } }> = [];
 
@@ -154,11 +183,11 @@ export default function SwingDetailPage() {
     const finishScore = sub["finish_balance"]?.score;
     if (typeof finishScore === "number" && finishScore < 75) {
       issues.push({
-        title: "收桿平衡重心 (Finish Balance)",
-        desc: "收桿停留時間偏短或身體晃動，代表擊球後重心未能完全傳遞至左腳腳跟。",
+        title: "收桿平衡軸線 (Finish Balance)",
+        desc: "收桿停留時間偏短或身體晃動，代表擊球後身體收桿軸心尚未完全穩定站定，建議維持收桿姿態停留 2~3 秒。",
         drill: {
           name: "定格收桿 3 秒挑戰 (3-Second Finish Hold)",
-          action: "每次擊球後強制站定收桿姿態 3 秒鐘，感受左腳腳跟穩定著地與肚臍完全面向目標。",
+          action: "每次擊球後強制站定收桿姿態 3 秒鐘，感受收桿身體站姿直立與肚臍完全轉向目標。",
         },
       });
     }

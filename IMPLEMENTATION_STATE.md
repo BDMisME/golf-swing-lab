@@ -1,6 +1,36 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Auto Precision & Clean Motion UI Redesign）
+## 最新開發策略執行狀態（Precision & Clean Motion Final Calibration）
+1. **多訊號 Impact 真球出球閉環回饋精修**：`PASS`
+   - 重構球體偵測資料流，實作 `GolfBallDetector.track_swing_launch_with_feedback`。
+   - 當真球出球點被可靠觀測（observed_count >= 2 且通過高爾夫物理合理性檢核），自動將出球瞬間 (`launch_onset_ms`) 作為權威錨點回饋精修 Impact 事件。
+   - Impact 時間不確定度收斂至 $\pm 16\text{ms}$，狀態精確升級為 `confirmed_strike`，並將 `"ball_flight_observed_launch"` 納入 `detection_sources`。
+   - 2 分鐘原片實測精確捕獲 6 記真球啟動（#1, #6, #7, #8, #9, #11），未捕獲出球的揮桿誠實保留為 `estimated_strike`，絕不捏造出球來源。
+2. **音訊抽取強健性與明確診斷記錄**：`PASS`
+   - 建立 `AudioExtractionResult`，支援局部區間切片抽取與長影片動態 timeout（解除原固定 8 秒 timeout 限制）。
+   - 明確記錄 `no_audio`、`timeout`、`too_short`、`error` 與 `ok` 狀態，並完整記錄至 `quality_summary` 與 `quality_metadata`。
+3. **局部高 FPS 二次精修（Local High-FPS Refinement）**：`PASS`
+   - 實作 `_refine_event_local_high_fps`，針對低信心度或粗步掃描之 Top 與 Impact 事件，僅在其前後 $\pm 200\text{ms}$ 視窗內執行全幀率（60 FPS, step_ms=16）密集取樣，精修速度零交越與減速峰值，耗時僅數十毫秒，徹底免去重跑全片開銷。
+4. **誠信原則與檢測來源嚴格審計**：`PASS`
+   - 嚴格落實「真正記錄各訊號參與」：音訊距擊球大於 60ms 或無音訊脈衝時，絕對不包含 `"audio_transient_consensus"`；無真球出球時絕對不包含 `"ball_flight_observed_launch"`。
+   - 區分模型信心分數 (`confidence: 0.0~1.0`) 與真實時間不確定性 (`uncertainty_ms: 16/33/67`)。
+5. **Clean Motion UI 視覺降級與誠信防線**：`PASS`
+   - 單球側邊欄 `coachInsights` 嚴格基於本球可觀測指標證據；若資料不足或覆蓋率低於門檻，**絕不宣告身體問題**，僅顯示客觀動作階段影像檢視。
+   - 徹底移除單鏡頭無法測量之「足底壓力」與「重心轉移至前腳/腳跟」偽宣稱，改用可觀測「身體垂直軸線平衡穩定度」。
+   - Pro Mode 明確標記 `✓ MediaPipe 33 點骨架`，杜絕與 YOLO 17 點混稱。
+   - 加入揮桿時間區間防殘留保護，超出該球範圍立即清空 Canvas。
+6. **WebKit 與 Chrome 實測分別記錄**：`PASS`
+   - Chrome 實測截圖保存於 `docs/screenshots/chrome/`。
+   - WebKit 實測截圖透過 macOS 原生 `WebKit.framework` (PyObjC) 保存於 `docs/screenshots/webkit/01_webkit_render.png`。
+7. **全量品質與回歸驗證**：`PASS`
+   - 後端全量測試：**50 / 50 PASSED (100%)** in 168.50s（包含新加入的 5 個回歸校準專項測試）。
+   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` SHA-256 恆為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`（0 污染）。
+   - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功。
+   - 真實原片評估基準：`docs/PRECISION_CALIBRATION_EVALUATION.md` 完整輸出逐球時間碼、多訊號來源與真值指標（11s 與 2min 原片 True Recall 100%, Precision 100%）。
+- **最後更新時間**：2026-10-21T12:50:00+08:00
+- **最新驗收報告**：`docs/PRECISION_CALIBRATION_EVALUATION.md`、`docs/CLEAN_MOTION_REDESIGN_REPORT.md` 與 `docs/TEST_REPORT.md`
+
+## 前期重大里程碑狀態（Auto Precision & Clean Motion UI Redesign）
 1. **多訊號融合自動事件判定（Multi-Signal Event Detection）**：`PASS`
    - 重構 `SwingPhaseStateMachine` 與 `scanner.py`，整合手腕速度零交越、Top Pause 最小速度、肩部/骨盆旋轉反轉、下桿制動峰值、48kHz 音訊瞬態衝擊（0.18s 極速抽取）與真球出發點。
    - 每個偵測事件包含客觀來源 (`detection_sources`) 與合理不確定區間 (`uncertainty_ms`)，擊球狀態標示為 `confirmed_strike` 或 `estimated_strike`。
