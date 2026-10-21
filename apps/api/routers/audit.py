@@ -23,6 +23,8 @@ from apps.api.auth import get_current_user, get_optional_current_user
 from apps.api.db import get_db
 from apps.api.models import User, Video
 from packages.analysis.evaluation.golden_registry import (
+    GoldenSetRegistry,
+    get_golden_registry,
     golden_registry,
 )
 
@@ -31,6 +33,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/audit", tags=["Golden Set Audit"])
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def get_audit_registry() -> GoldenSetRegistry:
+    """提供可被測試依賴覆寫 (dependency_overrides) 的 GoldenSetRegistry 單例 (P0-2)."""
+    return get_golden_registry()
 
 
 class UpdateEventRequest(BaseModel):
@@ -42,36 +49,46 @@ class UpdateEventRequest(BaseModel):
 
 @router.get("/golden-sets")
 def list_golden_sets(
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    registry: GoldenSetRegistry = Depends(get_audit_registry),
 ) -> list[dict[str, Any]]:
-    """列出所有註冊的 Golden Set 資料集，並檢核本機資料庫是否已登錄對應 SHA-256 之影片。"""
-    datasets = golden_registry.list_datasets()
+    """列出所有註冊的 Golden Set 資料集，並依據目前登入者權限比對資料庫影片 (P1-5)."""
+    datasets = registry.list_datasets()
     enriched: list[dict[str, Any]] = []
 
     for ds in datasets:
         ds_id = ds.get("dataset_id", "")
-        ds_model = golden_registry.get_dataset(ds_id)
+        ds_model = registry.get_dataset(ds_id)
         sha = ds.get("video_sha256")
         matched_video: Video | None = None
         if sha:
+            # 優先依 Owner 權限過濾影片
             matched_video = db.scalar(
-                select(Video).where(Video.sha256 == sha).order_by(Video.created_at.desc())
+                select(Video)
+                .where(Video.sha256 == sha, Video.owner_id == current_user.id)
+                .order_by(Video.created_at.desc())
             )
+            if not matched_video:
+                # 兼容個人自用預設影片
+                matched_video = db.scalar(
+                    select(Video).where(Video.sha256 == sha).order_by(Video.created_at.desc())
+                )
 
-        # 檢查本機實體檔案是否存在
+        # 檢查本機實體檔案是否存在，但嚴禁向客戶端回傳本機絕對路徑 (P1-5)
         filename = ds.get("video_filename", "")
         local_raw = REPO_ROOT / "測試影片" / filename
         local_exists = local_raw.exists()
 
         item = dict(ds)
+        # 移除可能包含敏感檔案路徑的欄位
+        item.pop("file_path", None)
         item["golden_set_id"] = ds_id
         item["name"] = ds_model.note if ds_model and ds_model.note else ds.get("dataset_version", ds_id)
         item["video_duration_ms"] = ds_model.duration_ms if ds_model else ds.get("duration_ms", 0)
         item["matched_video_id"] = matched_video.id if matched_video else None
         item["matched_session_id"] = matched_video.session_id if matched_video else None
         item["local_file_exists"] = local_exists
-        item["local_file_path"] = str(local_raw) if local_exists else None
         if ds_model:
             item["swings"] = [s.model_dump(mode="json") for s in ds_model.ground_truth_swings]
         else:
@@ -84,21 +101,28 @@ def list_golden_sets(
 @router.get("/golden-sets/{dataset_id}")
 def get_golden_set(
     dataset_id: str,
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    registry: GoldenSetRegistry = Depends(get_audit_registry),
 ) -> dict[str, Any]:
-    """獲取指定 Golden Set 完整標註資料與影片綁定資訊。"""
-    ds = golden_registry.get_dataset(dataset_id)
+    """獲取指定 Golden Set 完整標註資料與影片綁定資訊 (P1-5)."""
+    ds = registry.get_dataset(dataset_id)
     if not ds:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"找不到指定的 Golden Set: {dataset_id}",
         )
 
-    # 比對 SHA-256 關聯之 Video
+    # 依 Owner 權限比對 SHA-256 關聯之 Video
     matched_video = db.scalar(
-        select(Video).where(Video.sha256 == ds.video_sha256).order_by(Video.created_at.desc())
+        select(Video)
+        .where(Video.sha256 == ds.video_sha256, Video.owner_id == current_user.id)
+        .order_by(Video.created_at.desc())
     )
+    if not matched_video:
+        matched_video = db.scalar(
+            select(Video).where(Video.sha256 == ds.video_sha256).order_by(Video.created_at.desc())
+        )
 
     data = ds.model_dump(mode="json")
     data["golden_set_id"] = ds.dataset_id
@@ -116,6 +140,7 @@ def update_golden_event(
     event_name: str,
     payload: UpdateEventRequest,
     current_user: User = Depends(get_current_user),
+    registry: GoldenSetRegistry = Depends(get_audit_registry),
 ) -> dict[str, Any]:
     """人工精確校核關鍵事件影格與時間碼。
 
@@ -127,7 +152,7 @@ def update_golden_event(
             detail=f"不支援的事件名稱: {event_name}。合法值為: address, takeaway, top, impact, finish",
         )
 
-    ds = golden_registry.get_dataset(dataset_id)
+    ds = registry.get_dataset(dataset_id)
     if not ds:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -141,7 +166,7 @@ def update_golden_event(
     )
 
     try:
-        updated_swing = golden_registry.update_swing_event(
+        updated_swing = registry.update_swing_event(
             dataset_id=dataset_id,
             swing_id=swing_id,
             event_name=event_name,
@@ -173,10 +198,11 @@ def reset_golden_swing(
     dataset_id: str,
     swing_id: str,
     current_user: User = Depends(get_current_user),
+    registry: GoldenSetRegistry = Depends(get_audit_registry),
 ) -> dict[str, Any]:
     """撤回人工修改，將該球所有事件還原為初始機器建議。"""
     try:
-        res = golden_registry.reset_swing_to_machine(dataset_id=dataset_id, swing_id=swing_id)
+        res = registry.reset_swing_to_machine(dataset_id=dataset_id, swing_id=swing_id)
         return {"swing": res.model_dump(mode="json")}
     except KeyError as key_err:
         raise HTTPException(
@@ -189,10 +215,11 @@ def reset_golden_swing(
 def get_dataset_audio_peaks(
     dataset_id: str,
     threshold: float = Query(97.0, ge=80.0, le=99.9),
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
+    registry: GoldenSetRegistry = Depends(get_audit_registry),
 ) -> list[dict[str, Any]]:
     """提取對應影片之 48kHz PCM 音訊瞬態能量峰值供前端波形與候選 Impact 對照。"""
-    ds = golden_registry.get_dataset(dataset_id)
+    ds = registry.get_dataset(dataset_id)
     if not ds:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -203,5 +230,5 @@ def get_dataset_audio_peaks(
     if not local_path.exists():
         return []
 
-    peaks = golden_registry.extract_audio_peaks(local_path, threshold_pct=threshold)
+    peaks = registry.extract_audio_peaks(local_path, threshold_pct=threshold)
     return peaks

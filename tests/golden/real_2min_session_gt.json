@@ -17,13 +17,13 @@
       "address_ms": 11351,
       "takeaway_ms": 11751,
       "top_ms": 13051,
-      "impact_ms": 13616,
+      "impact_ms": 13601,
       "finish_ms": 15001,
       "frames": {
         "address": 680,
         "takeaway": 705,
         "top": 783,
-        "impact": 817,
+        "impact": 816,
         "finish": 899
       },
       "events": {
@@ -66,7 +66,7 @@
           "status": "machine_suggested",
           "source": "machine_heuristic_v1",
           "confidence": 0.85,
-          "rationale": "已撤回人工修改，還原為初始機器建議",
+          "rationale": "機器演算法初始推算",
           "verified_by": null,
           "verified_at": null,
           "previous_value": null
@@ -83,67 +83,12 @@
           "previous_value": null
         }
       },
-      "downswing_ms": 565,
+      "downswing_ms": 550,
       "backswing_ms": 1300,
-      "tempo_ratio": 2.3,
+      "tempo_ratio": 2.36,
       "label": "valid_swing",
       "strike_status": "confirmed_strike",
-      "history": [
-        {
-          "timestamp": "2026-10-20T16:38:50.168161+00:00",
-          "event_name": "impact",
-          "action": "update_event",
-          "user": "golfer@swinglab.local",
-          "previous_time_ms": 13601,
-          "previous_frame": 816,
-          "new_time_ms": 13616,
-          "new_frame": 817,
-          "previous_status": "machine_suggested",
-          "new_status": "human_verified",
-          "rationale": "測試人工校正"
-        },
-        {
-          "timestamp": "2026-10-20T16:38:50.178255+00:00",
-          "action": "reset_to_machine",
-          "note": "使用者撤回人工核定"
-        },
-        {
-          "timestamp": "2026-10-20T16:38:57.321331+00:00",
-          "event_name": "impact",
-          "action": "update_event",
-          "user": "golfer@swinglab.local",
-          "previous_time_ms": 13601,
-          "previous_frame": 816,
-          "new_time_ms": 13616,
-          "new_frame": 817,
-          "previous_status": "machine_suggested",
-          "new_status": "human_verified",
-          "rationale": "測試人工校正"
-        },
-        {
-          "timestamp": "2026-10-20T16:38:57.329813+00:00",
-          "action": "reset_to_machine",
-          "note": "使用者撤回人工核定"
-        },
-        {
-          "timestamp": "2026-10-20T16:44:56.010372+00:00",
-          "event_name": "impact",
-          "action": "update_event",
-          "user": "golfer@swinglab.local",
-          "previous_time_ms": 13601,
-          "previous_frame": 816,
-          "new_time_ms": 13616,
-          "new_frame": 817,
-          "previous_status": "machine_suggested",
-          "new_status": "human_verified",
-          "rationale": "測試人工校正"
-        },
-        {
-          "timestamp": "2026-10-20T16:44:56.019166+00:00",
-          "action": "reset_to_machine",
-          "note": "使用者撤回人工核定"
-        }
-      ]
+      "history": []
     },
     {
       "gt_id": "gt-2",

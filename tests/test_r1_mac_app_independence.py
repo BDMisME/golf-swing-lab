@@ -24,8 +24,12 @@ def test_launcher_binary_is_arm64_macho():
     assert "/Users/mathew" not in content, "launcher.c 嚴禁出現寫死的個人絕對路徑 /Users/mathew"
     assert "_NSGetExecutablePath" in content, "launcher.c 必須使用 _NSGetExecutablePath 動態解析"
 
-    binary_path = REPO_ROOT / "dist_mac" / "Golf Swing Lab.app" / "Contents" / "MacOS" / "GolfSwingLab"
-    assert binary_path.exists(), "dist_mac 中必須存在編譯後的 GolfSwingLab 執行檔"
+    app_dir = Path("/Applications/Golf Swing Lab.app")
+    if not app_dir.exists():
+        app_dir = REPO_ROOT / "dist_mac" / "Golf Swing Lab.app"
+
+    binary_path = app_dir / "Contents" / "MacOS" / "GolfSwingLab"
+    assert binary_path.exists(), f"App Bundle 中必須存在編譯後的 GolfSwingLab 執行檔: {binary_path}"
 
     # 使用 file 指令驗證 Mach-O arm64
     res = subprocess.run(["file", str(binary_path)], capture_output=True, text=True, check=True)
@@ -34,7 +38,10 @@ def test_launcher_binary_is_arm64_macho():
 
 def test_app_bundle_structure_and_signature():
     """驗證 App Bundle 結構與 Codesign 簽名。"""
-    app_dir = REPO_ROOT / "dist_mac" / "Golf Swing Lab.app"
+    app_dir = Path("/Applications/Golf Swing Lab.app")
+    if not app_dir.exists():
+        app_dir = REPO_ROOT / "dist_mac" / "Golf Swing Lab.app"
+
     info_plist = app_dir / "Contents" / "Info.plist"
     assert info_plist.exists(), "Info.plist 必須存在"
 

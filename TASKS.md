@@ -4,6 +4,14 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## R13.1 — Final Integrity Hotfix (2026-10-21)
+- [x] **P0-1 前後端事件資料契約統一**：統一後端 `status`, `source`, `frame`, `verified_at`，前端顯示人工確認徽章、影格號、Delta 偏移量 (`Δ +xx ms (+xf)`)，刷新頁面持久保留。
+- [x] **P0-2 禁止測試污染正式 Golden Set**：清除 6 筆測試 history，備份正式檔案（SHA-256: `efefa02b...`），所有寫入測試改用 tmp_path 與 dependency_overrides 隔離；修復 `reset_swing_to_machine` 之 Round-Trip。
+- [x] **P0-3 修正 Event Accuracy 驗收依據**：嚴格限定只有 `human_verified` 事件計入正式 MAE；未經確認時標示 `NOT_VALIDATED` 或 `PROVISIONAL`，輸出樣本數與覆蓋率。
+- [x] **P1-4 高爾夫運動學節奏修正**：`Backswing = Top - Takeaway`、`Downswing = Impact - Top`、`Tempo Ratio = Backswing / Downswing`，排除 Address 靜止時間。
+- [x] **P1-5 保護 Golden Set API**：端點必須認證（`401`），依 `owner_id` 過濾關聯影片，移除伺服器本機絕對路徑暴露。
+- [x] **全量自動化回歸驗證**：45/45 PASSED，Next.js 9/9 頁面打包成功，正式 Golden Set SHA-256 0 污染。
+
 ## Real Practice Validation 驗收任務清單 (2026-10-20)
 - [x] **任務一：獨立驗證 Golden Set (12/12)**：破解 2.267 秒試擺誤判假象，12 球逐格（48kHz PCM + 60fps）人工確認基準，True Recall 100%、Precision 100%、邊界誤差中位數 747.0ms。建立 `/audit` 人工審核 UI。
 - [x] **任務二：修正 Score v2 最後資料缺口**：`body_visibility_ratio` 來自 MediaPipe 真實入鏡分析；移除 coverage 頂替 IG 漏洞；實作同場多球手腕軌跡插值與重複性計算 `compute_session_wrist_repeatability`；詳情頁提供「🎯 影格」跳轉與無法評分原因。

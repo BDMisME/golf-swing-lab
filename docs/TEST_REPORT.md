@@ -154,3 +154,49 @@
 
 
 
+
+---
+
+## 8. R13.1 Final Integrity Hotfix 驗證證據報告 (2026-10-21)
+
+本輪次針對外部代碼審查提出的 5 大關鍵缺陷（P0-1 至 P1-5）進行全方位熱修復與防禦性加固，並完成無污染自動化回歸驗證。
+
+### 8.1 修復項目與驗收證據
+1. **P0-1 前後端事件契約與狀態完全統一**：
+   - 後端 DTO 統一使用 `status` (`machine_suggested` / `human_verified` / `uncertain`)、`source`、`frame`、`verified_at` 欄位。
+   - 前端 `/audit` 修正 `source === 'human_verified'` 舊欄位誤用，UI 準確呈現人工已確認藍綠色徽章、確認時間戳記，以及相對原始演算法建議值的時間/影格偏移量（如 `Δ +33 ms (+2f)`）。
+   - 人工確認後重新整理頁面，驗證狀態由後端持久化保留。
+2. **P0-2 禁止測試污染正式 Golden Set 與完整 Round-Trip 重置**：
+   - 正式真值檔案 `tests/golden/real_2min_session_gt.json` 備份至 `tests/golden/backups/real_2min_session_gt.backup.json`。
+   - 清除先前殘留之 6 筆測試 history，鎖定乾淨真值基準 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`。
+   - 所有寫入測試全面使用 pytest `tmp_path` 與 `app.dependency_overrides[get_audit_registry]`，測試執行前後正式檔案 SHA-256 完全相同（零污染）。
+   - 修復 `reset_swing_to_machine()` 使其完整恢復頂層快捷欄位 (`impact_ms` 等)、`events` 字典、`start_ms`/`end_ms`、`downswing_ms`/`backswing_ms` 與 `tempo_ratio`，Round-Trip 測試通過。
+3. **P0-3 嚴格修正 Event Accuracy 驗收依據**：
+   - `packages/analysis/evaluation/golden_eval.py` 嚴格限制：僅有標記為 `human_verified` 之事件納入正式人工真值 MAE 計算。
+   - 未經確認事件標示 `NOT_VALIDATED` 或 `PROVISIONAL`，並輸出樣本數 (`sample_count`)、總候選數、覆蓋率、中位數偏差與最大誤差。
+4. **P1-4 高爾夫運動學節奏定義修正**：
+   - 節奏嚴格採用運動學標準：`Backswing = Top - Takeaway`、`Downswing = Impact - Top`、`Tempo Ratio = Backswing / Downswing`。
+   - 廢除 Address 靜止時間併入上桿之舊邏輯；時序不合法或缺事件時 `tempo_ratio` 嚴格返回 `null`。
+5. **P1-5 保護 Golden Set API 安全性與隱私**：
+   - `GET /api/audit/golden-sets` 及所有 `/api/audit/*` 端點全面加入 `current_user: User = Depends(get_current_user)` 認證防護，未登入返回 `401 Unauthorized`。
+   - 關聯影片查詢限定於 `Video.owner_id == current_user.id`。
+   - 回傳 DTO 全面移除伺服器本機絕對檔案路徑暴露。
+
+### 8.2 自動化測試執行證據
+- **測試命令**：`uv run pytest tests/ -v`
+- **測試結果**：**45 passed in 170.18s (100% PASS)**
+  - `tests/test_r1_mac_app_independence.py`: 6 passed
+  - `tests/test_r1_r2_auth_and_models.py`: 3 passed
+  - `tests/test_r2_long_video_accuracy.py`: 3 passed
+  - `tests/test_r3_r4_upload_probe_and_worker.py`: 4 passed
+  - `tests/test_r3_verifiable_scoring.py`: 5 passed
+  - `tests/test_r4_dtl_algorithms.py`: 3 passed
+  - `tests/test_r5_personalized_coach.py`: 4 passed
+  - `tests/test_r5_r6_r7_detection_pose_scoring.py`: 4 passed
+  - `tests/test_r6_final_product_acceptance.py`: 4 passed
+  - `tests/test_r8_r9_r10_report_export_and_coach.py`: 3 passed
+  - `tests/test_r13_golden_set_integrity.py`: 6 passed
+- **正式 Golden Set 防污染檢驗**：
+  - 測試前 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`
+  - 測試後 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954` (完全一致)
+- **前端建置**：`cd apps/web && npm run build` 通過（9/9 靜態頁面生成成功，包含 `/audit`）。

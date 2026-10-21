@@ -1,37 +1,37 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（R13: Golden Set Integrity & Human Verification）
-1. **R13-A: `/audit` 資料來源與單一真實來源**：`PASS`
-   - 移除前端硬編碼常數 `AUDITED_12_SWINGS`，改由後端單一真實來源 API `GET /api/audit/golden-sets` 驅動。
-   - 嚴格以影片檔名與 SHA-256 綁定（2分鐘.mov `4993a3b6...`，11秒.mov `9df04b7b...`），拒絕隨機取第一部影片。
-   - 補齊 FPS、實際 PTS、總長度與事件幀號；第 12 球結束時間溢位已 clamp 修正至 139053ms；超出長度嚴格返回 422 錯誤。
-   - 一致性測試 `test_golden_set_registry_integrity` 實測通過。
+## 最新開發策略執行狀態（R13.1: Final Integrity Hotfix）
+1. **P0-1 前後端事件契約與狀態完全統一**：`PASS`
+   - 後端統一以 `status` (machine_suggested / human_verified / uncertain)、`source`、`frame`、`verified_at` 為權威契約。
+   - 前端 `/audit` 修正舊欄位誤用，支援即時人工確認標記、影格號顯示、更新時間戳記與相對演算法原始值的偏移量（`Δ +xx ms (+xf)`）。
+   - 經瀏覽器實測驗證，確認後重新整理頁面狀態持久保留，微調按鈕與 Snap 音訊吸附即時反映。
 
-2. **R13-B: 演算法建議與真值分離**：`PASS`
-   - 重構 `scripts/audit_all_12_swings.py`，徹底廢除人為固定時間偏移（-400ms, +1400ms），改為手腕動能與骨盆穩定性搜尋。
-   - 結果一律標示為 `machine_suggested` 並保留 `rationale` 推斷依據，不假造為人工 Ground Truth。
+2. **P0-2 禁止測試污染正式 Golden Set 與完整 Round-Trip 重置**：`PASS`
+   - 備份正式真值檔至 `tests/golden/backups/real_2min_session_gt.backup.json`，清理先前殘留之 6 筆測試 history，鎖定乾淨真值基準 SHA-256 為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`。
+   - 所有具寫入行為之 API 與整合測試全面改用 pytest `tmp_path` 與 FastAPI `dependency_overrides[get_audit_registry]`，正式檔案在測試執行前後 SHA-256 保持完全一致（0 污染）。
+   - 修復 `reset_swing_to_machine()`，重置時完整同步恢復 `events` 內部時間與影格、頂層快捷欄位 (`impact_ms` 等)、`start_ms`/`end_ms`、`downswing_ms`/`backswing_ms` 與 `tempo_ratio`，Round-Trip 測試 `test_golden_set_reset_round_trip` 實測 100% 通過。
 
-3. **R13-C: 互動式影格校核介面**：`PASS`
-   - `/audit` 頁面提供基準切換、逐影格步進（-5, -1, +1, +5 幀）、5 大事件標定（設為 Address, Takeaway, Top, Impact, Finish）。
-   - 整合 48kHz PCM 音訊 32 個能量峰值對照與一鍵吸附（Snap），提供撤回重置按鈕與 $\Delta t$ 偏差揭露。
-   - 事件獨立狀態標籤：未由球友親自點擊確認者維持 `machine_suggested`，不虛造模擬點擊。
+3. **P0-3 嚴格修正 Event Accuracy 驗收依據**：`PASS`
+   - `packages/analysis/evaluation/golden_eval.py` 嚴格限制：僅有標記為 `human_verified` 之事件納入正式人工真值 MAE 計算。
+   - 未獲人工確認之事件一律標示為 `NOT_VALIDATED` 或 `PROVISIONAL`，並輸出樣本數 (`sample_count`)、總候選數、覆蓋率、中位數偏差與最大誤差，絕不以機器演算法建議值充當人工真值。
 
-4. **R13-D: 雙向分離評估架構**：`PASS`
-   - 評估模組 `packages/analysis/evaluation/golden_eval.py` 嚴格分離 **Detection Accuracy**（TP/FP/FN/Recall/Precision/IoU/漏切/重複）與 **Swing Event Accuracy**（Address/Top/Impact/Finish/Tempo MAE 誤差）。
-   - 2 分鐘原片實測：`TP=12, Recall=1.0000, Precision=1.0000, 邊界偏差中位數=747.0ms, Impact MAE=28.4ms`。
+4. **P1-4 依高爾夫運動學修復揮桿節奏定義**：`PASS`
+   - 節奏嚴格採用運動學標準：`Backswing = Top - Takeaway`、`Downswing = Impact - Top`、`Tempo Ratio = Backswing / Downswing`。
+   - 徹底廢除將 Address 靜止瞄球時間併入上桿之舊邏輯；事件時序不符或缺少必要事件時，`tempo_ratio` 嚴格返回 `null`。
 
-5. **R13-E: 骨盆中心與軀幹尺度歸一化手腕重複性 (score-v2.1)**：`PASS`
-   - 以站姿骨盆中心為原點，軀幹長度為單位尺度歸一化：$(\tilde{x}, \tilde{y}) = (x - x_{\text{hip}}, y - y_{\text{hip}}) / L_{\text{torso}}$。
-   - 排除空揮與低信心揮桿，消除身高身材與站位距離平移偏差，升級版本為 `score-v2.1`。
+5. **P1-5 保護 Golden Set API 安全性與隱私**：`PASS`
+   - `GET /api/audit/golden-sets` 及所有 `/api/audit/*` 端點全面加入 `current_user: User = Depends(get_current_user)` 認證防護，未授權請求嚴格返回 `401 Unauthorized`。
+   - 關聯影片查詢限定於 `Video.owner_id == current_user.id`，落實租戶隔離。
+   - 回傳 DTO 全面移除伺服器本機絕對檔案路徑暴露。
 
 6. **全量品質與回歸驗證**：`PASS`
-   - 後端測試：**43 / 43 PASSED (100%)**。
-   - 前端打包：`npm run build` 9/9 頁面打包成功。
-   - 程式碼品質：`ruff check` 0 錯誤。
-   - 瀏覽器實測：Puppeteer 頁面截圖與互動驗證完全通過。
+   - 後端全量測試：**45 / 45 PASSED (100%)** in 170s。
+   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 於測試前後 SHA-256 恆為 `efefa02b...`。
+   - 前端打包：`npm run build` 9/9 路由靜態頁面生成成功。
+   - 瀏覽器實測：Chrome DevTools 驗證 `/audit` 畫面加載、事件切換與標籤狀態完全正常。
 
-- **最後更新時間**：2026-10-21T00:52:00+08:00
-- **最新驗收報告**：`docs/R13_GOLDEN_INTEGRITY_REPORT.md`
+- **最後更新時間**：2026-10-21T11:15:00+08:00
+- **最新驗收報告**：`docs/R13_GOLDEN_INTEGRITY_REPORT.md` 與 `docs/TEST_REPORT.md`
 
 
 ## 關鍵重大缺陷排除紀錄 (18% Proxy 卡死根因與修復)

@@ -26,18 +26,20 @@ import pytest
 
 
 def test_mac_app_integrity_and_signature():
-    """驗證桌面與應用程式目錄中的 Mac 原生 App bundle 結構與嚴格簽名。"""
-    desktop_app = Path(os.path.expanduser("~/Desktop/Golf Swing Lab.app"))
-    assert desktop_app.exists(), f"桌面 App 不存在: {desktop_app}"
+    """驗證系統應用程式目錄中的 Mac 原生 App bundle 結構與嚴格簽名。"""
+    target_app = Path("/Applications/Golf Swing Lab.app")
+    if not target_app.exists():
+        target_app = Path(os.path.expanduser("~/Desktop/Golf Swing Lab.app"))
+    assert target_app.exists(), f"Mac 原生 App 不存在: {target_app}"
 
-    plist_path = desktop_app / "Contents" / "Info.plist"
+    plist_path = target_app / "Contents" / "Info.plist"
     assert plist_path.exists(), "Info.plist 必須存在"
     with open(plist_path, "rb") as f:
         plist_data = plistlib.load(f)
     assert plist_data.get("CFBundleExecutable") == "GolfSwingLab"
     assert plist_data.get("CFBundleIdentifier") == "com.golfswinglab.desktop"
 
-    bin_path = desktop_app / "Contents" / "MacOS" / "GolfSwingLab"
+    bin_path = target_app / "Contents" / "MacOS" / "GolfSwingLab"
     assert bin_path.exists(), "可執行檔必須存在"
     assert os.access(bin_path, os.X_OK), "可執行檔必須具備執行權限"
 
@@ -47,7 +49,7 @@ def test_mac_app_integrity_and_signature():
 
     # 檢查嚴格簽名
     res = subprocess.run(
-        ["codesign", "--verify", "--deep", "--strict", str(desktop_app)],
+        ["codesign", "--verify", "--deep", "--strict", str(target_app)],
         capture_output=True,
         text=True,
     )

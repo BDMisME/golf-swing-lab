@@ -53,12 +53,39 @@ class GoldenSwingItem(BaseModel):
     finish_ms: int
     frames: dict[str, int]
     events: dict[str, GoldenEventDetail] = Field(default_factory=dict)
-    downswing_ms: int
-    backswing_ms: int
-    tempo_ratio: float
+    downswing_ms: int | None = None
+    backswing_ms: int | None = None
+    tempo_ratio: float | None = None
     label: str = "valid_swing"
     strike_status: str = "confirmed_strike"
     history: list[dict[str, Any]] = Field(default_factory=list)
+
+
+def compute_swing_tempo(
+    takeaway_ms: int | None, top_ms: int | None, impact_ms: int | None
+) -> tuple[int | None, int | None, float | None]:
+    """依據高爾夫運動學精確計算上／下桿時間與節奏比 (P1-4).
+    
+    定義：
+    - Backswing = Top - Takeaway
+    - Downswing = Impact - Top
+    - Tempo Ratio = Backswing / Downswing
+    
+    規則：
+    1. 嚴禁將 Address 等待時間併入上桿時間。
+    2. 若 Takeaway、Top、Impact 任一不存在或時序不合法 (Takeaway >= Top 或 Top >= Impact)，
+       或 Downswing <= 0，則 Tempo 與時間必須為 None。
+    """
+    if takeaway_ms is None or top_ms is None or impact_ms is None:
+        return None, None, None
+    if not (takeaway_ms < top_ms < impact_ms):
+        return None, None, None
+    bs = top_ms - takeaway_ms
+    ds = impact_ms - top_ms
+    if ds <= 0 or bs <= 0:
+        return None, None, None
+    tempo = round(float(bs) / float(ds), 2)
+    return bs, ds, tempo
 
 
 class GoldenDatasetModel(BaseModel):
@@ -217,9 +244,7 @@ class GoldenSetRegistry:
                         rationale="機器演算法初始推算",
                     )
 
-            downswing = imp_ms - top_ms
-            backswing = top_ms - take_ms
-            tempo = round(backswing / max(1.0, float(downswing)), 2)
+            bs, ds, tempo = compute_swing_tempo(take_ms, top_ms, imp_ms)
 
             normalized_swings.append(
                 GoldenSwingItem(
@@ -240,8 +265,8 @@ class GoldenSetRegistry:
                         "finish": f_fin,
                     },
                     events=events,
-                    downswing_ms=downswing,
-                    backswing_ms=backswing,
+                    downswing_ms=ds,
+                    backswing_ms=bs,
                     tempo_ratio=tempo,
                     label=sw.get("label", "valid_swing"),
                     strike_status=sw.get("strike_status", "confirmed_strike"),
@@ -384,19 +409,20 @@ class GoldenSetRegistry:
             target_swing.frames["finish"] = new_frame
             target_swing.end_ms = min(model.duration_ms, new_time_ms + 200)
 
-        # 重新計算衍生生理指標
-        target_swing.downswing_ms = target_swing.impact_ms - target_swing.top_ms
-        target_swing.backswing_ms = target_swing.top_ms - target_swing.takeaway_ms
-        target_swing.tempo_ratio = round(
-            target_swing.backswing_ms / max(1.0, float(target_swing.downswing_ms)), 2
+        # 重新計算衍生運動學生理指標 (P1-4)
+        bs, ds, tempo = compute_swing_tempo(
+            target_swing.takeaway_ms, target_swing.top_ms, target_swing.impact_ms
         )
+        target_swing.backswing_ms = bs
+        target_swing.downswing_ms = ds
+        target_swing.tempo_ratio = tempo
 
         # 寫回磁碟
         self.save_dataset(model)
         return target_swing
 
     def reset_swing_to_machine(self, dataset_id: str, swing_id: str) -> GoldenSwingItem:
-        """撤回人工修改，還原為 machine_suggested 初始推算。"""
+        """撤回人工修改，完整還原為 machine_suggested 初始推算與原始欄位 (P0-2 Round-Trip)."""
         model = self.get_dataset(dataset_id)
         if not model:
             raise KeyError(f"找不到指定的 Golden Set: {dataset_id}")
@@ -410,6 +436,7 @@ class GoldenSetRegistry:
         if not target_swing:
             raise KeyError(f"在 {dataset_id} 中找不到揮桿 {swing_id}")
 
+        # 1. 恢復所有事件至原始機器建議值
         for _ev_name, ev in target_swing.events.items():
             if ev.previous_value:
                 ev.time_ms = ev.previous_value["time_ms"]
@@ -421,6 +448,33 @@ class GoldenSetRegistry:
                 ev.verified_by = None
                 ev.verified_at = None
                 ev.previous_value = None
+
+        # 2. 同步恢復頂層快捷欄位與 frames (P0-2)
+        if "address" in target_swing.events:
+            target_swing.address_ms = target_swing.events["address"].time_ms
+            target_swing.frames["address"] = target_swing.events["address"].frame
+            target_swing.start_ms = target_swing.address_ms
+        if "takeaway" in target_swing.events:
+            target_swing.takeaway_ms = target_swing.events["takeaway"].time_ms
+            target_swing.frames["takeaway"] = target_swing.events["takeaway"].frame
+        if "top" in target_swing.events:
+            target_swing.top_ms = target_swing.events["top"].time_ms
+            target_swing.frames["top"] = target_swing.events["top"].frame
+        if "impact" in target_swing.events:
+            target_swing.impact_ms = target_swing.events["impact"].time_ms
+            target_swing.frames["impact"] = target_swing.events["impact"].frame
+        if "finish" in target_swing.events:
+            target_swing.finish_ms = target_swing.events["finish"].time_ms
+            target_swing.frames["finish"] = target_swing.events["finish"].frame
+            target_swing.end_ms = min(model.duration_ms, target_swing.finish_ms + 200)
+
+        # 3. 重新計算運動學生理節奏指標 (P1-4)
+        bs, ds, tempo = compute_swing_tempo(
+            target_swing.takeaway_ms, target_swing.top_ms, target_swing.impact_ms
+        )
+        target_swing.backswing_ms = bs
+        target_swing.downswing_ms = ds
+        target_swing.tempo_ratio = tempo
 
         target_swing.history.append(
             {

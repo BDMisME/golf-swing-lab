@@ -77,23 +77,47 @@ class DetectionAccuracyReport:
 
 @dataclass
 class EventMetricSummary:
-    """單一事件（如 Top, Impact）誤差統計"""
+    """單一事件（如 Top, Impact）誤差統計 (P0-3 嚴格誠信原則)"""
 
     event_name: str
-    sample_count: int
-    mean_absolute_error_ms: float
-    median_error_ms: float
-    max_error_ms: float
-    frame_error_median: float
+    sample_count: int  # 納入正式誤差統計的樣本數（僅限 human_verified）
+    mean_absolute_error_ms: float | None
+    median_error_ms: float | None
+    max_error_ms: float | None
+    frame_error_median: float | None
+    total_candidates: int = 0  # 該事件配對成功的總球數
+    human_verified_count: int = 0  # 真正人工核驗過的樣本數
+    coverage_rate: float = 0.0  # 人工核驗覆蓋率
+    status: str = "NOT_VALIDATED"  # PASS | PROVISIONAL | NOT_VALIDATED
+    note: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "event_name": self.event_name,
             "sample_count": self.sample_count,
-            "mean_absolute_error_ms": round(self.mean_absolute_error_ms, 1),
-            "median_error_ms": round(self.median_error_ms, 1),
-            "max_error_ms": round(self.max_error_ms, 1),
-            "frame_error_median": round(self.frame_error_median, 1),
+            "mean_absolute_error_ms": (
+                round(self.mean_absolute_error_ms, 1)
+                if self.mean_absolute_error_ms is not None
+                else None
+            ),
+            "median_error_ms": (
+                round(self.median_error_ms, 1)
+                if self.median_error_ms is not None
+                else None
+            ),
+            "max_error_ms": (
+                round(self.max_error_ms, 1) if self.max_error_ms is not None else None
+            ),
+            "frame_error_median": (
+                round(self.frame_error_median, 1)
+                if self.frame_error_median is not None
+                else None
+            ),
+            "total_candidates": self.total_candidates,
+            "human_verified_count": self.human_verified_count,
+            "coverage_rate": round(self.coverage_rate, 4),
+            "status": self.status,
+            "note": self.note,
         }
 
 
@@ -103,12 +127,18 @@ class SwingEventAccuracyReport:
 
     metrics: dict[str, EventMetricSummary] = field(default_factory=dict)
     tempo_ratio_mae: float | None = None
+    overall_status: str = "NOT_VALIDATED"  # PASS | PROVISIONAL | NOT_VALIDATED
     per_swing_diffs: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "metrics": {k: v.to_dict() for k, v in self.metrics.items()},
-            "tempo_ratio_mae": round(self.tempo_ratio_mae, 3) if self.tempo_ratio_mae is not None else None,
+            "tempo_ratio_mae": (
+                round(self.tempo_ratio_mae, 3)
+                if self.tempo_ratio_mae is not None
+                else None
+            ),
+            "overall_status": self.overall_status,
             "per_swing_diffs": self.per_swing_diffs,
         }
 
@@ -169,6 +199,18 @@ def _extract_event_frame(obj: dict[str, Any], event_name: str) -> int | None:
         if alias in obj and obj[alias] is not None:
             return int(obj[alias])
     return None
+
+
+def _extract_event_status(obj: dict[str, Any], event_name: str) -> str:
+    """從字典中彈性提取特定事件的驗證狀態 (P0-3)."""
+    if "events" in obj and isinstance(obj["events"], dict):
+        ev = obj["events"].get(event_name)
+        if isinstance(ev, dict) and "status" in ev and ev["status"] is not None:
+            return str(ev["status"])
+    for alias in [f"{event_name}_status", "status"]:
+        if alias in obj and obj[alias] is not None:
+            return str(obj[alias])
+    return "machine_suggested"
 
 
 def evaluate_against_golden(
@@ -352,10 +394,11 @@ def evaluate_detection_and_events(
         matches=matches,
     )
 
-    # 2. 事件準確率指標
+    # 2. 事件準確率指標 (P0-3 嚴格誠信原則)
     event_names = ["address", "takeaway", "top", "impact", "finish"]
-    event_diffs_map: dict[str, list[float]] = {ev: [] for ev in event_names}
-    frame_diffs_map: dict[str, list[float]] = {ev: [] for ev in event_names}
+    event_all_diffs_map: dict[str, list[float]] = {ev: [] for ev in event_names}
+    event_verified_diffs_map: dict[str, list[float]] = {ev: [] for ev in event_names}
+    frame_verified_diffs_map: dict[str, list[float]] = {ev: [] for ev in event_names}
     tempo_ratio_errors: list[float] = []
     per_swing_diffs: list[dict[str, Any]] = []
 
@@ -377,11 +420,12 @@ def evaluate_detection_and_events(
             pred_t = _extract_event_time(pred, ev)
             gt_f = _extract_event_frame(gt, ev)
             pred_f = _extract_event_frame(pred, ev)
+            gt_status = _extract_event_status(gt, ev)
 
             if gt_t is not None and pred_t is not None:
                 diff_ms = pred_t - gt_t
                 abs_diff_ms = abs(diff_ms)
-                event_diffs_map[ev].append(abs_diff_ms)
+                event_all_diffs_map[ev].append(abs_diff_ms)
                 pred_times[ev] = pred_t
                 gt_times[ev] = gt_t
 
@@ -390,7 +434,11 @@ def evaluate_detection_and_events(
                     diff_f = abs(pred_f - gt_f)
                 else:
                     diff_f = abs_diff_ms / (1000.0 / fps) if fps > 0 else 0.0
-                frame_diffs_map[ev].append(diff_f)
+
+                # P0-3: 僅有真正標記為 human_verified 者才納入正式事件誤差統計
+                if gt_status == "human_verified":
+                    event_verified_diffs_map[ev].append(abs_diff_ms)
+                    frame_verified_diffs_map[ev].append(diff_f)
 
                 swing_diff_record["events"][ev] = {
                     "gt_time_ms": gt_t,
@@ -398,25 +446,30 @@ def evaluate_detection_and_events(
                     "diff_ms": round(diff_ms, 1),
                     "abs_diff_ms": round(abs_diff_ms, 1),
                     "frame_diff": round(diff_f, 1),
+                    "gt_status": gt_status,
+                    "is_human_verified": gt_status == "human_verified",
                 }
             elif gt_t is not None:
                 swing_diff_record["events"][ev] = {
                     "gt_time_ms": gt_t,
                     "pred_time_ms": None,
                     "error": "missing_in_prediction",
+                    "gt_status": gt_status,
+                    "is_human_verified": gt_status == "human_verified",
                 }
 
-        # 節奏 (Tempo Ratio: Backswing / Downswing)
-        # Backswing = top - address (若無 address 則 takeaway)
-        # Downswing = impact - top
+        # 節奏 (Tempo Ratio: Backswing / Downswing) - 嚴格遵循 P1-4
+        # Backswing = Top - Takeaway (不可將 Address 等待時間併入上桿時間)
+        # Downswing = Impact - Top
         def calc_tempo(times: dict[str, float]) -> float | None:
-            if "top" in times and "impact" in times:
-                bs_start = times.get("address") or times.get("takeaway")
-                if bs_start is not None and times["top"] > bs_start and times["impact"] > times["top"]:
-                    bs_dur = times["top"] - bs_start
-                    ds_dur = times["impact"] - times["top"]
-                    if ds_dur > 10:
-                        return bs_dur / ds_dur
+            if "takeaway" in times and "top" in times and "impact" in times:
+                bs_start = times["takeaway"]
+                top = times["top"]
+                impact = times["impact"]
+                if bs_start < top < impact and (impact - top) > 0 and (top - bs_start) > 0:
+                    bs_dur = top - bs_start
+                    ds_dur = impact - top
+                    return bs_dur / ds_dur
             return None
 
         gt_tempo = calc_tempo(gt_times)
@@ -432,26 +485,73 @@ def evaluate_detection_and_events(
 
         per_swing_diffs.append(swing_diff_record)
 
-    # 聚合事件統計
+    # 聚合事件統計 (P0-3 嚴格誠信原則)
     metrics_summary: dict[str, EventMetricSummary] = {}
+    total_verified_all = 0
+    total_candidates_all = 0
+
     for ev in event_names:
-        diffs = event_diffs_map[ev]
-        fdiffs = frame_diffs_map[ev]
-        if diffs:
-            metrics_summary[ev] = EventMetricSummary(
-                event_name=ev,
-                sample_count=len(diffs),
-                mean_absolute_error_ms=float(statistics.mean(diffs)),
-                median_error_ms=float(statistics.median(diffs)),
-                max_error_ms=float(max(diffs)),
-                frame_error_median=float(statistics.median(fdiffs)) if fdiffs else 0.0,
-            )
+        all_diffs = event_all_diffs_map[ev]
+        verified_diffs = event_verified_diffs_map[ev]
+        verified_fdiffs = frame_verified_diffs_map[ev]
+
+        n_total = len(all_diffs)
+        n_verified = len(verified_diffs)
+        cov = n_verified / max(1, n_total) if n_total > 0 else 0.0
+        total_verified_all += n_verified
+        total_candidates_all += n_total
+
+        if n_verified == 0:
+            status_str = "NOT_VALIDATED"
+            note_str = "該事件目前為 machine_suggested 演算法建議值，未經肉眼人工確認，不予計算正式真值誤差。"
+            mae = None
+            med = None
+            max_err = None
+            f_med = None
+        elif n_verified < n_total:
+            status_str = "PROVISIONAL"
+            note_str = f"部分樣本人工確認 ({n_verified}/{n_total}，覆蓋率 {round(cov*100, 1)}%)，僅供暫行評估。"
+            mae = float(statistics.mean(verified_diffs))
+            med = float(statistics.median(verified_diffs))
+            max_err = float(max(verified_diffs))
+            f_med = float(statistics.median(verified_fdiffs)) if verified_fdiffs else 0.0
+        else:
+            status_str = "PASS"
+            note_str = "全量人工確認完成 (100% Human Verified)。"
+            mae = float(statistics.mean(verified_diffs))
+            med = float(statistics.median(verified_diffs))
+            max_err = float(max(verified_diffs))
+            f_med = float(statistics.median(verified_fdiffs)) if verified_fdiffs else 0.0
+
+        metrics_summary[ev] = EventMetricSummary(
+            event_name=ev,
+            sample_count=n_verified,
+            mean_absolute_error_ms=mae,
+            median_error_ms=med,
+            max_error_ms=max_err,
+            frame_error_median=f_med,
+            total_candidates=n_total,
+            human_verified_count=n_verified,
+            coverage_rate=cov,
+            status=status_str,
+            note=note_str,
+        )
 
     tempo_mae = float(statistics.mean(tempo_ratio_errors)) if tempo_ratio_errors else None
+    overall_status = (
+        "NOT_VALIDATED"
+        if total_verified_all == 0
+        else (
+            "PASS"
+            if total_verified_all == total_candidates_all and total_candidates_all > 0
+            else "PROVISIONAL"
+        )
+    )
 
     evt_report = SwingEventAccuracyReport(
         metrics=metrics_summary,
         tempo_ratio_mae=tempo_mae,
+        overall_status=overall_status,
         per_swing_diffs=per_swing_diffs,
     )
 

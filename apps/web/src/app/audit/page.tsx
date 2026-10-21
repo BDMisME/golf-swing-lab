@@ -6,12 +6,19 @@ import { apiFetch, API_BASE_URL, getAuthToken } from "@/lib/api";
 
 interface SwingEventRecord {
   time_ms: number;
-  frame_idx: number;
-  source: "machine_suggested" | "human_verified" | "uncertain";
-  machine_suggested_ms?: number;
+  frame: number;
+  status: "machine_suggested" | "human_verified" | "uncertain" | "pending_human_review";
+  source: string;
   confidence: number;
   rationale?: string;
-  updated_at?: string;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  previous_value?: {
+    time_ms: number;
+    frame: number;
+    status?: string;
+    source?: string;
+  } | null;
 }
 
 interface GoldenSetSwing {
@@ -19,6 +26,15 @@ interface GoldenSetSwing {
   sequence_no: number;
   start_ms: number;
   end_ms: number;
+  address_ms: number;
+  takeaway_ms: number;
+  top_ms: number;
+  impact_ms: number;
+  finish_ms: number;
+  downswing_ms?: number | null;
+  backswing_ms?: number | null;
+  tempo_ratio?: number | null;
+  frames: Record<string, number>;
   events: {
     address: SwingEventRecord;
     takeaway: SwingEventRecord;
@@ -173,13 +189,15 @@ export default function GoldenAuditPage() {
           method: "PUT",
           body: JSON.stringify({
             time_ms: targetMs,
-            source: "human_verified",
+            frame: currentFrame,
+            status: "human_verified",
             rationale: `人工逐格校正於 ${new Date().toLocaleTimeString()}（第 ${currentFrame} 幀）`,
           }),
         }
       );
+      const evFrame = res?.event?.frame ?? currentFrame;
       setMessage({
-        text: `已成功將第 #${selectedSwing.sequence_no} 球之 ${EVENT_LABELS[eventName]} 校正為 ${targetMs}ms（第 ${res.event.frame_idx} 幀）`,
+        text: `已成功將第 #${selectedSwing.sequence_no} 球之 ${EVENT_LABELS[eventName]} 校正為 ${targetMs}ms（第 ${evFrame} 幀，人工已確認）`,
         type: "success",
       });
       // 重新整理資料
@@ -228,15 +246,18 @@ export default function GoldenAuditPage() {
     });
   };
 
-  // 節奏計算 (Backswing / Downswing)
+  // 節奏計算 (Backswing / Downswing: P1-4 嚴格高爾夫運動學定義)
   const calcTempoRatio = (sw: GoldenSetSwing) => {
+    if (sw.tempo_ratio !== undefined && sw.tempo_ratio !== null) {
+      return sw.tempo_ratio.toFixed(2);
+    }
     const top = sw.events?.top?.time_ms;
     const impact = sw.events?.impact?.time_ms;
-    const address = sw.events?.address?.time_ms || sw.events?.takeaway?.time_ms;
-    if (top && impact && address && top > address && impact > top) {
-      const bs = top - address;
+    const takeaway = sw.events?.takeaway?.time_ms;
+    if (top && impact && takeaway && takeaway < top && top < impact) {
+      const bs = top - takeaway;
       const ds = impact - top;
-      if (ds > 10) return (bs / ds).toFixed(2);
+      if (ds > 0 && bs > 0) return (bs / ds).toFixed(2);
     }
     return "N/A";
   };
@@ -420,7 +441,7 @@ export default function GoldenAuditPage() {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {(["address", "takeaway", "top", "impact", "finish"] as const).map((evKey) => {
                 const evData = selectedSwing?.events?.[evKey];
-                const isVerified = evData?.source === "human_verified";
+                const isVerified = evData?.status === "human_verified";
                 return (
                   <button
                     key={evKey}
@@ -517,13 +538,16 @@ export default function GoldenAuditPage() {
               </div>
             )}
 
-            {/* 各事件表格 */}
+            {/* 各事件表格 (P0-1 嚴格前後端資料契約) */}
             <div className="space-y-2">
               {(["address", "takeaway", "top", "impact", "finish"] as const).map((evKey) => {
                 const evData = selectedSwing?.events?.[evKey];
-                const isVerified = evData?.source === "human_verified";
-                const machineMs = evData?.machine_suggested_ms ?? evData?.time_ms;
-                const deltaMs = evData ? evData.time_ms - machineMs : 0;
+                const isVerified = evData?.status === "human_verified";
+                const isUncertain = evData?.status === "uncertain";
+                const origMs = evData?.previous_value ? evData.previous_value.time_ms : evData?.time_ms;
+                const origFrame = evData?.previous_value ? evData.previous_value.frame : evData?.frame;
+                const deltaMs = evData && origMs !== undefined ? evData.time_ms - origMs : 0;
+                const deltaFrames = evData && origFrame !== undefined ? evData.frame - origFrame : 0;
 
                 return (
                   <div
@@ -547,18 +571,21 @@ export default function GoldenAuditPage() {
                           className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
                             isVerified
                               ? "bg-emerald-900/80 text-emerald-300 border border-emerald-700"
+                              : isUncertain
+                              ? "bg-amber-950 text-amber-400 border border-amber-800"
                               : "bg-sky-950 text-sky-400 border border-sky-800"
                           }`}
                         >
-                          {isVerified ? "人工已確認" : "演算法建議"}
+                          {isVerified ? "人工已確認" : isUncertain ? "標記不確定" : "演算法建議"}
                         </span>
                       </div>
                       <div className="text-[10px] text-gray-400 mt-1">
                         依據: {evData?.rationale || "運動學動能峰值"}
                       </div>
-                      {isVerified && evData?.updated_at && (
-                        <div className="text-[9px] text-gray-500">
-                          校核時間: {new Date(evData.updated_at).toLocaleTimeString()}
+                      {isVerified && evData?.verified_at && (
+                        <div className="text-[9px] text-emerald-400">
+                          校核時間: {new Date(evData.verified_at).toLocaleTimeString()}{" "}
+                          {evData.verified_by ? `(${evData.verified_by})` : ""}
                         </div>
                       )}
                     </div>
@@ -568,11 +595,12 @@ export default function GoldenAuditPage() {
                         {evData?.time_ms}ms
                       </div>
                       <div className="text-[10px] text-gray-400">
-                        第 {evData?.frame_idx} 幀
+                        第 {evData?.frame} 幀
                       </div>
-                      {isVerified && deltaMs !== 0 && (
+                      {isVerified && (deltaMs !== 0 || deltaFrames !== 0) && (
                         <div className="font-mono text-[9px] text-amber-400">
-                          Δ {deltaMs > 0 ? `+${deltaMs}` : deltaMs}ms
+                          Δ {deltaMs > 0 ? `+${deltaMs}` : deltaMs}ms (
+                          {deltaFrames > 0 ? `+${deltaFrames}` : deltaFrames}f)
                         </div>
                       )}
                     </div>
@@ -593,7 +621,7 @@ export default function GoldenAuditPage() {
               {swings.map((sw, idx) => {
                 const isSelected = idx === selectedSwingIndex;
                 const verifiedCount = Object.values(sw.events || {}).filter(
-                  (e) => e.source === "human_verified"
+                  (e) => e.status === "human_verified"
                 ).length;
                 return (
                   <button
