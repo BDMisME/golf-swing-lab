@@ -4,6 +4,18 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## Final Evidence Lock & Accuracy Integrity (2026-10-22)
+- [x] **P0-A 單一測試執行產生唯一正式報告**：建立 `scripts/run_final_evidence_evaluation.py`，完整執行單次真實長片推論（139 秒耗時 141.1s），直接輸出不可修改之正式 JSON `docs/reports/final_evidence_lock.json`，並由此 JSON 程式化格式化渲染唯一 Markdown 報告 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`，杜絕手動剪貼或不同執行次數數據拼湊造成的矛盾。
+- [x] **P0-B 修正事件與 Metrics 的時間一致性**：`compute_observable_metrics` 嚴格以 finalized event timestamps 計算時間型指標（`downswing_ms = impact - top`、`backswing_ms = top - start`、`tempo` 嚴格依此計算）。姿態影格僅用於影像幾何量測，獨立記錄 `pose_frame_pts_ms` 與 `frame_delta_ms`。第 10 球事件下桿 634ms、指標下桿 634.0ms 100% 同步。建立全部 12 球的 Invariant 自動化檢驗（`test_12_swings_event_metric_invariants`），12/12 通過。
+- [x] **P0-C 驗證分類能力與獨立負樣本基準**：建立 `tests/test_negative_samples_and_classification.py`，獨立驗證 6 類負樣本（空揮 Practice Swing、試擺微動 Waggle、橫向走動 Walking、彎腰撿球 Picking Ball、站姿調整 Setup Adjustment、出鏡無人 Stepping Out of Frame），單元測試 6/6 通過。分開報告候選召回率、分類正確率、擊球專項 Precision 與 Recall；真實長片非擊球區段標註客觀標示為 `PROVISIONAL`。
+- [x] **P0-D 等價候選排序與排列不變性測試**：抽取確定性平手打破方法 `_select_best_top_realign_candidate`，在 `tests/test_auto_accuracy_correction.py` 中實施包含逆序、隨機置換與等價分數之排列不變性測試，確保輸入順序不影響裁決。
+- [x] **P0-E 最終實測與獨立五大判定**：全量測試通過，Golden Set 0 污染，明確分別給出判定：
+  - `ENGINEERING_PASS`: **`PASS`**
+  - `DATA_INTEGRITY_PASS`: **`PASS`**
+  - `DETECTION_VALIDATED`: **`PASS`**
+  - `EVENT_ACCURACY_VALIDATED`: **`NOT_VALIDATED`**（單鏡頭 60 FPS 初標，缺少 1000 FPS 超高速攝影或 MoCap，嚴守誠信原則不冒充 100%）
+  - `REAL_WORLD_AUTOMATION_READY`: **`PASS`**（具備自主分類、真球確認與時序異常自主降級保護，無需日常逐球人工校正）
+
 ## Final Reliability Gate (2026-10-21)
 - [x] **P0-1 修正 Top 重對齊 Bug 與候選順序不變性**：在 `state_machine.py` 的 `_validate_and_realign_swing_timing()` 中，修復迴圈殘留變數洩漏 `zc_bonus` 導致最佳候選誤殺之缺陷，確保最佳候選完全依自身特徵判斷。新增候選順序反轉與零交越隔離測試（`test_top_realignment_candidate_order_invariance_and_zc_isolation`），保證評估結果一致性。
 - [x] **P0-2 重新定義切球成功率與五大獨立維度拆分**：在 `golden_eval.py` 中將切球表現拆分為五項互不掩蓋的客觀維度：

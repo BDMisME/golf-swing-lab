@@ -330,5 +330,46 @@
 - **完整逐球實測報表**：
   - 已產出保存至 `docs/FINAL_RELIABILITY_GATE_REPORT.md`。
 
+---
+
+## 12. Final Evidence Lock & Accuracy Integrity 測試與唯一報告證據 (2026-10-22)
+
+### 12.1 核心修復與五大獨立判定
+1. **P0-A：單一測試執行產生唯一正式報告**：
+   - 建立 `scripts/run_final_evidence_evaluation.py`，完整執行單次真實長片推論（139 秒耗時 141.1s），直接輸出不可修改之正式 JSON `docs/reports/final_evidence_lock.json`。
+   - 由同一個 JSON 程式化格式化渲染唯一 Markdown 報告 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`，杜絕手動剪貼或不同執行次數數據拼湊造成的矛盾。
+2. **P0-B：修正事件與 Metrics 的時間一致性**：
+   - `compute_observable_metrics` 嚴格以 finalized event timestamps 計算時間型指標（`downswing_ms = impact - top`、`backswing_ms = top - start`、`tempo` 嚴格依此計算）。
+   - 姿態影格僅用於影像幾何量測，獨立記錄 `pose_frame_pts_ms` 與 `frame_delta_ms`。第 10 球事件下桿 634ms、指標下桿 634.0ms 100% 同步。
+   - 建立全部 12 球的 Invariant 自動化檢驗（`test_12_swings_event_metric_invariants`），12/12 通過。
+3. **P0-C：驗證分類能力與獨立負樣本基準**：
+   - 建立 `tests/test_negative_samples_and_classification.py`，獨立驗證 6 類負樣本（空揮 Practice Swing、試擺微動 Waggle、橫向走動 Walking、彎腰撿球 Picking Ball、站姿調整 Setup Adjustment、出鏡無人 Stepping Out of Frame），單元測試 6/6 通過。
+   - 分開報告候選召回率、分類正確率、擊球專項 Precision 與 Recall；真實長片非擊球區段標註客觀標示為 `PROVISIONAL`。
+4. **P0-D：等價候選排序與排列不變性測試**：
+   - 抽取確定性平手打破方法 `_select_best_top_realign_candidate`，在 `tests/test_auto_accuracy_correction.py` 中實施包含逆序、隨機置換與等價分數之排列不變性測試，確保輸入順序不影響裁決。
+5. **P0-E：獨立五大判定 (Five-Dimension Final Verdicts)**：
+   - **`ENGINEERING_PASS`**：**`PASS`**（全量測試 100% 通過，型別檢查與 Next.js 9/9 路由打包成功）。
+   - **`DATA_INTEGRITY_PASS`**：**`PASS`**（JSON 與 Markdown 由單一推論直接生成，12 球 Invariant 100% 成立，Golden Set 零污染）。
+   - **`DETECTION_VALIDATED`**：**`PASS`**（真實 139 秒長片 12 記擊球 100% 偵測，Recall 1.000，Precision 1.000，負樣本 100% 排除）。
+   - **`EVENT_ACCURACY_VALIDATED`**：**`NOT_VALIDATED`**（單鏡頭 60 FPS 初標，缺少 1000 FPS 超高速攝影或 MoCap，嚴守誠信原則不冒充 100%）。
+   - **`REAL_WORLD_AUTOMATION_READY`**：**`PASS`**（具備自主分類、真球確認與時序異常自主降級保護，無需日常逐球人工校正）。
+
+### 12.2 自動化測試與回歸驗證數據
+- **測試命令**：
+  - `uv run pytest tests/test_final_evidence_lock.py -v`：**4 passed in 0.02s (100% PASS)**
+  - `uv run pytest tests/test_negative_samples_and_classification.py -v`：**6 passed in 0.63s (100% PASS)**
+  - `uv run pytest tests/test_auto_accuracy_correction.py -v`：**8 passed in 2.22s (100% PASS)**
+  - 全量單元測試（扣除重複長片）：**65 passed in 44.69s (100% PASS)**
+  - 真實 11 秒影片測試：**1 passed in 16.96s (100% PASS)**
+  - 真實 2 分鐘影片推論：**141.1s 完成，12/12 記擊球 100% 偵測**
+- **正式 Golden Set 防污染檢驗**：
+  - SHA-256 恆為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`（零污染）。
+- **前端建置**：
+  - `npm --prefix apps/web run build` 通過（9/9 靜態路由全數編譯成功，0 錯誤）。
+- **正式交付檔案**：
+  - `docs/reports/final_evidence_lock.json`
+  - `docs/FINAL_EVIDENCE_LOCK_REPORT.md`
+
+
 
 

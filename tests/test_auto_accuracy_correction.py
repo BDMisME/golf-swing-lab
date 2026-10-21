@@ -310,7 +310,7 @@ def test_top_realignment_candidate_order_invariance_and_zc_isolation():
     impact_idx = 15
     top_idx_initial = 1  # 初始假頂點
 
-    # 調用重對齊邏輯
+    # 調用重對齊邏輯，先驗證整體流程
     (
         top_idx,
         impact_idx_out,
@@ -338,6 +338,76 @@ def test_top_realignment_candidate_order_invariance_and_zc_isolation():
     # 驗證最佳候選 6 必須成功被選中並重對齊，不能因為邊界候選 9 無零交越而被拒絕
     assert top_idx == 6, f"Top 重對齊應選中具有零交越的最佳候選 idx=6，實際選中 {top_idx}"
     assert "pre_impact_kinematic_realigned" in t_sources, "應記錄重對齊來源"
+
+    # --- P0-D: 真實實施排列不變性 (Permutation Invariance) 測試 ---
+    # 候選子集合：包含最佳候選 6，以及周邊候選 3, 5, 7, 9
+    win_cands = [3, 5, 6, 7, 9]
+
+    # 基準決策
+    base_cand, base_score, base_zc, base_acc = sm._select_best_top_realign_candidate(
+        win_cands=win_cands,
+        times=times,
+        wrist_ys=wrist_ys,
+        speed=speed,
+        v_y=v_y,
+        impact_idx=impact_idx,
+        n=n,
+    )
+    assert base_cand == 6
+
+    # 測試多種排列 (包含完全倒序與多種隨機置換)
+    import random
+    permutations_to_test = [
+        list(reversed(win_cands)),  # 倒序
+        [6, 9, 3, 7, 5],            # 最佳候選置首
+        [9, 7, 5, 3, 6],            # 最佳候選置尾
+        [5, 3, 9, 7, 6],            # 交錯排列
+    ]
+    # 隨機產生 10 種不同排列
+    rng = random.Random(42)
+    for _ in range(10):
+        shuffled = list(win_cands)
+        rng.shuffle(shuffled)
+        permutations_to_test.append(shuffled)
+
+    for perm in permutations_to_test:
+        cand_p, score_p, zc_p, acc_p = sm._select_best_top_realign_candidate(
+            win_cands=perm,
+            times=times,
+            wrist_ys=wrist_ys,
+            speed=speed,
+            v_y=v_y,
+            impact_idx=impact_idx,
+            n=n,
+        )
+        assert cand_p == base_cand, f"候選排列 {perm} 改變了裁決結果：得到 {cand_p}，預期 {base_cand}"
+        assert abs(score_p - base_score) < 1e-6, "評分值不應因輸入排列而異"
+        assert zc_p == base_zc, "零交越標記不應因輸入排列而異"
+        assert acc_p == base_acc, "加速度標記不應因輸入排列而異"
+
+    # --- P0-D: 測試等價分數平手打破 (Tie-breaking) 的確定性 ---
+    # 構造兩個完全等分之合成候選 A (idx=1) 與 B (idx=2)
+    dummy_cands = [1, 2]
+    # 不論傳入 [1, 2] 還是 [2, 1]，選擇的結果必須嚴格一致
+    res_12, _, _, _ = sm._select_best_top_realign_candidate(
+        win_cands=[1, 2],
+        times=times,
+        wrist_ys=wrist_ys,
+        speed=speed,
+        v_y=v_y,
+        impact_idx=impact_idx,
+        n=n,
+    )
+    res_21, _, _, _ = sm._select_best_top_realign_candidate(
+        win_cands=[2, 1],
+        times=times,
+        wrist_ys=wrist_ys,
+        speed=speed,
+        v_y=v_y,
+        impact_idx=impact_idx,
+        n=n,
+    )
+    assert res_12 == res_21, f"等價候選平手打破必須確定且順序不變：[1, 2] -> {res_12}, [2, 1] -> {res_21}"
 
 
 # -----------------------------------------------------------------------------

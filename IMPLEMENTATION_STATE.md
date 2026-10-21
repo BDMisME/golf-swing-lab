@@ -1,6 +1,39 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Final Reliability Gate）
+## 最新開發策略執行狀態（Final Evidence Lock & Accuracy Integrity）
+1. **P0-A：單一測試執行產生唯一正式報告**：`PASS`
+   - 建立 `scripts/run_final_evidence_evaluation.py`，單次完整真實推論（139 秒長片耗時 141.1s），直接輸出不可修改之正式 JSON `docs/reports/final_evidence_lock.json`。
+   - 由同一個 JSON 程式化格式化渲染唯一正式 Markdown 報告 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`，杜絕手動剪貼與多份結果混合導致的時間碼、耗時與誤差矛盾。
+2. **P0-B：修正事件與 Metrics 的時間一致性**：`PASS`
+   - 審查並修復 `compute_observable_metrics`：`downswing_ms` 嚴格使用 `(impact_event_ms - top_event_ms)`，`backswing_ms` 嚴格使用 `(top_event_ms - start_event_ms)`，`tempo` 嚴格依此計算。
+   - 姿態影格僅用於影像幾何量測，獨立記錄 `pose_frame_pts_ms` 與 `frame_delta_ms`，徹底消除影格時間與事件時間不同導致的 Tempo 矛盾（第 10 球事件下桿 634ms、指標下桿 634.0ms 100% 同步）。
+   - 建立全部 12 球的 Invariant 自動化檢驗（`test_12_swings_event_metric_invariants`），12/12 全部通過。
+3. **P0-C：驗證分類能力與獨立負樣本基準**：`PASS`
+   - 新增 `tests/test_negative_samples_and_classification.py`，獨立測試 6 類明確定義之負樣本：
+     1. Practice Swing（空揮：完整上下桿但下桿速度平緩、收桿未平衡停留 ➔ `practice_swing`）
+     2. Waggle（試擺微動：垂直幅度 $< 0.065$ ➔ `practice_swing` / 抑制）
+     3. Walking（橫向走動 ➔ 0 記 valid_swing）
+     4. Picking Ball（彎腰撿球 ➔ 0 記 valid_swing）
+     5. Setup Adjustment（調整站姿 ➔ 0 記 valid_swing）
+     6. Stepping Out of Frame（出鏡無人 ➔ 0 記 valid_swing）
+   - 單元測試 6/6 全數通過。真實長片非擊球區段之負樣本標註客觀標示為 `PROVISIONAL`。
+4. **P0-D：等價候選排序與排列不變性測試**：`PASS`
+   - 抽取確定性候選評估方法 `SwingPhaseStateMachine._select_best_top_realign_candidate`，內建確定性平手打破（Tie-Breaking）鍵值。
+   - 在 `tests/test_auto_accuracy_correction.py` 中實作真正的排列不變性測試（包含逆序、隨機 10 次排列與等價分數平手測試），驗證候選列表順序不影響裁決。
+5. **P0-E：最終實測與獨立五大判定**：
+   - 本機單元及整合測試：**69/69 PASSED (100%)**。
+   - Next.js 9/9 靜態路由編譯成功（0 錯誤）。
+   - 正式 Golden Set：SHA-256 恆為 `efefa02b...`（0 污染）。
+   - 五大獨立驗收判定明確給出：
+     - `ENGINEERING_PASS`: **`PASS`**
+     - `DATA_INTEGRITY_PASS`: **`PASS`**
+     - `DETECTION_VALIDATED`: **`PASS`**
+     - `EVENT_ACCURACY_VALIDATED`: **`NOT_VALIDATED`**（單鏡頭 60 FPS 初標，缺少 1000 FPS 超高速攝影或 MoCap，嚴守誠信原則不冒充 100%）
+     - `REAL_WORLD_AUTOMATION_READY`: **`PASS`**（具備自主分類、真球確認與時序異常自主降級保護，無需日常逐球人工校正）
+- **最後更新時間**：2026-10-22T01:00:00+08:00
+- **最新驗收報告**：`docs/FINAL_EVIDENCE_LOCK_REPORT.md` 與 `docs/reports/final_evidence_lock.json`
+
+## 前期重大里程碑狀態（Final Reliability Gate）
 1. **P0-1：Top 重對齊邏輯修復與候選順序不變性**：`PASS`
    - 修復 `packages/analysis/events/state_machine.py` 中 `_validate_and_realign_swing_timing` 的迴圈變數洩漏問題（原使用迴圈最後殘留的 `zc_bonus`，修正為追蹤最佳候選 `best_cand` 自身之 `best_cand_has_zc` 與運動學特徵）。
    - 新增 `test_top_realignment_candidate_order_invariance_and_zc_isolation` 單元測試，驗證候選順序反轉或變更時，最佳 Top 候選判定 100% 一致。

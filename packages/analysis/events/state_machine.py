@@ -101,6 +101,55 @@ class SwingPhaseStateMachine:
     def __init__(self, model_version: str = "pose-v2") -> None:
         self.model_version = model_version
 
+    @staticmethod
+    def _select_best_top_realign_candidate(
+        win_cands: list[int],
+        times: list[int],
+        wrist_ys: list[float],
+        speed: np.ndarray,
+        v_y: np.ndarray,
+        impact_idx: int,
+        n: int,
+    ) -> tuple[int | None, float, bool, bool]:
+        """
+        在候選集合中評估並選出最佳 Top 重對齊候選。
+        實作確定性排序與平手打破規則 (Tie-Breaking)，保證輸入順序或排列不影響裁決結果 (Permutation Invariance)。
+        回傳: (best_cand, best_cand_score, best_cand_has_zc, best_cand_has_accel)
+        """
+        if not win_cands:
+            return None, -1e9, False, False
+
+        sub_ys = [wrist_ys[i] for i in win_cands]
+        min_sub_y = min(sub_ys)
+        max_sub_y = max(sub_ys)
+        y_span = max(1e-3, max_sub_y - min_sub_y)
+
+        candidates_evaluated = []
+        for c in win_cands:
+            h_s = (max_sub_y - wrist_ys[c]) / y_span
+            cand_zc = bool(c < n - 1 and v_y[c] <= 0 and v_y[c + 1] > 0)
+            zc_bonus = 2.0 if cand_zc else 0.0
+            p_s = 1.0 if (0 < c < n - 1 and speed[c] <= speed[c - 1] and speed[c] <= speed[c + 1]) else 0.0
+            post_s = speed[c : min(impact_idx + 1, c + 5)]
+            acc = float(np.max(post_s)) - speed[c] if len(post_s) > 0 else 0.0
+
+            score = h_s * 3.0 + zc_bonus * 2.5 + p_s * 1.5 + acc * 40.0
+            has_accel = bool(acc >= 0.003)
+
+            # 確定性評分元組：(score, -wrist_ys[c], times[c])
+            # 當 score 相等時，優先選擇手腕最高者 (-wrist_y 越大)，再選擇靠近 Impact 者 (times 越大)
+            candidates_evaluated.append({
+                "cand": c,
+                "score": score,
+                "cand_zc": cand_zc,
+                "has_accel": has_accel,
+                "tie_key": (round(score, 6), -wrist_ys[c], times[c]),
+            })
+
+        # 排序選出最佳候選 (排序鍵不依賴原始列表順序)
+        best = max(candidates_evaluated, key=lambda x: x["tie_key"])
+        return best["cand"], best["score"], best["cand_zc"], best["has_accel"]
+
     def _validate_and_realign_swing_timing(
         self,
         times: list[int],
@@ -161,29 +210,21 @@ class SwingPhaseStateMachine:
                     if (times[impact_idx] - 650) <= times[i] <= (times[impact_idx] - 180)
                 ]
                 if win_cands:
-                    best_cand = win_cands[0]
-                    best_cand_score = -1e9
+                    best_cand, best_cand_score, best_cand_has_zc, best_cand_has_accel = (
+                        self._select_best_top_realign_candidate(
+                            win_cands=win_cands,
+                            times=times,
+                            wrist_ys=wrist_ys,
+                            speed=speed,
+                            v_y=v_y,
+                            impact_idx=impact_idx,
+                            n=n,
+                        )
+                    )
                     sub_ys = [wrist_ys[i] for i in win_cands]
                     min_sub_y = min(sub_ys)
                     max_sub_y = max(sub_ys)
                     y_span = max(1e-3, max_sub_y - min_sub_y)
-
-                    best_cand_has_zc = False
-                    best_cand_has_accel = False
-                    for c in win_cands:
-                        h_s = (max_sub_y - wrist_ys[c]) / y_span
-                        cand_zc = bool(c < n - 1 and v_y[c] <= 0 and v_y[c + 1] > 0)
-                        zc_bonus = 2.0 if cand_zc else 0.0
-                        p_s = 1.0 if (0 < c < n - 1 and speed[c] <= speed[c - 1] and speed[c] <= speed[c + 1]) else 0.0
-                        post_s = speed[c : min(impact_idx + 1, c + 5)]
-                        acc = float(np.max(post_s)) - speed[c] if len(post_s) > 0 else 0.0
-
-                        score = h_s * 3.0 + zc_bonus * 2.5 + p_s * 1.5 + acc * 40.0
-                        if score > best_cand_score:
-                            best_cand_score = score
-                            best_cand = c
-                            best_cand_has_zc = cand_zc
-                            best_cand_has_accel = bool(acc >= 0.003)
 
                     stroke_height = wrist_ys[impact_idx] - wrist_ys[best_cand]
                     full_amp = max(wrist_ys) - min(wrist_ys)
@@ -659,11 +700,20 @@ class SwingPhaseStateMachine:
         # 判斷是正式揮桿 (valid_swing) 還是空揮練習 (practice_swing)
         finish_hold_ms = max(0, times[-1] - times[follow_idx])
         downswing_peak_energy = max(energies[top_idx : impact_idx + 1] or [0.0])
-        is_subtle_waggle = (
-            vertical_amplitude < 0.065
-            or (downswing_peak_energy < 0.015 and finish_hold_ms < 300)
+        max_ds_speed = float(np.max(speed[top_idx : impact_idx + 1])) if impact_idx > top_idx else 0.0
+
+        has_impact_evidence = bool(
+            "audio_transient_consensus" in impact_sources
+            or "ball_flight_observed_launch" in impact_sources
+            or (ball_strike_ms is not None and abs(ball_strike_ms - times[impact_idx]) <= 150)
         )
-        if is_subtle_waggle:
+
+        is_practice = (
+            vertical_amplitude < 0.065
+            or (downswing_peak_energy < 0.015 and max_ds_speed < 0.0009)
+            or (max_ds_speed < 0.0010 and not has_impact_evidence and finish_hold_ms < 400)
+        )
+        if is_practice:
             label = "practice_swing"
         else:
             label = "valid_swing"
@@ -826,6 +876,10 @@ def compute_observable_metrics(
     # 4. 上下桿節奏比 (backswing_downswing_ratio) 與 P0-3 異常時序保護
     top_ev = next((e for e in events if e.event_name == "top"), None)
     imp_ev = next((e for e in events if "impact" in e.event_name), None)
+    takeaway_ev = next((e for e in events if e.event_name == "takeaway"), None)
+    addr_ev = next((e for e in events if e.event_name == "address"), None)
+    start_ev = takeaway_ev or addr_ev
+
     is_timing_anomalous = False
     if top_ev and imp_ev:
         cur_ds = imp_ev.time_ms - top_ev.time_ms
@@ -834,8 +888,7 @@ def compute_observable_metrics(
         if "timing_anomaly_detected" in top_ev.detection_sources or "timing_anomaly_detected" in imp_ev.detection_sources:
             is_timing_anomalous = True
 
-    f_start = f_take or f_addr
-    if is_timing_anomalous or not (f_start and f_top and f_imp):
+    if is_timing_anomalous or not (start_ev and top_ev and imp_ev):
         metrics.append(
             {
                 "metric_key": "backswing_ms",
@@ -870,10 +923,16 @@ def compute_observable_metrics(
             }
         )
     else:
-        bs_ms = max(80, f_top.time_ms - f_start.time_ms)
-        ds_ms = max(60, f_imp.time_ms - f_top.time_ms)
+        # 嚴格以 finalized event timestamps 計算時間型指標 (P0-B: 杜絕混用影格時間產生不同數值)
+        bs_ms = max(80, top_ev.time_ms - start_ev.time_ms)
+        ds_ms = max(60, imp_ev.time_ms - top_ev.time_ms)
         tempo_ratio = round(bs_ms / float(ds_ms), 2)
-        tempo_conf = round(min(f_start.pose_confidence, f_top.pose_confidence, f_imp.pose_confidence), 3)
+        tempo_conf = round(min(start_ev.confidence, top_ev.confidence, imp_ev.confidence), 3)
+
+        _, delta_start = get_event_frame("takeaway" if takeaway_ev else "address")
+        _, delta_top = get_event_frame("top")
+        _, delta_imp = get_event_frame("impact_estimated")
+
         metrics.append(
             {
                 "metric_key": "backswing_ms",
@@ -882,6 +941,11 @@ def compute_observable_metrics(
                 "confidence": tempo_conf,
                 "source": model_version,
                 "observability": "estimated",
+                "details": {
+                    "event_start_ms": start_ev.time_ms,
+                    "event_top_ms": top_ev.time_ms,
+                    "frame_delta_ms": max(delta_start, delta_top),
+                },
             }
         )
         metrics.append(
@@ -892,6 +956,11 @@ def compute_observable_metrics(
                 "confidence": tempo_conf,
                 "source": model_version,
                 "observability": "estimated",
+                "details": {
+                    "event_top_ms": top_ev.time_ms,
+                    "event_impact_ms": imp_ev.time_ms,
+                    "frame_delta_ms": max(delta_top, delta_imp),
+                },
             }
         )
         metrics.append(
@@ -902,6 +971,11 @@ def compute_observable_metrics(
                 "confidence": tempo_conf,
                 "source": model_version,
                 "observability": "estimated",
+                "details": {
+                    "formula": "backswing_ms / downswing_ms",
+                    "backswing_ms": float(bs_ms),
+                    "downswing_ms": float(ds_ms),
+                },
             }
         )
 
