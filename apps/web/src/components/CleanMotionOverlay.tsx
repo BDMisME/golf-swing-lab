@@ -23,6 +23,9 @@ interface SwingEventItem {
   confidence: number;
   rationale?: string;
   uncertainty_ms?: number;
+  sampling_resolution_ms?: number;
+  detection_sources?: string[];
+  event_timing_error_ms?: number | null;
 }
 
 interface CleanMotionOverlayProps {

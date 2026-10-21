@@ -247,6 +247,7 @@ class CoarseToFineDetector:
                     video_path=video_path,
                     start_ms=win_start,
                     end_ms=win_end,
+                    duration_ms=duration_ms,
                     sequence_no=seq_counter,
                     extractor=extractor,
                     audio_transients_ms=win_transients,
@@ -324,6 +325,7 @@ class CoarseToFineDetector:
         ball_strike_ms: int | None = None,
         audio_status: str = "ok",
         audio_error: str | None = None,
+        duration_ms: int | None = None,
     ) -> CandidateSegmentResult | None:
         own_extractor = extractor is None
         ext = extractor or create_pose_extractor()
@@ -348,31 +350,6 @@ class CoarseToFineDetector:
                 fine_frames,
                 audio_transients_ms=audio_transients_ms,
                 ball_strike_ms=ball_strike_ms,
-            )
-
-            # 根據偵測到的 address/takeaway 與 finish/follow_through 精細對齊揮桿片段邊界
-            refined_start = start_ms
-            refined_end = end_ms
-            if events:
-                ev_map = {e.event_name: e.time_ms for e in events}
-                if "address" in ev_map:
-                    refined_start = max(start_ms, ev_map["address"] - 300)
-                elif "takeaway" in ev_map:
-                    refined_start = max(start_ms, ev_map["takeaway"] - 700)
-
-                if "finish" in ev_map:
-                    refined_end = min(end_ms, ev_map["finish"] + 450)
-                elif "follow_through" in ev_map:
-                    refined_end = min(end_ms, ev_map["follow_through"] + 800)
-                elif "impact" in ev_map:
-                    refined_end = min(end_ms, ev_map["impact"] + 1200)
-
-                if refined_end - refined_start < self.min_swing_duration_ms:
-                    refined_start = start_ms
-                    refined_end = end_ms
-
-            metrics = compute_observable_metrics(
-                frames=fine_frames, events=events, model_version=self.model_version
             )
 
             flags_set: set[str] = set()
@@ -434,14 +411,9 @@ class CoarseToFineDetector:
             else:
                 ball_strike_status = "strike_unknown"
 
-            # 僅儲存精簡過之關鍵影格與抽樣點（避免 API 回傳龐大逐幀資料）
-            event_times = {e.time_ms for e in events}
-            keyframes: list[dict[str, Any]] = []
-            for idx_f, fr in enumerate(fine_frames):
-                if fr.time_ms in event_times or idx_f % 2 == 0:
-                    keyframes.append(fr.to_dict())
-
-            # 若為有效擊球，啟動小白球專用模型與卡爾曼濾波器捕獲出球飛行彈道
+            # ---------------------------------------------------------
+            # 1. 小白球出球觀測與回饋校正 (P0-A)
+            # ---------------------------------------------------------
             ball_traj: list[dict[str, float]] = []
             ball_feedback_info: dict[str, Any] = {"applied": False, "observed_count": 0}
             imp_ev = next((e for e in events if "impact" in e.event_name), None)
@@ -467,16 +439,19 @@ class CoarseToFineDetector:
                     ball_traj = ball_res.get("trajectory_points", [])
                     obs_launch = ball_res.get("observed_launch_ms")
                     obs_count = ball_res.get("observed_count", 0)
+                    launch_state = ball_res.get("launch_state", "airborne" if ball_res.get("is_valid") else "none")
                     ball_feedback_info["observed_count"] = obs_count
+                    ball_feedback_info["launch_state"] = launch_state
 
-                    # 若可靠偵測到真球啟動出球，回饋修正 Impact 事件
-                    if ball_res.get("is_valid") and obs_launch is not None:
+                    # 僅當明確檢測到真球升空 (airborne / moving) 且時間差在生理合理範圍內時，方回饋 Impact
+                    if ball_res.get("is_valid") and launch_state in ("airborne", "moving") and obs_launch is not None:
                         diff = abs(obs_launch - imp_ev.time_ms)
                         if diff <= 180:
                             orig_imp = imp_ev.time_ms
                             imp_ev.time_ms = obs_launch
                             imp_ev.uncertainty_ms = 16
-                            imp_ev.confidence = min(0.98, max(imp_ev.confidence, 0.92))
+                            imp_ev.sampling_resolution_ms = 16
+                            imp_ev.confidence = min(0.96, max(imp_ev.confidence, 0.88))
                             if "ball_flight_observed_launch" not in imp_ev.detection_sources:
                                 imp_ev.detection_sources.append("ball_flight_observed_launch")
                             imp_ev.rationale = f"真球出發點 (ball_launch_onset @ {obs_launch}ms) 權威觀測定位擊球瞬間"
@@ -488,7 +463,9 @@ class CoarseToFineDetector:
                 except Exception as b_exc:
                     logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
 
-            # 局部高 FPS 二次精修 (在初步以 ~15 FPS 抽樣後，針對關鍵 Top 與未獲真球鎖定之 Impact，進行前後 ±200ms 的 60 FPS 精修)
+            # ---------------------------------------------------------
+            # 2. 局部高 FPS 二次精修 (P0-3)
+            # ---------------------------------------------------------
             local_refinements: dict[str, Any] = {}
             if top_ev and (top_ev.uncertainty_ms > 20 or top_ev.confidence < 0.95):
                 top_ref = self._refine_event_local_high_fps(
@@ -503,6 +480,7 @@ class CoarseToFineDetector:
                     top_ev.time_ms = top_ref["refined_ms"]
                     top_ev.confidence = top_ref["confidence"]
                     top_ev.uncertainty_ms = top_ref["uncertainty_ms"]
+                    top_ev.sampling_resolution_ms = top_ref.get("sampling_resolution_ms", 16)
                     for s in top_ref["sources"]:
                         if s not in top_ev.detection_sources:
                             top_ev.detection_sources.append(s)
@@ -521,12 +499,15 @@ class CoarseToFineDetector:
                     imp_ev.time_ms = imp_ref["refined_ms"]
                     imp_ev.confidence = imp_ref["confidence"]
                     imp_ev.uncertainty_ms = imp_ref["uncertainty_ms"]
+                    imp_ev.sampling_resolution_ms = imp_ref.get("sampling_resolution_ms", 16)
                     for s in imp_ref["sources"]:
                         if s not in imp_ev.detection_sources:
                             imp_ev.detection_sources.append(s)
                     local_refinements["impact"] = imp_ref
 
-            # 誠實檢查 detection_sources：未實際發生的來源絕不保留
+            # ---------------------------------------------------------
+            # 3. 誠實清理 detection_sources (未使用的來源絕不保留)
+            # ---------------------------------------------------------
             if imp_ev:
                 if not ball_feedback_info.get("applied") and "ball_flight_observed_launch" in imp_ev.detection_sources:
                     imp_ev.detection_sources.remove("ball_flight_observed_launch")
@@ -537,6 +518,55 @@ class CoarseToFineDetector:
                 else:
                     if "audio_transient_consensus" in imp_ev.detection_sources:
                         imp_ev.detection_sources.remove("audio_transient_consensus")
+
+            # ---------------------------------------------------------
+            # 4. 最終時序合理性防呆 (P0-B)
+            # ---------------------------------------------------------
+            if top_ev and imp_ev:
+                final_ds = imp_ev.time_ms - top_ev.time_ms
+                if final_ds < 180 or final_ds > 650:
+                    if "timing_anomaly_detected" not in top_ev.detection_sources:
+                        top_ev.detection_sources.append("timing_anomaly_detected")
+                    if "timing_anomaly_detected" not in imp_ev.detection_sources:
+                        imp_ev.detection_sources.append("timing_anomaly_detected")
+                    top_ev.confidence = min(top_ev.confidence, 0.55)
+                    imp_ev.confidence = min(imp_ev.confidence, 0.55)
+
+            # ---------------------------------------------------------
+            # 5. 指標與邊界全面重新計算 (P0-C: 資料流單向一致性)
+            # ---------------------------------------------------------
+            metrics = compute_observable_metrics(
+                frames=fine_frames, events=events, model_version=self.model_version
+            )
+
+            # 根據最終 finalized 的事件時間碼精細對齊揮桿片段邊界，並防範溢出原片總長度
+            refined_start = start_ms
+            refined_end = end_ms
+            if events:
+                ev_map = {e.event_name: e.time_ms for e in events}
+                if "address" in ev_map:
+                    # 邊界微調：最多微調 200ms 保留完整準備姿態，避免過度裁切破壞真實覆蓋
+                    refined_start = min(start_ms + 200, max(start_ms, ev_map["address"] - 400))
+                if "finish" in ev_map:
+                    refined_end = max(end_ms - 200, min(end_ms, ev_map["finish"] + 450))
+
+                if refined_end - refined_start < self.min_swing_duration_ms:
+                    refined_start = start_ms
+                    refined_end = end_ms
+
+            # 邊界防溢出安全保護
+            refined_start = max(0, refined_start)
+            if duration_ms is not None and duration_ms > 0:
+                refined_end = min(duration_ms, refined_end)
+            if refined_end <= refined_start:
+                refined_end = refined_start + self.min_swing_duration_ms
+
+            # 依據最終事件時間點提取精簡關鍵影格
+            event_times = {e.time_ms for e in events}
+            keyframes: list[dict[str, Any]] = []
+            for idx_f, fr in enumerate(fine_frames):
+                if fr.time_ms in event_times or idx_f % 2 == 0:
+                    keyframes.append(fr.to_dict())
 
 
             # 提取手腕 2D 軌跡點序列供多球重複性計算
@@ -781,7 +811,8 @@ class CoarseToFineDetector:
             return {
                 "refined_ms": refined_time_ms,
                 "confidence": min(0.96, max(0.75, wrist_confs[refined_idx])),
-                "uncertainty_ms": 16,
+                "uncertainty_ms": 25,
+                "sampling_resolution_ms": 16,
                 "sources": sources,
                 "delta_ms": refined_time_ms - center_ms,
             }
@@ -795,7 +826,8 @@ class CoarseToFineDetector:
             return {
                 "refined_ms": refined_time_ms,
                 "confidence": min(0.95, max(0.72, wrist_confs[decel_idx])),
-                "uncertainty_ms": 16,
+                "uncertainty_ms": 25,
+                "sampling_resolution_ms": 16,
                 "sources": ["wrist_kinematic_deceleration", "local_high_fps_refinement"],
                 "delta_ms": refined_time_ms - center_ms,
             }

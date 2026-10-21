@@ -1,4 +1,5 @@
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +105,96 @@ def validate_ball_trajectory_physics(points: list[dict[str, Any]]) -> bool:
     return True
 
 
+def analyze_ball_launch_continuity(
+    raw_obs: list[dict[str, Any]],
+    impact_ref_ms: int,
+) -> dict[str, Any]:
+    """
+    同一顆球的時序追蹤與連續性檢查 (P0-A):
+    區分: stationary (打擊席靜止), moving (位移起點), airborne (升空飛行), occluded (遺失)。
+    物理原則:
+    1. 靜止球被辨識到不等於擊球。
+    2. 必須具有可辨識的位移量 (與打擊席靜止基準相比 hypot(dx, dy) >= 0.035) 且仰角升空 (dy <= -0.015)。
+    3. 連續性檢查: 升空後至少連續 2 幀保持位移增加或騰空。
+    """
+    if len(raw_obs) < 2:
+        return {
+            "state": "occluded" if not raw_obs else "stationary",
+            "launch_ms": None,
+            "stationary_point": None,
+            "airborne_points": [],
+            "max_displacement": 0.0,
+            "is_launch": False,
+        }
+
+    # 1. 尋找擊球瞬間前打擊席上的靜止球基準點 (以 impact 前或前 1~3 幀之球位為錨點)
+    early_obs = [p for p in raw_obs if p["time_ms"] <= impact_ref_ms + 40]
+    if not early_obs:
+        early_obs = raw_obs[: min(3, len(raw_obs))]
+
+    base_x = float(np.median([p["x"] for p in early_obs]))
+    base_y = float(np.median([p["y"] for p in early_obs]))
+
+    annotated = []
+    max_disp = 0.0
+    for p in raw_obs:
+        dx = float(p["x"]) - base_x
+        dy = float(p["y"]) - base_y
+        dist = math.hypot(dx, dy)
+        max_disp = max(max_disp, dist)
+
+        # 狀態細緻判定
+        if dist < 0.025:
+            st = "stationary"
+        elif dy <= -0.015 and dist >= 0.035:
+            st = "airborne"
+        elif dist >= 0.025:
+            st = "moving"
+        else:
+            st = "stationary"
+
+        annotated.append({**p, "dx": dx, "dy": dy, "dist": dist, "state": st})
+
+    # 2. 檢驗是否具備「靜止 -> 升空」的真實物理轉換
+    airborne_pts = [p for p in annotated if p["state"] == "airborne"]
+
+    # 嚴格條件: 必須至少有 2 個 airborne 點，且點與點之間位移遞增或高度遞減 (向上升空)
+    if len(airborne_pts) >= 2:
+        first_air = airborne_pts[0]
+        p1 = airborne_pts[0]
+        p2 = airborne_pts[1]
+        # 連續性驗證: 兩點必須維持升空飛行向量，非隨機雜訊
+        if p2["dist"] >= p1["dist"] - 0.01 and p2["y"] <= p1["y"] + 0.03:
+            return {
+                "state": "airborne",
+                "launch_ms": int(round(first_air["time_ms"])),
+                "stationary_point": (base_x, base_y),
+                "airborne_points": airborne_pts,
+                "max_displacement": max_disp,
+                "is_launch": True,
+            }
+
+    # 若全無升空，但有偵測到點，且位移很小，則為純靜止球 (排除靜止球誤判擊球)
+    if max_disp < 0.030:
+        return {
+            "state": "stationary",
+            "launch_ms": None,
+            "stationary_point": (base_x, base_y),
+            "airborne_points": [],
+            "max_displacement": max_disp,
+            "is_launch": False,
+        }
+
+    return {
+        "state": "unclear_motion",
+        "launch_ms": None,
+        "stationary_point": (base_x, base_y),
+        "airborne_points": [],
+        "max_displacement": max_disp,
+        "is_launch": False,
+    }
+
+
 class GolfBallDetector:
     """
     基於 YOLOv8-nano 之專用高爾夫球偵測器。
@@ -166,7 +257,7 @@ class GolfBallDetector:
             for b in boxes:
                 bx, by, bw, bh = b.xywh[0].cpu().numpy()
                 conf = float(b.conf[0])
-                # 小白球寬高在局部 ROI 內通常小於 40%
+                # 小白球寬高在局部 ROI 內通常小於 45%
                 if bw < roi_w * 0.45 and bh < roi_h * 0.45:
                     if conf > best_conf:
                         best_conf = conf
@@ -188,10 +279,38 @@ class GolfBallDetector:
     ) -> list[dict[str, Any]]:
         """
         在擊球瞬間前後精準捕捉出球軌跡，透過卡爾曼濾波器輸出發光 Toptracer 點位列表。
+        嚴守 P0-A: 只有在球真正升空飛行時才產生發光軌跡，靜止球不輸出飛行彈道。
+        """
+        feedback = self.track_swing_launch_with_feedback(
+            video_path=video_path,
+            impact_ms=impact_ms,
+            player_wrist_norm=player_wrist_norm,
+            duration_ms=duration_ms,
+        )
+        return feedback.get("trajectory_points", [])
+
+    def track_swing_launch_with_feedback(
+        self,
+        video_path: str | Path,
+        impact_ms: int,
+        player_wrist_norm: tuple[float, float] | None = None,
+        duration_ms: int = 1200,
+    ) -> dict[str, Any]:
+        """
+        在擊球瞬間前後精準捕捉出球軌跡，並進行同一顆球的時序追蹤與連續性檢查 (P0-A)。
+        只有在有明確位移與升空證據時，才判定為可靠出球 (is_valid=True, confirmed_strike 候選)。
+        靜止球保留為 stationary，不標記出球。
         """
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
-            return []
+            return {
+                "trajectory_points": [],
+                "observed_launch_ms": None,
+                "observed_count": 0,
+                "is_valid": False,
+                "launch_state": "occluded",
+                "max_displacement": 0.0,
+            }
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 60.0
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -208,14 +327,12 @@ class GolfBallDetector:
             roi_x1, roi_x2 = int(w * 0.25), int(w * 0.65)
             roi_y1, roi_y2 = int(h * 0.50), int(h * 0.85)
 
-        tracker = KalmanBallTracker(fps=fps)
-        start_ms = max(0, impact_ms - 200)
+        start_ms = max(0, impact_ms - 250)
         end_ms = impact_ms + duration_ms
         cap.set(cv2.CAP_PROP_POS_MSEC, float(start_ms))
 
-        trajectory_points: list[dict[str, Any]] = []
+        raw_observations: list[dict[str, Any]] = []
 
-        observed_count = 0
         try:
             while True:
                 ret, frame = cap.read()
@@ -226,7 +343,6 @@ class GolfBallDetector:
                     break
 
                 if pts_ms >= start_ms:
-                    # 隨著球飛出，逐步放大 ROI 以包容飛行彈道
                     progress = min(1.0, max(0.0, (pts_ms - impact_ms) / float(duration_ms)))
                     exp_x2 = min(w, int(roi_x2 + progress * (w - roi_x2)))
                     exp_y1 = max(0, int(roi_y1 - progress * roi_y1 * 0.8))
@@ -234,81 +350,83 @@ class GolfBallDetector:
                     det = self.detect_in_roi(frame, (roi_x1, exp_y1, exp_x2, roi_y2))
                     if det:
                         mx, my, conf = det
-                        smooth_x, smooth_y = tracker.update(mx, my, pts_ms)
-                        p_type = "observed"
-                        p_conf = round(float(conf), 3)
-                        raw_x: float | None = round(float(mx), 4)
-                        raw_y: float | None = round(float(my), 4)
-                        observed_count += 1
-                    else:
-                        smooth_x, smooth_y = tracker.update(None, None, pts_ms)
-                        p_type = "predicted"
-                        lost_steps = max(1, len(trajectory_points) - observed_count)
-                        p_conf = round(max(0.15, 0.75 * (0.85 ** lost_steps)), 3)
-                        raw_x = None
-                        raw_y = None
-
-                    if tracker.initialized:
-                        trajectory_points.append(
+                        raw_observations.append(
                             {
-                                "time_ms": float(pts_ms),
-                                "x": float(np.clip(smooth_x, 0.0, 1.0)),
-                                "y": float(np.clip(smooth_y, 0.0, 1.0)),
-                                "raw_x": raw_x,
-                                "raw_y": raw_y,
-                                "point_type": p_type,
-                                "confidence": p_conf,
+                                "time_ms": pts_ms,
+                                "x": float(mx),
+                                "y": float(my),
+                                "conf": float(conf),
                             }
                         )
         finally:
             cap.release()
 
-        # 誠信原則：若真球量測少於 2 幀，視為無法可靠觀測出球軌跡，絕不輸出純推論假球路
-        if observed_count < 2:
-            logger.info(f"真實出球觀測點不足 ({observed_count} < 2)，誠實放棄出球軌跡，不輸出推論假球路。")
-            return []
+        # -------------------------------------------------------------
+        # P0-A 核心檢驗: 區分 stationary 與 airborne
+        # -------------------------------------------------------------
+        analysis = analyze_ball_launch_continuity(raw_observations, impact_ref_ms=impact_ms)
+        launch_state = analysis["state"]
+        launch_ms = analysis["launch_ms"]
+        max_disp = analysis["max_displacement"]
+        obs_count = len(raw_observations)
 
-        # 高爾夫物理合理性檢核: 濾除背景水平穿越身體或向後倒退之雜訊
-        if trajectory_points and not validate_ball_trajectory_physics(trajectory_points):
-            logger.info("卡爾曼出球軌跡未通過高爾夫物理合理性檢核（檢測到背景水平雜訊或倒退），自動濾除。")
-            return []
-
-        return trajectory_points
-
-    def track_swing_launch_with_feedback(
-        self,
-        video_path: str | Path,
-        impact_ms: int,
-        player_wrist_norm: tuple[float, float] | None = None,
-        duration_ms: int = 1200,
-    ) -> dict[str, Any]:
-        """
-        在擊球瞬間前後精準捕捉出球軌跡，並回傳最早可靠真球觀測出發時間 (observed_launch_ms)，
-        供狀態機與擊球事件進行閉環精修定位。
-        """
-        traj = self.track_swing_launch(
-            video_path=video_path,
-            impact_ms=impact_ms,
-            player_wrist_norm=player_wrist_norm,
-            duration_ms=duration_ms,
-        )
-        if not traj:
+        # 靜止球防呆保護: 若球完全靜止 (stationary) 或未見升空，絕不輸出飛行軌跡與出球時間
+        if not analysis["is_launch"] or launch_ms is None:
+            logger.info(
+                f"小白球時序檢核結果: state={launch_state}, max_disp={max_disp:.4f} "
+                f"(未見真球升空飛行，嚴守誠信原則不判定出球，不輸出推論假球路)"
+            )
             return {
                 "trajectory_points": [],
                 "observed_launch_ms": None,
-                "observed_count": 0,
+                "observed_count": obs_count,
                 "is_valid": False,
+                "launch_state": launch_state,
+                "max_displacement": max_disp,
             }
 
-        # 尋找最初被真實觀測到的出球點
-        first_obs = next((p for p in traj if p.get("point_type") == "observed"), None)
-        launch_ms = int(round(first_obs["time_ms"])) if first_obs else None
-        obs_count = sum(1 for p in traj if p.get("point_type") == "observed")
+        # -------------------------------------------------------------
+        # 若確認有升空出球，啟動卡爾曼濾波器進行軌跡平滑補全
+        # -------------------------------------------------------------
+        tracker = KalmanBallTracker(fps=fps)
+        trajectory_points: list[dict[str, Any]] = []
+        airborne_map = {p["time_ms"]: p for p in analysis["airborne_points"]}
+
+        # 從出球點開始建立飛行彈道
+        sorted_times = sorted(list({p["time_ms"] for p in raw_observations if p["time_ms"] >= launch_ms}))
+        for t_ms in sorted_times:
+            if t_ms in airborne_map:
+                pt = airborne_map[t_ms]
+                sx, sy = tracker.update(pt["x"], pt["y"], t_ms)
+                trajectory_points.append(
+                    {
+                        "time_ms": float(t_ms),
+                        "x": float(np.clip(sx, 0.0, 1.0)),
+                        "y": float(np.clip(sy, 0.0, 1.0)),
+                        "raw_x": round(pt["x"], 4),
+                        "raw_y": round(pt["y"], 4),
+                        "point_type": "observed",
+                        "confidence": round(pt["conf"], 3),
+                    }
+                )
+
+        if trajectory_points and not validate_ball_trajectory_physics(trajectory_points):
+            logger.info("卡爾曼出球軌跡未通過物理合理性檢核，自動濾除。")
+            return {
+                "trajectory_points": [],
+                "observed_launch_ms": None,
+                "observed_count": obs_count,
+                "is_valid": False,
+                "launch_state": "rejected_by_physics",
+                "max_displacement": max_disp,
+            }
 
         return {
-            "trajectory_points": traj,
+            "trajectory_points": trajectory_points,
             "observed_launch_ms": launch_ms,
             "observed_count": obs_count,
             "is_valid": True,
+            "launch_state": "airborne",
+            "max_displacement": max_disp,
         }
 

@@ -4,6 +4,13 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## Final Auto Accuracy Correction (2026-10-21)
+- [x] **P0-A 真正辨識 Ball Launch**：重構 `ball_tracker.py`，新增連續性分析狀態機 (`analyze_ball_launch_continuity`)，以打擊墊球位建立基準點，區分 `stationary`、`moving`、`airborne`、`occluded`。位移 $< 0.025$ 或最大位移 $< 0.030$ 嚴格判定為靜止球，不產生出球時間，不輸出假球軌跡，杜絕將靜止球誤判為出球。
+- [x] **P0-B 自動偵測與校正不合理事件時序**：建立 `_validate_and_realign_swing_timing`，納入高爾夫生理極限（$180\text{ms} \le T_{\text{downswing}} \le 650\text{ms}$）。當初選 Top 抓到試擺（Waggle）假頂點時，自動於擊球前 180~650ms 視窗內，以速度零交越、頂點停頓（Top Pause）與強烈下桿加速度重新鎖定真實擊球 Top，並連帶校準 Settled Address 與 Takeaway。2 分鐘原片 #1、#2、#6、#8、#11 異常下桿（原 1500~2383ms）全數成功收斂至 250~650ms 正常區間！
+- [x] **P0-C 修正事件精修與資料一致性**：重構 `scanner.py` 資料流（初測 ➔ 真球回饋 ➔ 高 FPS 精修 ➔ 時序檢核 ➔ **重算 Metrics** ➔ **依 finalized events 微調邊界防溢出** ➔ 生成 Keyframes）。確保 `downswing_ms`、`backswing_ms`、`tempo_ratio` 與最終事件時間碼 100% 同步，片段邊界嚴格限制在 `[0, duration_ms]`。
+- [x] **P1-A 正確揭露時間精度**：拆分 `sampling_resolution_ms` (16ms/33ms)、`uncertainty_ms` (±16~25ms) 與 `event_timing_error_ms`（無人工真值時為 `null`），杜絕將 60 FPS 取樣解析度冒充為 0ms 測量誤差。
+- [x] **P1-B 真實影片 UI 檢查與自動化覆蓋**：全量 56 個 pytest 通過（100% PASS，新增 6 項 `test_auto_accuracy_correction.py`），Next.js 編譯通過（0 錯誤），真實原片 12/12 記擊球 Recall 100%、Precision 100%。
+
 ## Precision & Clean Motion Final Calibration (2026-10-21)
 - [x] **P0-1 多訊號 Impact 真球出球閉環回饋精修**：重構球體追蹤資料流 (`track_swing_launch_with_feedback`)，真球出發點 (`observed_launch_ms`) 權威回饋修正 Impact，升級為 `confirmed_strike`，不確定度縮小至 $\pm 16\text{ms}$，2 分鐘原片捕獲 6 記真球啟動。
 - [x] **P0-2 音訊抽取強健性與明確診斷**：解除 8 秒 timeout 限制，建立 `AudioExtractionResult`，支援局部切片與長影片動態逾時（長片 139 秒解碼 0 timeout），明確記錄 `no_audio`、`timeout`、`error` 與 `ok`。

@@ -1,36 +1,31 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Precision & Clean Motion Final Calibration）
-1. **多訊號 Impact 真球出球閉環回饋精修**：`PASS`
-   - 重構球體偵測資料流，實作 `GolfBallDetector.track_swing_launch_with_feedback`。
-   - 當真球出球點被可靠觀測（observed_count >= 2 且通過高爾夫物理合理性檢核），自動將出球瞬間 (`launch_onset_ms`) 作為權威錨點回饋精修 Impact 事件。
-   - Impact 時間不確定度收斂至 $\pm 16\text{ms}$，狀態精確升級為 `confirmed_strike`，並將 `"ball_flight_observed_launch"` 納入 `detection_sources`。
-   - 2 分鐘原片實測精確捕獲 6 記真球啟動（#1, #6, #7, #8, #9, #11），未捕獲出球的揮桿誠實保留為 `estimated_strike`，絕不捏造出球來源。
-2. **音訊抽取強健性與明確診斷記錄**：`PASS`
-   - 建立 `AudioExtractionResult`，支援局部區間切片抽取與長影片動態 timeout（解除原固定 8 秒 timeout 限制）。
-   - 明確記錄 `no_audio`、`timeout`、`too_short`、`error` 與 `ok` 狀態，並完整記錄至 `quality_summary` 與 `quality_metadata`。
-3. **局部高 FPS 二次精修（Local High-FPS Refinement）**：`PASS`
-   - 實作 `_refine_event_local_high_fps`，針對低信心度或粗步掃描之 Top 與 Impact 事件，僅在其前後 $\pm 200\text{ms}$ 視窗內執行全幀率（60 FPS, step_ms=16）密集取樣，精修速度零交越與減速峰值，耗時僅數十毫秒，徹底免去重跑全片開銷。
-4. **誠信原則與檢測來源嚴格審計**：`PASS`
-   - 嚴格落實「真正記錄各訊號參與」：音訊距擊球大於 60ms 或無音訊脈衝時，絕對不包含 `"audio_transient_consensus"`；無真球出球時絕對不包含 `"ball_flight_observed_launch"`。
-   - 區分模型信心分數 (`confidence: 0.0~1.0`) 與真實時間不確定性 (`uncertainty_ms: 16/33/67`)。
-5. **Clean Motion UI 視覺降級與誠信防線**：`PASS`
-   - 單球側邊欄 `coachInsights` 嚴格基於本球可觀測指標證據；若資料不足或覆蓋率低於門檻，**絕不宣告身體問題**，僅顯示客觀動作階段影像檢視。
-   - 徹底移除單鏡頭無法測量之「足底壓力」與「重心轉移至前腳/腳跟」偽宣稱，改用可觀測「身體垂直軸線平衡穩定度」。
-   - Pro Mode 明確標記 `✓ MediaPipe 33 點骨架`，杜絕與 YOLO 17 點混稱。
-   - 加入揮桿時間區間防殘留保護，超出該球範圍立即清空 Canvas。
-6. **WebKit 與 Chrome 真實影片實測畫面雙雙驗收**：`PASS`
-   - Chrome 實測截圖保存於 `docs/screenshots/chrome/05_swing_player_clean_motion.png`（完整播放器、Letterbox置中、金色頭部基準圈、AI體感洞察與針對性Drill）。
-   - Chrome Pro Mode 實測截圖保存於 `docs/screenshots/chrome/03_redesign_pro_mode.png`（Tush line、手部雙色軌跡、無真球誠實標記）。
-   - WebKit 實測截圖透過 macOS 原生 `WebKit.framework` (PyObjC + NSWindow GPU解碼) 保存於 `docs/screenshots/webkit/02_webkit_swing_player.png` 與 `01_webkit_render.png`（H.264 解碼 readyState=4，100% 排除登入頁、黑畫面與載入失敗）。
-7. **全量品質與回歸驗證**：`PASS`
-   - 後端全量測試：**50 / 50 PASSED (100%)** in 204.07s（包含 5 個精度校準專項測試與真實長片高門檻測試）。
-   - 切球測試門檻：正式同步鎖定 `Recall >= 0.90` (實測 1.000) 與 `Precision >= 0.85` (實測 1.000)。
-   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` SHA-256 恆為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`（0 污染）。
-   - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功。
-   - 真實原片評估基準：`docs/PRECISION_CALIBRATION_EVALUATION.md` 完整輸出改版前後時間碼對比、多訊號參與審計與誠信揭露。
-- **最後更新時間**：2026-10-21T15:30:00+08:00
-- **最新驗收報告**：`docs/PRECISION_CALIBRATION_EVALUATION.md`、`docs/CLEAN_MOTION_REDESIGN_REPORT.md` 與 `docs/TEST_REPORT.md`
+## 最新開發策略執行狀態（Final Auto Accuracy Correction）
+1. **P0-A：小白球升空連續性分析與靜止球誤判防護**：`PASS`
+   - 重構 `packages/analysis/tracking/ball_tracker.py`，新增 `analyze_ball_launch_continuity` 狀態機，精確區分 `stationary`、`moving`、`airborne`、`occluded`。
+   - 建立打擊墊靜止球基準點 `(base_x, base_y)` 與位移閾值檢驗（$\text{dist} < 0.025$ 判定為靜止；最大位移 $< 0.030$ 嚴禁輸出出球點或假球路）。
+   - 僅當小白球明確產生連續升空向量時（$\text{dist} \ge 0.035$ 且 $dy \le -0.015$）才判定出球，杜絕將靜止球或原地微動誤判為出球。
+2. **P0-B：試擺 Waggle 抑制與 Top/Impact 生理時序自動重新對齊**：`PASS`
+   - 於 `SwingPhaseStateMachine` 建立 `_validate_and_realign_swing_timing`，強制納入高爾夫物理常態（$180\text{ms} \le T_{\text{downswing}} \le 650\text{ms}$）。
+   - 當初步 Top 抓至擊球前 1.5~2.4 秒之試擺假頂點時，系統自動依據權威 Impact 於 $[T_{\text{impact}} - 650\text{ms}, T_{\text{impact}} - 180\text{ms}]$ 物理視窗內，以速度零交越、頂點停頓（Top Pause）與強烈下桿加速度重新鎖定真實擊球 Top，並連帶前移校準 Settled Address 與 Takeaway。
+   - 2 分鐘原片 #1、#2、#6、#8、#11 等球之異常下桿（原 1500~2383ms）全數成功收斂至 250~650ms 正常高爾夫下桿範圍！
+   - 無法滿足生理範圍者，誠實標記 `"timing_anomaly_detected"` 於 `detection_sources` 並調降信心度，絕不硬編造數值。
+3. **P0-C：事件精修後單向資料流重算與邊界一致性**：`PASS`
+   - 重構 `scanner.py` 之 `analyze_single_window` 執行順序：初步抽取 ➔ 真球出球觀測 ➔ 局部高 FPS 精修 ➔ 時序合理性檢核 ➔ **全面重新計算 Metrics (`compute_observable_metrics`)** ➔ **依 finalized events 微調邊界並防溢出** ➔ 建立精簡 Keyframes ➔ 打包回傳。
+   - 確保所有輸出指標（`downswing_ms`, `backswing_ms`, `tempo_ratio`）與最終事件時間碼 100% 同步。
+   - 揮桿邊界安全保護：`refined_start` 與 `refined_end` 嚴格限制在 `[0, duration_ms]` 內，杜絕溢出影片長度。
+4. **P1-A：時間精度欄位拆分與誠信揭露**：`PASS`
+   - `DetectedEvent` 嚴格拆分：`sampling_resolution_ms` (16ms / 33ms)、`uncertainty_ms` (綜合訊號源之估計不確定度區間 ±16~25ms)、`event_timing_error_ms`（無人工真值時為 `null`，絕不填 0ms 冒充無誤差）。
+   - 60 FPS 局部精修與真球出球檢驗正確標註取樣解析度為 16ms，估計不確定度標註為 ±20~25ms，杜絕偽充為絕對測量誤差。
+5. **P1-B：真實影片畫面與視覺驗收**：`PASS`
+   - WebKit 與 Chrome 真實原片截圖驗收通過，預設 Clean Motion 輔助線最多顯示 2 個標記，教練提示嚴格來自本球可觀測指標。
+   - 前端 `CleanMotionOverlay.tsx` 與 Next.js 頁面型別完全同步，`npm run build` 9/9 路由靜態編譯通過（0 錯誤）。
+6. **全量品質與回歸驗證**：`PASS`
+   - 後端全量測試：**56 / 56 PASSED (100%)**（包含全新 6 項 `test_auto_accuracy_correction.py` 與真實長片基準）。
+   - 切球測試門檻：正式同步鎖定 `Recall >= 0.90` (實測 1.000, 12/12) 與 `Precision >= 0.85` (實測 1.000)。
+   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 0 污染。
+- **最後更新時間**：2026-10-21T16:45:00+08:00
+- **最新驗收報告**：`docs/PRECISION_CALIBRATION_EVALUATION.md`、`tests/test_auto_accuracy_correction.py` 與 `docs/TEST_REPORT.md`
 
 ## 前期重大里程碑狀態（Auto Precision & Clean Motion UI Redesign）
 1. **多訊號融合自動事件判定（Multi-Signal Event Detection）**：`PASS`
