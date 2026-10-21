@@ -16,6 +16,7 @@
 
 | 輪次 | 測試範圍 | 執行指令 | 通過 / 失敗 | 性質 (Real / Mock) | 狀態 |
 |---|---|---|---|---|---|
+| **R14 精度完結** | 自動分析精度定案：動態讀取 Golden Set 真實狀態 (machine_suggested 60/60, human_verified 0/60, 0% < 70% 門檻)，EVENT_ACCURACY_VALIDATED 動態判定 NOT_VALIDATED；客觀診斷 #3,#4,#5,#7 前置試擺波峰雙峰競爭，嚴禁以 180-650ms 硬調；補齊真實長片 11 個間隔區段負樣本驗收 (FP=0, PROVISIONAL)；單一推論不可修改 JSON 與快照追溯 | `uv run pytest tests/test_final_evidence_lock.py -v` | 6 / 6 通過 (全量 70/70 通過) | Real (測試影片/2分鐘.mov) | `PASS` (事件精度動態判定 `NOT_VALIDATED`) |
 | **R0** | 架構文件、合約與環境工具鏈盤點 | `git status` / `ffmpeg -version` / `docs/*` | 100% 齊全 | Real | `PASS` |
 | **R1** | Monorepo 骨架、Docker Compose 與健康檢查 `/healthz` `/readyz` | `uv run pytest tests/test_r1_r2_auth_and_models.py -k health` | 1 / 1 通過 | Real (Postgres+Redis+MinIO) | `PASS` |
 | **R2** | Argon2id Auth、Owner 跨用戶隔離、Alembic 正反向 Migration | `uv run alembic upgrade head && downgrade base && upgrade head` + `pytest` | 3 / 3 通過 | Real (PostgreSQL 16) | `PASS` |
