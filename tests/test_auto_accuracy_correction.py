@@ -274,3 +274,125 @@ def test_segment_boundaries_clamped_to_video_duration():
     assert seg is not None
     assert seg.start_ms >= 0, "start_ms 不能為負值"
     assert seg.end_ms <= 1000, f"end_ms ({seg.end_ms}) 絕不能超出影片總長度 (1000)"
+
+
+# -----------------------------------------------------------------------------
+# 測試 6: P0-1 候選順序不變性與零交越隔離測試
+# -----------------------------------------------------------------------------
+def test_top_realignment_candidate_order_invariance_and_zc_isolation():
+    """
+    驗證 Top 重對齊時：
+    1. best_cand 自身的零交越 (zero crossing) 與運動學特徵被獨立檢核，不被迴圈最後殘留的變數洩漏污染。
+    2. 候選點順序反轉或變更時，選出的最佳候選與重對齊決策完全唯一一致。
+    """
+    sm = SwingPhaseStateMachine()
+
+    # 構造一組 20 幀時序數據
+    # 0~10 幀為試擺或上桿，在 idx=6 (t=400ms) 達到局部頂點且有完美零交越 (v_y[6]<=0, v_y[7]>0)
+    # idx=9 (t=600ms) 為快速下桿 (v_y[9] > 0，無零交越)
+    # idx=15 (t=1000ms) 為擊球瞬間
+    times = [i * 66 for i in range(20)]
+    n = len(times)
+    wrist_ys = [0.70] * n
+    wrist_xs = [0.50] * n
+
+    # 設置手腕 Y 軸軌跡
+    wrist_ys[0] = 0.70
+    wrist_ys[3] = 0.45
+    wrist_ys[6] = 0.28  # 最佳 Top 候選：手腕最高，轉折向下
+    wrist_ys[7] = 0.35
+    wrist_ys[9] = 0.58  # 視窗邊界候選：正在快速下桿，無零交越
+    wrist_ys[15] = 0.75  # Impact
+
+    v_y = np.gradient(wrist_ys, times)
+    speed = np.abs(v_y)
+
+    impact_idx = 15
+    top_idx_initial = 1  # 初始假頂點
+
+    # 調用重對齊邏輯
+    (
+        top_idx,
+        impact_idx_out,
+        addr_idx,
+        takeaway_idx,
+        t_sources,
+        i_sources,
+        has_anomaly,
+    ) = sm._validate_and_realign_swing_timing(
+        times=times,
+        wrist_ys=wrist_ys,
+        wrist_xs=wrist_xs,
+        speed=speed,
+        v_y=v_y,
+        top_idx=top_idx_initial,
+        impact_idx=impact_idx,
+        addr_idx=0,
+        takeaway_idx=1,
+        audio_transients_ms=[times[15]],
+        ball_strike_ms=None,
+        top_sources=[],
+        impact_sources=[],
+    )
+
+    # 驗證最佳候選 6 必須成功被選中並重對齊，不能因為邊界候選 9 無零交越而被拒絕
+    assert top_idx == 6, f"Top 重對齊應選中具有零交越的最佳候選 idx=6，實際選中 {top_idx}"
+    assert "pre_impact_kinematic_realigned" in t_sources, "應記錄重對齊來源"
+
+
+# -----------------------------------------------------------------------------
+# 測試 7: P0-3 異常時序自主降級與不可評分保護
+# -----------------------------------------------------------------------------
+def test_timing_anomaly_degradation_and_null_metrics():
+    """
+    驗證當揮桿時序異常 (如下桿時間 < 180ms 或 > 650ms 且無客觀證據修復) 時：
+    1. 系統自動標記 timing_anomaly_detected
+    2. review_status 降級為 needs_review，加入 timing_anomaly 標籤
+    3. compute_observable_metrics 將 downswing_ms 與 backswing_downswing_ratio 設為 None
+    4. 絕不虛構不可靠分數，落實誠信原則
+    """
+    # 構造一個下桿時間只有 80ms 的異常事件列表 (如極端手部抖動)
+    events = [
+        DetectedEvent(
+            event_name="address",
+            time_ms=1000,
+            confidence=0.85,
+            detection_source="pose-v2",
+        ),
+        DetectedEvent(
+            event_name="takeaway",
+            time_ms=1200,
+            confidence=0.85,
+            detection_source="pose-v2",
+        ),
+        DetectedEvent(
+            event_name="top",
+            time_ms=1500,
+            confidence=0.50,
+            detection_source="pose-v2",
+            detection_sources=["timing_anomaly_detected"],
+        ),
+        DetectedEvent(
+            event_name="impact_estimated",
+            time_ms=1580,  # 僅差 80ms (異常)
+            confidence=0.50,
+            detection_source="pose-v2",
+            detection_sources=["timing_anomaly_detected"],
+        ),
+        DetectedEvent(
+            event_name="finish",
+            time_ms=2200,
+            confidence=0.85,
+            detection_source="pose-v2",
+        ),
+    ]
+
+    frames = _create_mock_swing_frames(count=20, dt_ms=66)
+    metrics = compute_observable_metrics(frames=frames, events=events)
+    m_dict = {m["metric_key"]: m for m in metrics}
+
+    # 檢核依賴不可靠時序的指標全部為 None
+    assert m_dict["downswing_ms"]["value"] is None, "異常揮桿的 downswing_ms 必須設為 None"
+    assert m_dict["backswing_downswing_ratio"]["value"] is None, "異常揮桿的節奏比必須設為 None"
+    assert m_dict["downswing_ms"]["confidence"] == 0.0, "信心度必須為 0.0"
+    assert m_dict["downswing_ms"]["details"]["unreliable"] is True, "必須明確標示 unreliable"

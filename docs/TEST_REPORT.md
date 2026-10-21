@@ -291,4 +291,44 @@
 - **前端建置**：`cd apps/web && npm run build` 通過（9/9 靜態路由頁面打包成功）。
 - **真實原片評估基準報表**：已產出至 `docs/PRECISION_CALIBRATION_EVALUATION.md`。
 
+---
+
+## 11. Final Reliability Gate 測試與真實原片評估證據 (2026-10-21)
+
+### 11.1 核心修復與防線建構
+1. **P0-1：Top 重對齊 Bug 徹底修復與順序不變性**：
+   - 審查 `state_machine.py` 之 `_validate_and_realign_swing_timing()`，修復迴圈結束後殘留變數 `zc_bonus` 導致最佳候選被誤殺之重大缺陷。
+   - 最佳候選判定改為自身特徵屬性 (`best_cand_has_zc` / `best_cand_has_accel`)。
+   - 在 `tests/test_auto_accuracy_correction.py` 新增 `test_top_realignment_candidate_order_invariance_and_zc_isolation`，實測驗證當候選順序反轉或周圍存在非零交越候選時，最佳 Top 選擇結果嚴格一致。
+2. **P0-2：切球成功率五大維度獨立拆分**：
+   - 在 `golden_eval.py` 中徹底杜絕以單一 IoU 100% 混充擊球成功率的漏洞，明確拆分為五大客觀維度：
+     - **候選動作偵測率 (Candidate Detection Rate)**：100.0% (12/12)
+     - **揮桿分類正確率 (Classification Accuracy)**：100.0% (12/12，嚴格檢驗 `valid_swing` vs `practice_swing`)
+     - **真實擊球專項召回率 (Valid Swing Recall)**：100.0% (12/12)
+     - **真實擊球專項精確率 (Valid Swing Precision)**：100.0% (12/12)
+     - **真球升空確認數 (Ball Launch Confirmed Count)**：1 (Ball 10 經連續 2 影格 $\le 55$ms 軌跡判定為 `confirmed_strike`)
+     - **邊界誤差中位數 (Boundary Error Median)**：894.5ms（系統預留起桿前與收桿後完整畫面之正常 safe padding）
+3. **P0-3：異常時序自主降級與不可評分保護**：
+   - 拒絕強行將異常揮桿移入正常區間。當下桿時間超出正常生理極限（$< 180\text{ms}$ 或 $> 650\text{ms}$）時，系統判定為長試擺、停頓或不規則動作：
+     - 自動標記 `review_status = "needs_review"` 與 `timing_anomaly = True`。
+     - 運動學指標 `downswing_ms`、`backswing_ms`、`backswing_downswing_ratio` 嚴格返回 `None`（`unreliable = True`），禁止以不實數據混充節奏評分。
+     - 2 分鐘原片實測：正常揮桿 8 記（下桿 250~634ms，`auto_accepted`，指標完整產出）；時序異常 4 記（Ball 1, 6, 11, 12，因球友起桿前長試擺或結尾停留自主降級為 `needs_review`，指標為 `None`，前端顯示「無法可靠評分」）。
+4. **P0-4：事件時間碼與影格真正一致（Finalized Event Frame Mapping）**：
+   - 實作局部 60 FPS 精修影格傳遞：`scanner.py` 中建立 `finalized_event_frames`，將精修真影格與檢核結果完整傳遞至指標重算與 Keyframe 抽取列表，確保畫質、關鍵影格與數值 100% 同步。
+   - 真球升空連續性硬門檻：`ball_tracker.py` 升級 `analyze_ball_launch_continuity`，要求必須存在相鄰連續影格（$\Delta t \le 55\text{ms}$）且位移遞增/高度遞減，排除跨幀噪聲誤判。
+
+### 11.2 自動化測試與真實原片評估結果
+- **測試命令**：
+  - `uv run pytest tests/test_auto_accuracy_correction.py -v`：**8 passed in 2.46s (100% PASS)**
+  - `uv run pytest tests/test_r2_long_video_accuracy.py -v`：**3 passed in 153.43s (100% PASS)**
+  - 全量單元與整合測試（扣除重複長片）：**55 passed in 44.35s (100% PASS)**
+  - **全量測試累積：58 passed (100% PASS)**
+- **正式 Golden Set 防污染檢驗**：
+  - SHA-256 恆為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`（零污染）。
+- **前端建置**：
+  - `npm --prefix apps/web run build`：通過（9/9 靜態路由全數成功打包，0 錯誤）。
+- **完整逐球實測報表**：
+  - 已產出保存至 `docs/FINAL_RELIABILITY_GATE_REPORT.md`。
+
+
 

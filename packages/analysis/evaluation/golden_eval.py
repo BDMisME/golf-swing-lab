@@ -9,7 +9,7 @@ from packages.analysis.detection.scanner import compute_time_iou
 
 @dataclass
 class GoldenEvalSummary:
-    """既有邊界評估摘要（向後相容）"""
+    """既有邊界評估摘要（向後相容與 P0-2 拆分維度）"""
 
     total_gt: int
     total_pred: int
@@ -21,6 +21,10 @@ class GoldenEvalSummary:
     start_error_median_ms: float
     end_error_median_ms: float
     combined_boundary_median_ms: float
+    candidate_detection_rate: float = 1.0
+    classification_accuracy: float = 1.0
+    valid_swing_recall: float = 1.0
+    valid_swing_precision: float = 1.0
     matches: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -35,13 +39,17 @@ class GoldenEvalSummary:
             "start_error_median_ms": round(self.start_error_median_ms, 1),
             "end_error_median_ms": round(self.end_error_median_ms, 1),
             "combined_boundary_median_ms": round(self.combined_boundary_median_ms, 1),
+            "candidate_detection_rate": round(self.candidate_detection_rate, 4),
+            "classification_accuracy": round(self.classification_accuracy, 4),
+            "valid_swing_recall": round(self.valid_swing_recall, 4),
+            "valid_swing_precision": round(self.valid_swing_precision, 4),
             "matches": self.matches,
         }
 
 
 @dataclass
 class DetectionAccuracyReport:
-    """R13-D 偵測準確率報告（專注揮桿有無抓到、切球完整性、漏切與重複切球）"""
+    """R13-D 偵測準確率報告（P0-2 拆分五大維度：候選偵測、分類正確率、專項擊球、真球確認、邊界誤差）"""
 
     total_gt: int
     total_pred: int
@@ -53,6 +61,18 @@ class DetectionAccuracyReport:
     f1_score: float
     mean_iou: float
     min_iou: float
+    candidate_detection_rate: float = 1.0
+    classification_accuracy: float = 1.0
+    valid_swing_tp: int = 0
+    valid_swing_fp: int = 0
+    valid_swing_fn: int = 0
+    valid_swing_recall: float = 1.0
+    valid_swing_precision: float = 1.0
+    ball_launch_confirmed_count: int = 0
+    ball_launch_rate: float = 0.0
+    boundary_error_median_ms: float = 0.0
+    boundary_start_error_median_ms: float = 0.0
+    boundary_end_error_median_ms: float = 0.0
     missed_swings: list[dict[str, Any]] = field(default_factory=list)
     duplicate_swings: list[dict[str, Any]] = field(default_factory=list)
     matches: list[dict[str, Any]] = field(default_factory=list)
@@ -69,6 +89,18 @@ class DetectionAccuracyReport:
             "f1_score": round(self.f1_score, 4),
             "mean_iou": round(self.mean_iou, 4),
             "min_iou": round(self.min_iou, 4),
+            "candidate_detection_rate": round(self.candidate_detection_rate, 4),
+            "classification_accuracy": round(self.classification_accuracy, 4),
+            "valid_swing_tp": self.valid_swing_tp,
+            "valid_swing_fp": self.valid_swing_fp,
+            "valid_swing_fn": self.valid_swing_fn,
+            "valid_swing_recall": round(self.valid_swing_recall, 4),
+            "valid_swing_precision": round(self.valid_swing_precision, 4),
+            "ball_launch_confirmed_count": self.ball_launch_confirmed_count,
+            "ball_launch_rate": round(self.ball_launch_rate, 4),
+            "boundary_error_median_ms": round(self.boundary_error_median_ms, 1),
+            "boundary_start_error_median_ms": round(self.boundary_start_error_median_ms, 1),
+            "boundary_end_error_median_ms": round(self.boundary_end_error_median_ms, 1),
             "missed_swings": self.missed_swings,
             "duplicate_swings": self.duplicate_swings,
             "matches": self.matches,
@@ -246,6 +278,8 @@ def evaluate_against_golden(
         matched_gt.add(g_idx)
         pred = predictions[p_idx]
         gt = ground_truths[g_idx]
+        gt_label = gt.get("label", "valid_swing")
+        pred_label = pred.get("label", "valid_swing")
         s_err = abs(float(pred["start_ms"]) - float(gt["start_ms"]))
         e_err = abs(float(pred["end_ms"]) - float(gt["end_ms"]))
         start_errors.append(s_err)
@@ -257,6 +291,9 @@ def evaluate_against_golden(
                 "iou": round(iou, 3),
                 "start_error_ms": round(s_err, 1),
                 "end_error_ms": round(e_err, 1),
+                "gt_label": gt_label,
+                "pred_label": pred_label,
+                "label_match": bool(gt_label == pred_label),
             }
         )
 
@@ -265,6 +302,20 @@ def evaluate_against_golden(
     fn = max(0, len(ground_truths) - tp)
     recall = tp / float(len(ground_truths)) if ground_truths else 1.0
     precision = tp / float(len(predictions)) if predictions else (1.0 if not ground_truths else 0.0)
+
+    # P0-2 拆分指標計算
+    candidate_det_rate = recall
+    correct_class_count = sum(1 for m in matches if m.get("label_match"))
+    class_acc = correct_class_count / float(tp) if tp > 0 else 1.0
+
+    gt_valid_count = sum(1 for gt in ground_truths if gt.get("label", "valid_swing") == "valid_swing")
+    pred_valid_count = sum(1 for pred in predictions if pred.get("label", "valid_swing") == "valid_swing")
+    valid_tp = sum(
+        1 for m in matches
+        if m.get("gt_label") == "valid_swing" and m.get("pred_label") == "valid_swing"
+    )
+    valid_recall = valid_tp / float(gt_valid_count) if gt_valid_count > 0 else 1.0
+    valid_prec = valid_tp / float(pred_valid_count) if pred_valid_count > 0 else 1.0
 
     s_med = float(statistics.median(start_errors)) if start_errors else 0.0
     e_med = float(statistics.median(end_errors)) if end_errors else 0.0
@@ -282,6 +333,10 @@ def evaluate_against_golden(
         start_error_median_ms=s_med,
         end_error_median_ms=e_med,
         combined_boundary_median_ms=c_med,
+        candidate_detection_rate=candidate_det_rate,
+        classification_accuracy=class_acc,
+        valid_swing_recall=valid_recall,
+        valid_swing_precision=valid_prec,
         matches=matches,
     )
 
@@ -294,7 +349,7 @@ def evaluate_detection_and_events(
 ) -> DualEvaluationReport:
     """
     R13-D 嚴格分離評估：
-    1. Detection Accuracy: TP/FP/FN/Recall/Precision/F1/IoU/漏切/重複切球
+    1. Detection Accuracy: TP/FP/FN/Recall/Precision/F1/IoU/漏切/重複切球與 P0-2 五維度拆分
     2. Swing Event Accuracy: Address/Takeaway/Top/Impact/Finish 與 Tempo 誤差
     """
     matched_gt: set[int] = set()
@@ -317,6 +372,8 @@ def evaluate_detection_and_events(
 
     candidates.sort(key=lambda x: x[0], reverse=True)
     paired_ious: list[float] = []
+    start_errs: list[float] = []
+    end_errs: list[float] = []
 
     for iou, p_idx, g_idx in candidates:
         if p_idx in matched_pred or g_idx in matched_gt:
@@ -326,6 +383,13 @@ def evaluate_detection_and_events(
         paired_ious.append(iou)
         pred = predictions[p_idx]
         gt = ground_truths[g_idx]
+        gt_l = gt.get("label", "valid_swing")
+        pred_l = pred.get("label", "valid_swing")
+        s_err = abs(float(pred["start_ms"]) - float(gt["start_ms"]))
+        e_err = abs(float(pred["end_ms"]) - float(gt["end_ms"]))
+        start_errs.append(s_err)
+        end_errs.append(e_err)
+
         matches.append(
             {
                 "gt_id": gt.get("gt_id", f"gt-{g_idx + 1}"),
@@ -337,10 +401,15 @@ def evaluate_detection_and_events(
                 "gt_end_ms": int(gt["end_ms"]),
                 "pred_start_ms": int(pred["start_ms"]),
                 "pred_end_ms": int(pred["end_ms"]),
+                "start_error_ms": round(s_err, 1),
+                "end_error_ms": round(e_err, 1),
+                "gt_label": gt_l,
+                "pred_label": pred_l,
+                "label_match": bool(gt_l == pred_l),
             }
         )
 
-    # 1. 偵測指標
+    # 1. 偵測指標 (P0-2 拆分)
     tp = len(matches)
     fp = max(0, len(predictions) - tp)
     fn = max(0, len(ground_truths) - tp)
@@ -350,6 +419,26 @@ def evaluate_detection_and_events(
 
     mean_iou = float(statistics.mean(paired_ious)) if paired_ious else 0.0
     min_iou = float(min(paired_ious)) if paired_ious else 0.0
+
+    candidate_det_rate = recall
+    correct_class_count = sum(1 for m in matches if m.get("label_match"))
+    class_acc = correct_class_count / float(tp) if tp > 0 else 1.0
+
+    gt_valid_count = sum(1 for gt in ground_truths if gt.get("label", "valid_swing") == "valid_swing")
+    pred_valid_count = sum(1 for pred in predictions if pred.get("label", "valid_swing") == "valid_swing")
+    valid_tp = sum(
+        1 for m in matches
+        if m.get("gt_label") == "valid_swing" and m.get("pred_label") == "valid_swing"
+    )
+    valid_recall = valid_tp / float(gt_valid_count) if gt_valid_count > 0 else 1.0
+    valid_prec = valid_tp / float(pred_valid_count) if pred_valid_count > 0 else 1.0
+
+    ball_conf_cnt = sum(1 for p in predictions if p.get("ball_strike_status") == "confirmed_strike")
+    ball_conf_rate = ball_conf_cnt / float(len(predictions)) if predictions else 0.0
+
+    s_med = float(statistics.median(start_errs)) if start_errs else 0.0
+    e_med = float(statistics.median(end_errs)) if end_errs else 0.0
+    c_med = float(statistics.median(start_errs + end_errs)) if (start_errs + end_errs) else 0.0
 
     # 漏切項目
     missed_swings = [
@@ -389,6 +478,18 @@ def evaluate_detection_and_events(
         f1_score=f1,
         mean_iou=mean_iou,
         min_iou=min_iou,
+        candidate_detection_rate=candidate_det_rate,
+        classification_accuracy=class_acc,
+        valid_swing_tp=valid_tp,
+        valid_swing_fp=max(0, pred_valid_count - valid_tp),
+        valid_swing_fn=max(0, gt_valid_count - valid_tp),
+        valid_swing_recall=valid_recall,
+        valid_swing_precision=valid_prec,
+        ball_launch_confirmed_count=ball_conf_cnt,
+        ball_launch_rate=ball_conf_rate,
+        boundary_error_median_ms=c_med,
+        boundary_start_error_median_ms=s_med,
+        boundary_end_error_median_ms=e_med,
         missed_swings=missed_swings,
         duplicate_swings=duplicate_swings,
         matches=matches,

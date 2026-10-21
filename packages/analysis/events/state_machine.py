@@ -168,9 +168,12 @@ class SwingPhaseStateMachine:
                     max_sub_y = max(sub_ys)
                     y_span = max(1e-3, max_sub_y - min_sub_y)
 
+                    best_cand_has_zc = False
+                    best_cand_has_accel = False
                     for c in win_cands:
                         h_s = (max_sub_y - wrist_ys[c]) / y_span
-                        zc_bonus = 2.0 if (c < n - 1 and v_y[c] <= 0 and v_y[c + 1] > 0) else 0.0
+                        cand_zc = bool(c < n - 1 and v_y[c] <= 0 and v_y[c + 1] > 0)
+                        zc_bonus = 2.0 if cand_zc else 0.0
                         p_s = 1.0 if (0 < c < n - 1 and speed[c] <= speed[c - 1] and speed[c] <= speed[c + 1]) else 0.0
                         post_s = speed[c : min(impact_idx + 1, c + 5)]
                         acc = float(np.max(post_s)) - speed[c] if len(post_s) > 0 else 0.0
@@ -179,10 +182,14 @@ class SwingPhaseStateMachine:
                         if score > best_cand_score:
                             best_cand_score = score
                             best_cand = c
+                            best_cand_has_zc = cand_zc
+                            best_cand_has_accel = bool(acc >= 0.003)
 
                     stroke_height = wrist_ys[impact_idx] - wrist_ys[best_cand]
                     full_amp = max(wrist_ys) - min(wrist_ys)
-                    if (stroke_height >= 0.08 or stroke_height >= 0.35 * full_amp) and (zc_bonus > 0 or has_audio or has_ball):
+                    cand_h_ratio = (max_sub_y - wrist_ys[best_cand]) / y_span
+                    kinematic_confirmed = best_cand_has_zc or (cand_h_ratio >= 0.85 and best_cand_has_accel)
+                    if (stroke_height >= 0.08 or stroke_height >= 0.35 * full_amp) and (kinematic_confirmed or has_audio or has_ball):
                         top_idx = best_cand
                         if "pre_impact_kinematic_realigned" not in t_sources:
                             t_sources.append("pre_impact_kinematic_realigned")
@@ -668,28 +675,39 @@ def compute_observable_metrics(
     frames: list[FramePoseResult],
     events: list[DetectedEvent],
     model_version: str = "pose-v2",
+    event_frames: dict[str, FramePoseResult] | None = None,
 ) -> list[dict[str, Any]]:
     """
     依據可見 2D 關鍵點與階段事件計算可追溯之 DTL 動作指標。
     若特定階段關鍵點缺失或信心度 < 0.50，該指標設為 value=None 並誠實標記，絕不捏造數值。
+    支援優先使用局部高 FPS 精修之真實影格 (event_frames)。
+    若時序存在異常 (unreliable)，節奏與下桿時間明確設為 value=None，絕不虛構分數。
     """
     if not frames or not events:
         return []
 
     event_map = {e.event_name: e.time_ms for e in events}
 
-    def nearest_frame(target_ms: int | None) -> FramePoseResult | None:
-        if target_ms is None:
-            return None
-        return min(frames, key=lambda f: abs(f.time_ms - target_ms))
+    def get_event_frame(ev_name: str) -> tuple[FramePoseResult | None, int]:
+        """優先使用精修影格，否則使用最近影格，並回傳影格與時間偏差 (ms)。"""
+        if event_frames and ev_name in event_frames:
+            ef = event_frames[ev_name]
+            target_t = event_map.get(ev_name)
+            delta = abs(ef.time_ms - target_t) if target_t is not None else 0
+            return ef, delta
+        target_t = event_map.get(ev_name)
+        if target_t is None:
+            return None, 0
+        nf = min(frames, key=lambda f: abs(f.time_ms - target_t))
+        return nf, abs(nf.time_ms - target_t)
 
-    f_addr = nearest_frame(event_map.get("address"))
-    f_take = nearest_frame(event_map.get("takeaway"))
-    f_back = nearest_frame(event_map.get("backswing"))
-    f_top = nearest_frame(event_map.get("top"))
-    f_down = nearest_frame(event_map.get("downswing"))
-    f_imp = nearest_frame(event_map.get("impact_estimated"))
-    f_fin = nearest_frame(event_map.get("finish"))
+    f_addr, _ = get_event_frame("address")
+    f_take, _ = get_event_frame("takeaway")
+    f_back, _ = get_event_frame("backswing")
+    f_top, _ = get_event_frame("top")
+    f_down, _ = get_event_frame("downswing")
+    f_imp, _ = get_event_frame("impact_estimated")
+    f_fin, _ = get_event_frame("finish")
 
     metrics: list[dict[str, Any]] = []
 
@@ -805,11 +823,53 @@ def compute_observable_metrics(
         }
     )
 
-    # 4. 上下桿節奏比 (backswing_downswing_ratio)
-    tempo_ratio: float | None = None
-    tempo_conf = 0.0
+    # 4. 上下桿節奏比 (backswing_downswing_ratio) 與 P0-3 異常時序保護
+    top_ev = next((e for e in events if e.event_name == "top"), None)
+    imp_ev = next((e for e in events if "impact" in e.event_name), None)
+    is_timing_anomalous = False
+    if top_ev and imp_ev:
+        cur_ds = imp_ev.time_ms - top_ev.time_ms
+        if cur_ds < 180 or cur_ds > 650:
+            is_timing_anomalous = True
+        if "timing_anomaly_detected" in top_ev.detection_sources or "timing_anomaly_detected" in imp_ev.detection_sources:
+            is_timing_anomalous = True
+
     f_start = f_take or f_addr
-    if f_start and f_top and f_imp:
+    if is_timing_anomalous or not (f_start and f_top and f_imp):
+        metrics.append(
+            {
+                "metric_key": "backswing_ms",
+                "value": None,
+                "unit": "ms",
+                "confidence": 0.0,
+                "source": model_version,
+                "observability": "estimated",
+                "details": {"reason": "揮桿時序異常或不可靠，依誠信原則不予評分", "unreliable": True},
+            }
+        )
+        metrics.append(
+            {
+                "metric_key": "downswing_ms",
+                "value": None,
+                "unit": "ms",
+                "confidence": 0.0,
+                "source": model_version,
+                "observability": "estimated",
+                "details": {"reason": "揮桿時序異常或不可靠，依誠信原則不予評分", "unreliable": True},
+            }
+        )
+        metrics.append(
+            {
+                "metric_key": "backswing_downswing_ratio",
+                "value": None,
+                "unit": "ratio",
+                "confidence": 0.0,
+                "source": model_version,
+                "observability": "estimated",
+                "details": {"reason": "揮桿時序異常或不可靠，依誠信原則不予評分", "unreliable": True},
+            }
+        )
+    else:
         bs_ms = max(80, f_top.time_ms - f_start.time_ms)
         ds_ms = max(60, f_imp.time_ms - f_top.time_ms)
         tempo_ratio = round(bs_ms / float(ds_ms), 2)
@@ -834,17 +894,16 @@ def compute_observable_metrics(
                 "observability": "estimated",
             }
         )
-
-    metrics.append(
-        {
-            "metric_key": "backswing_downswing_ratio",
-            "value": tempo_ratio,
-            "unit": "ratio",
-            "confidence": tempo_conf,
-            "source": model_version,
-            "observability": "estimated",
-        }
-    )
+        metrics.append(
+            {
+                "metric_key": "backswing_downswing_ratio",
+                "value": tempo_ratio,
+                "unit": "ratio",
+                "confidence": tempo_conf,
+                "source": model_version,
+                "observability": "estimated",
+            }
+        )
 
     # 5. 收桿姿勢穩定 (finish_hold_ms & finish_sway_ratio)
     finish_hold: float | None = None

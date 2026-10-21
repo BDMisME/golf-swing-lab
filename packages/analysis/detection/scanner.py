@@ -464,9 +464,11 @@ class CoarseToFineDetector:
                     logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
 
             # ---------------------------------------------------------
-            # 2. 局部高 FPS 二次精修 (P0-3)
+            # 2. 局部高 FPS 二次精修 (P0-3 & P0-4: 真正影格與時序防呆)
             # ---------------------------------------------------------
             local_refinements: dict[str, Any] = {}
+            finalized_event_frames: dict[str, FramePoseResult] = {}
+
             if top_ev and (top_ev.uncertainty_ms > 20 or top_ev.confidence < 0.95):
                 top_ref = self._refine_event_local_high_fps(
                     video_path=video_path,
@@ -476,7 +478,7 @@ class CoarseToFineDetector:
                     window_radius_ms=200,
                     high_fps_step_ms=16,
                 )
-                if top_ref:
+                if top_ref and abs(top_ref.get("delta_ms", 0)) <= 200:
                     top_ev.time_ms = top_ref["refined_ms"]
                     top_ev.confidence = top_ref["confidence"]
                     top_ev.uncertainty_ms = top_ref["uncertainty_ms"]
@@ -484,7 +486,10 @@ class CoarseToFineDetector:
                     for s in top_ref["sources"]:
                         if s not in top_ev.detection_sources:
                             top_ev.detection_sources.append(s)
-                    local_refinements["top"] = top_ref
+                    if "refined_frame" in top_ref:
+                        finalized_event_frames["top"] = top_ref["refined_frame"]
+                    local_ref_copy = {k: v for k, v in top_ref.items() if k != "refined_frame"}
+                    local_refinements["top"] = local_ref_copy
 
             if imp_ev and not ball_feedback_info.get("applied") and (imp_ev.uncertainty_ms > 20 or imp_ev.confidence < 0.95):
                 imp_ref = self._refine_event_local_high_fps(
@@ -496,14 +501,24 @@ class CoarseToFineDetector:
                     high_fps_step_ms=16,
                 )
                 if imp_ref:
-                    imp_ev.time_ms = imp_ref["refined_ms"]
-                    imp_ev.confidence = imp_ref["confidence"]
-                    imp_ev.uncertainty_ms = imp_ref["uncertainty_ms"]
-                    imp_ev.sampling_resolution_ms = imp_ref.get("sampling_resolution_ms", 16)
-                    for s in imp_ref["sources"]:
-                        if s not in imp_ev.detection_sources:
-                            imp_ev.detection_sources.append(s)
-                    local_refinements["impact"] = imp_ref
+                    # 驗證精修後的合理性：下桿時間必須維持在生理區間，且精修偏移不應失控
+                    refined_ds = imp_ref["refined_ms"] - (top_ev.time_ms if top_ev else 0)
+                    if 180 <= refined_ds <= 650 and abs(imp_ref.get("delta_ms", 0)) <= 180:
+                        imp_ev.time_ms = imp_ref["refined_ms"]
+                        imp_ev.confidence = imp_ref["confidence"]
+                        imp_ev.uncertainty_ms = imp_ref["uncertainty_ms"]
+                        imp_ev.sampling_resolution_ms = imp_ref.get("sampling_resolution_ms", 16)
+                        for s in imp_ref["sources"]:
+                            if s not in imp_ev.detection_sources:
+                                imp_ev.detection_sources.append(s)
+                        if "refined_frame" in imp_ref:
+                            finalized_event_frames["impact_estimated"] = imp_ref["refined_frame"]
+                        local_ref_copy = {k: v for k, v in imp_ref.items() if k != "refined_frame"}
+                        local_refinements["impact"] = local_ref_copy
+                    else:
+                        logger.info(
+                            f"局部 Impact 精修違反生理區間 (refined_ds={refined_ds}ms, delta={imp_ref.get('delta_ms')}ms)，已保守拒絕精修"
+                        )
 
             # ---------------------------------------------------------
             # 3. 誠實清理 detection_sources (未使用的來源絕不保留)
@@ -520,7 +535,7 @@ class CoarseToFineDetector:
                         imp_ev.detection_sources.remove("audio_transient_consensus")
 
             # ---------------------------------------------------------
-            # 4. 最終時序合理性防呆 (P0-B)
+            # 4. 最終時序合理性防呆與降級 (P0-B & P0-3)
             # ---------------------------------------------------------
             if top_ev and imp_ev:
                 final_ds = imp_ev.time_ms - top_ev.time_ms
@@ -529,14 +544,21 @@ class CoarseToFineDetector:
                         top_ev.detection_sources.append("timing_anomaly_detected")
                     if "timing_anomaly_detected" not in imp_ev.detection_sources:
                         imp_ev.detection_sources.append("timing_anomaly_detected")
-                    top_ev.confidence = min(top_ev.confidence, 0.55)
-                    imp_ev.confidence = min(imp_ev.confidence, 0.55)
+                    top_ev.confidence = min(top_ev.confidence, 0.50)
+                    imp_ev.confidence = min(imp_ev.confidence, 0.50)
+                    flags_set.add("timing_anomaly")
+                    review_status = "needs_review"
+
+            review_flags = sorted(flags_set)
 
             # ---------------------------------------------------------
-            # 5. 指標與邊界全面重新計算 (P0-C: 資料流單向一致性)
+            # 5. 指標與邊界全面重新計算 (P0-C & P0-4: 資料流單向一致性)
             # ---------------------------------------------------------
             metrics = compute_observable_metrics(
-                frames=fine_frames, events=events, model_version=self.model_version
+                frames=fine_frames,
+                events=events,
+                model_version=self.model_version,
+                event_frames=finalized_event_frames,
             )
 
             # 根據最終 finalized 的事件時間碼精細對齊揮桿片段邊界，並防範溢出原片總長度
@@ -561,12 +583,17 @@ class CoarseToFineDetector:
             if refined_end <= refined_start:
                 refined_end = refined_start + self.min_swing_duration_ms
 
-            # 依據最終事件時間點提取精簡關鍵影格
+            # 依據最終事件時間點提取精簡關鍵影格 (P0-4: 包含真實精修高 FPS 影格)
             event_times = {e.time_ms for e in events}
-            keyframes: list[dict[str, Any]] = []
+            keyframe_dict: dict[int, dict[str, Any]] = {}
             for idx_f, fr in enumerate(fine_frames):
                 if fr.time_ms in event_times or idx_f % 2 == 0:
-                    keyframes.append(fr.to_dict())
+                    keyframe_dict[fr.time_ms] = fr.to_dict()
+
+            for ef_name, ef_fr in finalized_event_frames.items():
+                keyframe_dict[ef_fr.time_ms] = ef_fr.to_dict()
+
+            keyframes = [keyframe_dict[t] for t in sorted(keyframe_dict.keys())]
 
 
             # 提取手腕 2D 軌跡點序列供多球重複性計算
@@ -811,25 +838,36 @@ class CoarseToFineDetector:
             return {
                 "refined_ms": refined_time_ms,
                 "confidence": min(0.96, max(0.75, wrist_confs[refined_idx])),
-                "uncertainty_ms": 25,
+                "uncertainty_ms": 20,
                 "sampling_resolution_ms": 16,
                 "sources": sources,
                 "delta_ms": refined_time_ms - center_ms,
+                "refined_frame": local_frames[refined_idx],
             }
 
         elif event_name == "impact":
             # 搜尋下桿速度劇烈制動點 (減速峰值)
+            # 必須是在速度達到一定水準的有效動能區段內，排除起點雜訊
             speeds = np.abs(v_y)
+            mean_speed = float(np.mean(speeds)) if len(speeds) > 0 else 1e-4
+            valid_cands = [
+                i for i in range(1, len(speeds) - 1)
+                if speeds[i] >= 0.75 * mean_speed
+            ]
+            if not valid_cands:
+                valid_cands = list(range(len(speeds)))
+
             accels = np.diff(speeds, prepend=speeds[0])
-            decel_idx = int(np.argmin(accels))
+            decel_idx = min(valid_cands, key=lambda i: accels[i])
             refined_time_ms = times[decel_idx]
             return {
                 "refined_ms": refined_time_ms,
                 "confidence": min(0.95, max(0.72, wrist_confs[decel_idx])),
-                "uncertainty_ms": 25,
+                "uncertainty_ms": 20,
                 "sampling_resolution_ms": 16,
                 "sources": ["wrist_kinematic_deceleration", "local_high_fps_refinement"],
                 "delta_ms": refined_time_ms - center_ms,
+                "refined_frame": local_frames[decel_idx],
             }
 
         return None

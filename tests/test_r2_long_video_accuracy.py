@@ -75,20 +75,33 @@ def test_short_video_11s_accuracy():
     )
     elapsed = time.time() - t0
 
-    preds = [{"start_ms": c.start_ms, "end_ms": c.end_ms, "sequence_no": i + 1} for i, c in enumerate(candidates)]
+    preds = [
+        {
+            "start_ms": c.start_ms,
+            "end_ms": c.end_ms,
+            "sequence_no": i + 1,
+            "label": c.label,
+            "ball_strike_status": c.ball_strike_status,
+        }
+        for i, c in enumerate(candidates)
+    ]
     summary = evaluate_against_golden(
         predictions=preds,
         ground_truths=gt_data["ground_truth_swings"],
         iou_threshold=0.25,
     )
 
-    print(f"\n[11秒.mov 一對一配對] TP: {summary.true_positives}, Recall: {summary.recall:.2f}, 耗時: {elapsed:.2f}s")
+    print(
+        f"\n[11秒.mov 一對一配對] TP: {summary.true_positives}, Recall: {summary.recall:.2f}, "
+        f"分類正確率: {summary.classification_accuracy:.2f}, 耗時: {elapsed:.2f}s"
+    )
     assert summary.true_positives >= 1, "必須一對一配對命中真實擊球"
-    assert summary.recall >= 1.0
+    assert summary.candidate_detection_rate >= 1.0
+    assert summary.valid_swing_recall >= 1.0
 
 
 def test_long_video_2min_12_swings_benchmark():
-    """驗證 2分鐘.mov (12 記真實揮桿) 透過真實人工標註進行一對一逐球配對評估。"""
+    """驗證 2分鐘.mov (12 記真實揮桿) 透過真實人工標註進行一對一逐球配對評估 (P0-2 五維度驗收)。"""
     if not VIDEO_2MIN.exists():
         pytest.skip("[NOT_VALIDATED] 測試影片/2分鐘.mov 不存在，標記為 NOT_VALIDATED，絕不偽裝為 PASS")
 
@@ -110,7 +123,16 @@ def test_long_video_2min_12_swings_benchmark():
     )
     elapsed = time.time() - t0
 
-    preds = [{"start_ms": c.start_ms, "end_ms": c.end_ms, "sequence_no": i + 1} for i, c in enumerate(candidates)]
+    preds = [
+        {
+            "start_ms": c.start_ms,
+            "end_ms": c.end_ms,
+            "sequence_no": i + 1,
+            "label": c.label,
+            "ball_strike_status": c.ball_strike_status,
+        }
+        for i, c in enumerate(candidates)
+    ]
     summary = evaluate_against_golden(
         predictions=preds,
         ground_truths=gt_data["ground_truth_swings"],
@@ -120,12 +142,25 @@ def test_long_video_2min_12_swings_benchmark():
     print(
         f"\n[2分鐘.mov 逐球一對一配對] 偵測: {len(candidates)}, GT: {summary.total_gt}, "
         f"TP: {summary.true_positives}, FP: {summary.false_positives}, FN: {summary.false_negatives}, "
-        f"逐球真 Recall: {summary.recall:.4f}, 逐球真 Precision: {summary.precision:.4f}, "
+        f"候選偵測率: {summary.candidate_detection_rate:.4f}, 分類正確率: {summary.classification_accuracy:.4f}, "
+        f"擊球專項 Recall: {summary.valid_swing_recall:.4f}, 擊球專項 Precision: {summary.valid_swing_precision:.4f}, "
         f"邊界誤差中位數: {summary.combined_boundary_median_ms:.1f}ms, 耗時: {elapsed:.2f}s"
     )
 
-    # 嚴格一對一真實配對標準 (基於真實人工校準時間碼，正式目標 Recall >= 0.90, Precision >= 0.85)
-    assert summary.true_positives >= 11, f"真實一對一配對命中數未達門檻: {summary.true_positives} / 12"
-    assert summary.recall >= 0.90, f"逐球真 Recall 未達標 (門檻 >= 0.90): {summary.recall:.4f}"
-    assert summary.precision >= 0.85, f"逐球真 Precision 未達標 (門檻 >= 0.85): {summary.precision:.4f}"
+    # 嚴格一對一真實配對標準 (P0-2: 分開考核候選偵測、分類正確率、擊球專項 Recall >= 0.90, Precision >= 0.85)
+    assert summary.candidate_detection_rate >= 0.90, (
+        f"候選動作偵測率未達標: {summary.candidate_detection_rate:.4f} / 1.0"
+    )
+    assert summary.classification_accuracy >= 0.90, (
+        f"揮桿分類正確率未達標: {summary.classification_accuracy:.4f} / 1.0"
+    )
+    assert summary.valid_swing_recall >= 0.90, (
+        f"擊球專項 Recall 未達標 (門檻 >= 0.90): {summary.valid_swing_recall:.4f}"
+    )
+    assert summary.valid_swing_precision >= 0.85, (
+        f"擊球專項 Precision 未達標 (門檻 >= 0.85): {summary.valid_swing_precision:.4f}"
+    )
+    assert summary.combined_boundary_median_ms <= 1500, (
+        f"起迄邊界時間偏差中位數過大: {summary.combined_boundary_median_ms:.1f}ms"
+    )
     assert elapsed < 180, f"處理時間過長: {elapsed:.2f}s"

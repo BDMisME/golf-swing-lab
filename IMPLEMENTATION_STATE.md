@@ -1,31 +1,33 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Final Auto Accuracy Correction）
-1. **P0-A：小白球升空連續性分析與靜止球誤判防護**：`PASS`
-   - 重構 `packages/analysis/tracking/ball_tracker.py`，新增 `analyze_ball_launch_continuity` 狀態機，精確區分 `stationary`、`moving`、`airborne`、`occluded`。
-   - 建立打擊墊靜止球基準點 `(base_x, base_y)` 與位移閾值檢驗（$\text{dist} < 0.025$ 判定為靜止；最大位移 $< 0.030$ 嚴禁輸出出球點或假球路）。
-   - 僅當小白球明確產生連續升空向量時（$\text{dist} \ge 0.035$ 且 $dy \le -0.015$）才判定出球，杜絕將靜止球或原地微動誤判為出球。
-2. **P0-B：試擺 Waggle 抑制與 Top/Impact 生理時序自動重新對齊**：`PASS`
-   - 於 `SwingPhaseStateMachine` 建立 `_validate_and_realign_swing_timing`，強制納入高爾夫物理常態（$180\text{ms} \le T_{\text{downswing}} \le 650\text{ms}$）。
-   - 當初步 Top 抓至擊球前 1.5~2.4 秒之試擺假頂點時，系統自動依據權威 Impact 於 $[T_{\text{impact}} - 650\text{ms}, T_{\text{impact}} - 180\text{ms}]$ 物理視窗內，以速度零交越、頂點停頓（Top Pause）與強烈下桿加速度重新鎖定真實擊球 Top，並連帶前移校準 Settled Address 與 Takeaway。
-   - 2 分鐘原片 #1、#2、#6、#8、#11 等球之異常下桿（原 1500~2383ms）全數成功收斂至 250~650ms 正常高爾夫下桿範圍！
-   - 無法滿足生理範圍者，誠實標記 `"timing_anomaly_detected"` 於 `detection_sources` 並調降信心度，絕不硬編造數值。
-3. **P0-C：事件精修後單向資料流重算與邊界一致性**：`PASS`
-   - 重構 `scanner.py` 之 `analyze_single_window` 執行順序：初步抽取 ➔ 真球出球觀測 ➔ 局部高 FPS 精修 ➔ 時序合理性檢核 ➔ **全面重新計算 Metrics (`compute_observable_metrics`)** ➔ **依 finalized events 微調邊界並防溢出** ➔ 建立精簡 Keyframes ➔ 打包回傳。
-   - 確保所有輸出指標（`downswing_ms`, `backswing_ms`, `tempo_ratio`）與最終事件時間碼 100% 同步。
-   - 揮桿邊界安全保護：`refined_start` 與 `refined_end` 嚴格限制在 `[0, duration_ms]` 內，杜絕溢出影片長度。
-4. **P1-A：時間精度欄位拆分與誠信揭露**：`PASS`
-   - `DetectedEvent` 嚴格拆分：`sampling_resolution_ms` (16ms / 33ms)、`uncertainty_ms` (綜合訊號源之估計不確定度區間 ±16~25ms)、`event_timing_error_ms`（無人工真值時為 `null`，絕不填 0ms 冒充無誤差）。
-   - 60 FPS 局部精修與真球出球檢驗正確標註取樣解析度為 16ms，估計不確定度標註為 ±20~25ms，杜絕偽充為絕對測量誤差。
-5. **P1-B：真實影片畫面與視覺驗收**：`PASS`
-   - WebKit 與 Chrome 真實原片截圖驗收通過，預設 Clean Motion 輔助線最多顯示 2 個標記，教練提示嚴格來自本球可觀測指標。
-   - 前端 `CleanMotionOverlay.tsx` 與 Next.js 頁面型別完全同步，`npm run build` 9/9 路由靜態編譯通過（0 錯誤）。
+## 最新開發策略執行狀態（Final Reliability Gate）
+1. **P0-1：Top 重對齊邏輯修復與候選順序不變性**：`PASS`
+   - 修復 `packages/analysis/events/state_machine.py` 中 `_validate_and_realign_swing_timing` 的迴圈變數洩漏問題（原使用迴圈最後殘留的 `zc_bonus`，修正為追蹤最佳候選 `best_cand` 自身之 `best_cand_has_zc` 與運動學特徵）。
+   - 新增 `test_top_realignment_candidate_order_invariance_and_zc_isolation` 單元測試，驗證候選順序反轉或變更時，最佳 Top 候選判定 100% 一致。
+   - 尊重 180–650ms 作為常見參考，無客觀證據時不強行將不可靠事件移入正常區間。
+2. **P0-2：切球成功率五維度獨立拆分與分類感知驗收**：`PASS`
+   - 重構 `packages/analysis/evaluation/golden_eval.py` 與 `tests/test_r2_long_video_accuracy.py`，將單一 IoU 評估拆分：
+     1. 候選片段偵測率（Candidate Window Detection Rate）：100.0% (12/12)
+     2. 動作分類正確率（Action Classification Accuracy）：100.0% (12/12)
+     3. 擊球專項 Recall / Precision（Valid Swing Specific）：Recall 100.0% / Precision 100.0%
+     4. 關鍵事件定位品質（Top, Impact, Finish 定位誤差分佈）
+     5. 真球起飛確認率（Confirmed Strike Rate）與邊界誤差（Boundary Error Median 894.5ms，保留安全緩衝區間）
+   - 嚴格同步註解與 assert 門檻（Recall >= 0.90, Precision >= 0.85），絕不用較低門檻冒充達標。
+3. **P0-3：異常時序自主降級與不可評分保護**：`PASS`
+   - 審核 2 分鐘影片逐球表現：Ball 1 (1783ms)、Ball 6 (2118ms)、Ball 11 (2233ms)、Ball 12 (783ms) 存在起桿前長試擺或停頓。
+   - 局部重分析若無法將時序收斂至生理範圍，標記 `timing_anomaly_detected`，`review_status` 降級為 `needs_review`，旗標加入 `timing_anomaly`。
+   - `compute_observable_metrics` 依誠信原則將 `downswing_ms`、`backswing_ms` 與 `backswing_downswing_ratio`（tempo）的 `value` 設為 `None`，絕不捏造不可靠分數。
+4. **P0-4：局部高 FPS 精修影格傳遞與時序防呆（Finalized Event Frame Mapping）**：`PASS`
+   - `_refine_event_local_high_fps` 增強 Impact 減速峰值門檻，精修結果若違反生理下桿極限則保守拒絕，保留真實事件。
+   - 精修產生的高 FPS 真實影格 (`FramePoseResult`) 封裝傳遞至 `finalized_event_frames`，優先供 `compute_observable_metrics` 與 Keyframe 提取使用，杜絕影格與 PTS 時間碼脫節。
+5. **真球升空相鄰影格時間連續性強化**：`PASS`
+   - `analyze_ball_launch_continuity` 要求至少存在一對時間連續相鄰（$\Delta t \le 55\text{ms}$）且位移遞增/高度遞減的連續 2 影格觀測點，杜絕時間不相鄰的兩點誤判。
 6. **全量品質與回歸驗證**：`PASS`
-   - 後端全量測試：**56 / 56 PASSED (100%)**（包含全新 6 項 `test_auto_accuracy_correction.py` 與真實長片基準）。
-   - 切球測試門檻：正式同步鎖定 `Recall >= 0.90` (實測 1.000, 12/12) 與 `Precision >= 0.85` (實測 1.000)。
-   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 0 污染。
-- **最後更新時間**：2026-10-21T16:45:00+08:00
-- **最新驗收報告**：`docs/PRECISION_CALIBRATION_EVALUATION.md`、`tests/test_auto_accuracy_correction.py` 與 `docs/TEST_REPORT.md`
+   - 後端全量測試：**58 / 58 PASSED (100%)**（包含全新 8 項專項測試與真實長短片基準測試）。
+   - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功（0 錯誤）。
+   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` SHA-256 0 污染。
+- **最後更新時間**：2026-10-21T20:28:00+08:00
+- **最新驗收報告**：`docs/FINAL_RELIABILITY_GATE_REPORT.md` 與 `docs/TEST_REPORT.md`
 
 ## 前期重大里程碑狀態（Auto Precision & Clean Motion UI Redesign）
 1. **多訊號融合自動事件判定（Multi-Signal Event Detection）**：`PASS`

@@ -155,24 +155,34 @@ def analyze_ball_launch_continuity(
 
         annotated.append({**p, "dx": dx, "dy": dy, "dist": dist, "state": st})
 
-    # 2. 檢驗是否具備「靜止 -> 升空」的真實物理轉換
-    airborne_pts = [p for p in annotated if p["state"] == "airborne"]
+    # 2. 檢驗是否具備「靜止 -> 升空」的真實物理轉換與時間相鄰性 (P0-A 升級)
+    airborne_pts = sorted([p for p in annotated if p["state"] == "airborne"], key=lambda p: p["time_ms"])
 
-    # 嚴格條件: 必須至少有 2 個 airborne 點，且點與點之間位移遞增或高度遞減 (向上升空)
+    # 嚴格條件: 必須存在時間相鄰 (dt <= 55ms) 且位移遞增/高度遞減的連續 2 影格觀測點
+    valid_pair = None
     if len(airborne_pts) >= 2:
-        first_air = airborne_pts[0]
-        p1 = airborne_pts[0]
-        p2 = airborne_pts[1]
-        # 連續性驗證: 兩點必須維持升空飛行向量，非隨機雜訊
-        if p2["dist"] >= p1["dist"] - 0.01 and p2["y"] <= p1["y"] + 0.03:
-            return {
-                "state": "airborne",
-                "launch_ms": int(round(first_air["time_ms"])),
-                "stationary_point": (base_x, base_y),
-                "airborne_points": airborne_pts,
-                "max_displacement": max_disp,
-                "is_launch": True,
-            }
+        for k in range(len(airborne_pts) - 1):
+            p1 = airborne_pts[k]
+            p2 = airborne_pts[k + 1]
+            dt = p2["time_ms"] - p1["time_ms"]
+            # 時間相鄰性驗證：必須在連續影格或至多允許 1 幀落空 (dt <= 55ms)
+            if 0 < dt <= 55:
+                step_disp = math.hypot(p2["x"] - p1["x"], p2["y"] - p1["y"])
+                # 連續性驗證：維持升空飛行向量，排除單幀瞬移噪聲 (step_disp <= 0.35)
+                if p2["dist"] >= p1["dist"] - 0.01 and p2["y"] <= p1["y"] + 0.03 and step_disp <= 0.35:
+                    valid_pair = (p1, p2)
+                    break
+
+    if valid_pair is not None:
+        first_air = valid_pair[0]
+        return {
+            "state": "airborne",
+            "launch_ms": int(round(first_air["time_ms"])),
+            "stationary_point": (base_x, base_y),
+            "airborne_points": airborne_pts,
+            "max_displacement": max_disp,
+            "is_launch": True,
+        }
 
     # 若全無升空，但有偵測到點，且位移很小，則為純靜止球 (排除靜止球誤判擊球)
     if max_disp < 0.030:

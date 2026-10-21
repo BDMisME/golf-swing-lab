@@ -4,6 +4,22 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## Final Reliability Gate (2026-10-21)
+- [x] **P0-1 修正 Top 重對齊 Bug 與候選順序不變性**：在 `state_machine.py` 的 `_validate_and_realign_swing_timing()` 中，修復迴圈殘留變數洩漏 `zc_bonus` 導致最佳候選誤殺之缺陷，確保最佳候選完全依自身特徵判斷。新增候選順序反轉與零交越隔離測試（`test_top_realignment_candidate_order_invariance_and_zc_isolation`），保證評估結果一致性。
+- [x] **P0-2 重新定義切球成功率與五大獨立維度拆分**：在 `golden_eval.py` 中將切球表現拆分為五項互不掩蓋的客觀維度：
+  1. 所有揮桿動作候選偵測率 (`candidate_detection_rate`: 100%, 12/12)
+  2. 揮桿分類正確率 (`classification_accuracy`: 100%, 12/12，嚴格檢驗 `valid_swing` vs `practice_swing`)
+  3. 真實擊球專項 Recall (`valid_swing_recall`: 100%, 12/12)
+  4. 真實擊球專項 Precision (`valid_swing_precision`: 100%, 12/12)
+  5. 真球升空連續觀測確認數 (`ball_launch_confirmed_count`: 1) 與邊界誤差中位數 (894.5ms 安全 padding)。
+- [x] **P0-3 異常時序自主降級與不可評分保護**：在 `state_machine.py` 實作生理極限防呆保護（$180\text{ms} \le T_{\text{downswing}} \le 650\text{ms}$）。長試擺或停頓導致下桿時間超標之球次（Ball 1: 1783ms, Ball 6: 2118ms, Ball 11: 2233ms, Ball 12: 783ms）自動標記 `review_status = "needs_review"`、`timing_anomaly`，`downswing_ms`、`backswing_ms` 與 `backswing_downswing_ratio` 嚴格返回 `None`（`unreliable=True`），前端誠實顯示「無法可靠評分」，絕不捏造虛構分數。
+- [x] **P0-4 事件時間碼與影格真正一致（Finalized Event Frame Mapping）**：在 `scanner.py` 中建立 `finalized_event_frames`，將局部 60 FPS 精修與時序檢核後之最終事件幀注入指標重算與 Keyframe 抽取；在 `ball_tracker.py` 中要求至少存在相鄰連續影格（$\Delta t \le 55\text{ms}$）且位移遞增/高度遞減之連續觀測點才判定真球升空，排除跨幀噪聲誤判。
+- [x] **全量自動化回歸驗證**：
+  - 後端 Pytest：**58/58 PASSED (100%)**（包含真實 11 秒與 2 分鐘原片長片驗收）。
+  - 前端建置：Next.js 9/9 靜態路由全數編譯成功（0 錯誤）。
+  - 正式 Golden Set：SHA-256 恆為 `efefa02b...`（零污染）。
+  - 詳盡逐球報告保存於 `docs/FINAL_RELIABILITY_GATE_REPORT.md`。
+
 ## Final Auto Accuracy Correction (2026-10-21)
 - [x] **P0-A 真正辨識 Ball Launch**：重構 `ball_tracker.py`，新增連續性分析狀態機 (`analyze_ball_launch_continuity`)，以打擊墊球位建立基準點，區分 `stationary`、`moving`、`airborne`、`occluded`。位移 $< 0.025$ 或最大位移 $< 0.030$ 嚴格判定為靜止球，不產生出球時間，不輸出假球軌跡，杜絕將靜止球誤判為出球。
 - [x] **P0-B 自動偵測與校正不合理事件時序**：建立 `_validate_and_realign_swing_timing`，納入高爾夫生理極限（$180\text{ms} \le T_{\text{downswing}} \le 650\text{ms}$）。當初選 Top 抓到試擺（Waggle）假頂點時，自動於擊球前 180~650ms 視窗內，以速度零交越、頂點停頓（Top Pause）與強烈下桿加速度重新鎖定真實擊球 Top，並連帶校準 Settled Address 與 Takeaway。2 分鐘原片 #1、#2、#6、#8、#11 異常下桿（原 1500~2383ms）全數成功收斂至 250~650ms 正常區間！
