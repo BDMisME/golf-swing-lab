@@ -1,6 +1,35 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（R13.1: Final Integrity Hotfix）
+## 最新開發策略執行狀態（Auto Precision & Clean Motion UI Redesign）
+1. **多訊號融合自動事件判定（Multi-Signal Event Detection）**：`PASS`
+   - 重構 `SwingPhaseStateMachine` 與 `scanner.py`，整合手腕速度零交越、Top Pause 最小速度、肩部/骨盆旋轉反轉、下桿制動峰值、48kHz 音訊瞬態衝擊（0.18s 極速抽取）與真球出發點。
+   - 每個偵測事件包含客觀來源 (`detection_sources`) 與合理不確定區間 (`uncertainty_ms`)，擊球狀態標示為 `confirmed_strike` 或 `estimated_strike`。
+2. **Waggle / Practice Lift 抑制機制（Settled Address Anchor）**：`PASS`
+   - 辨識起桿前微小晃動、試擺與靜止等待，鎖定起桿前最後靜止基準點（Settled Address），徹底排除瞄球微晃動與前置假動作，鎖定真實上桿發起點。
+3. **極簡動態輔助線 Clean Motion UI（CleanMotionOverlay）**：`PASS`
+   - 全新獨立組件 `apps/web/src/components/CleanMotionOverlay.tsx`，徹底解決五顏六色骨架與繁雜輔助線問題。
+   - 預設「AI 教練模式」最多同時顯示 2 個標記，依 Address/Top/Downswing/Impact/Finish 自動流轉主題：
+     - Address：金黃色站姿穩定框（頭部/臀部）與脊椎軸線
+     - Top：手腕頂點位置與轉肩參考線
+     - Downswing：手部動態路徑（$t \le \text{currentTime}$，不劇透未來）
+     - Impact：桿身釋放平面與出球觀測點（嚴守誠信原則：無真球不畫假球軌）
+     - Finish：收桿平衡金黃色垂直平衡軸
+   - 徹底移除直接疊在人體關節上的交錯文字標籤與左上角常駐 5 色圖例，資訊移至底部 Coach HUD 提示列。
+   - 統一色彩語義：青綠觀測點 (`#00f5d4`)、金黃站姿參考 (`#ffd166`)、亮紅超標警示 (`#ff5470`)。
+   - 保留「專業模式 (Pro Mode)」開關，供深度分析者自選 33 點完整骨架、雙色手部軌跡、Tush Line 與即時數值儀表板。
+4. **個人化體感教練體驗升級**：`PASS`
+   - 單球側邊欄自動提煉每球最關鍵 1~2 項體感動作核心問題（如：骨盆旋轉不足、收桿提前煞車、頭部側移），並配對 2 項針對性實體自主 Drill。
+5. **逐幀播放器與視覺同步**：`PASS`
+   - 支援 `requestVideoFrameCallback` 零延遲繪製對齊，支援精確 `±1f / ±5f` 步進控制。
+6. **全量品質與回歸驗證**：`PASS`
+   - 後端全量測試：**45 / 45 PASSED (100%)** in 177.49s（包含真實 11 秒短片與 2 分鐘 139 秒長片 12/12 切球測試全數通過）。
+   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 於測試前後 SHA-256 恆為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`（0 污染）。
+   - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功。
+   - 視覺存證：改版前後各階段畫面截圖完整留存於 `docs/screenshots/baseline_clean_redesign/` 與 `docs/screenshots/redesign_clean_motion/`。
+- **最後更新時間**：2026-10-21T12:00:00+08:00
+- **最新驗收報告**：`docs/CLEAN_MOTION_REDESIGN_REPORT.md`、`docs/R13_GOLDEN_INTEGRITY_REPORT.md` 與 `docs/TEST_REPORT.md`
+
+## 前期重大里程碑狀態（R13.1: Final Integrity Hotfix）
 1. **P0-1 前後端事件契約與狀態完全統一**：`PASS`
    - 後端統一以 `status` (machine_suggested / human_verified / uncertain)、`source`、`frame`、`verified_at` 為權威契約。
    - 前端 `/audit` 修正舊欄位誤用，支援即時人工確認標記、影格號顯示、更新時間戳記與相對演算法原始值的偏移量（`Δ +xx ms (+xf)`）。
@@ -23,15 +52,6 @@
    - `GET /api/audit/golden-sets` 及所有 `/api/audit/*` 端點全面加入 `current_user: User = Depends(get_current_user)` 認證防護，未授權請求嚴格返回 `401 Unauthorized`。
    - 關聯影片查詢限定於 `Video.owner_id == current_user.id`，落實租戶隔離。
    - 回傳 DTO 全面移除伺服器本機絕對檔案路徑暴露。
-
-6. **全量品質與回歸驗證**：`PASS`
-   - 後端全量測試：**45 / 45 PASSED (100%)** in 170s。
-   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 於測試前後 SHA-256 恆為 `efefa02b...`。
-   - 前端打包：`npm run build` 9/9 路由靜態頁面生成成功。
-   - 瀏覽器實測：Chrome DevTools 驗證 `/audit` 畫面加載、事件切換與標籤狀態完全正常。
-
-- **最後更新時間**：2026-10-21T11:15:00+08:00
-- **最新驗收報告**：`docs/R13_GOLDEN_INTEGRITY_REPORT.md` 與 `docs/TEST_REPORT.md`
 
 
 ## 關鍵重大缺陷排除紀錄 (18% Proxy 卡死根因與修復)

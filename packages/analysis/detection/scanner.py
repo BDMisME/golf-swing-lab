@@ -55,6 +55,56 @@ def merge_overlapping_windows(
     return merged
 
 
+def extract_audio_transients(video_path: str | Path) -> list[int]:
+    """快速從影片音訊軌抽取短時能量脈衝時間碼 (ms)，耗時小於 0.2 秒。若無音訊則優雅降級為空清單。"""
+    try:
+        import subprocess
+
+        cmd = [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(video_path),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "8000",
+            "-f",
+            "s16le",
+            "-",
+        ]
+        proc = subprocess.run(cmd, capture_output=True, timeout=8)
+        if proc.returncode != 0 or not proc.stdout:
+            return []
+        audio_data = np.frombuffer(proc.stdout, dtype=np.int16).astype(np.float32)
+        if len(audio_data) < 8000 * 0.2:
+            return []
+        window_size = int(8000 * 0.05)  # 50ms
+        hop_size = int(8000 * 0.02)  # 20ms
+        energies: list[float] = []
+        timestamps: list[int] = []
+        for i in range(0, len(audio_data) - window_size, hop_size):
+            chunk = audio_data[i : i + window_size]
+            rms = float(np.sqrt(np.mean(chunk**2)))
+            energies.append(rms)
+            timestamps.append(int(round(i * 1000.0 / 8000.0)))
+        if not energies:
+            return []
+        arr_e = np.array(energies)
+        diff_e = np.diff(arr_e, prepend=arr_e[0])
+        thresh = float(np.percentile(diff_e, 94))
+        transients: list[int] = []
+        for k in range(1, len(diff_e) - 1):
+            if diff_e[k] > thresh and diff_e[k] > diff_e[k - 1] and diff_e[k] > diff_e[k + 1]:
+                transients.append(timestamps[k])
+        return transients
+    except Exception:
+        return []
+
+
+
 @dataclass
 class CandidateSegmentResult:
     sequence_no: int
@@ -124,16 +174,22 @@ class CoarseToFineDetector:
                     f"粗掃定位 {len(candidate_windows)} 個候選視窗，進入高幀率精掃 (Fine Scan)",
                 )
 
+            all_audio_transients = extract_audio_transients(video_path)
+
             results: list[CandidateSegmentResult] = []
             total_wins = max(1, len(candidate_windows))
             seq_counter = 1
             for idx, (win_start, win_end) in enumerate(candidate_windows, start=1):
+                win_transients = [
+                    t for t in all_audio_transients if (win_start - 400) <= t <= (win_end + 400)
+                ]
                 seg = self.analyze_single_window(
                     video_path=video_path,
                     start_ms=win_start,
                     end_ms=win_end,
                     sequence_no=seq_counter,
                     extractor=extractor,
+                    audio_transients_ms=win_transients,
                 )
                 if seg is not None and len(seg.events) >= 4:
                     seg.sequence_no = seq_counter
@@ -202,6 +258,8 @@ class CoarseToFineDetector:
         end_ms: int,
         sequence_no: int = 1,
         extractor: PoseExtractor | None = None,
+        audio_transients_ms: list[int] | None = None,
+        ball_strike_ms: int | None = None,
     ) -> CandidateSegmentResult | None:
         own_extractor = extractor is None
         ext = extractor or create_pose_extractor()
@@ -216,7 +274,17 @@ class CoarseToFineDetector:
             if not fine_frames:
                 return None
 
-            events, state_trace, label = self.state_machine.extract_events(fine_frames)
+            if audio_transients_ms is None:
+                all_aud = extract_audio_transients(video_path)
+                audio_transients_ms = [
+                    t for t in all_aud if (start_ms - 400) <= t <= (end_ms + 400)
+                ]
+
+            events, state_trace, label = self.state_machine.extract_events(
+                fine_frames,
+                audio_transients_ms=audio_transients_ms,
+                ball_strike_ms=ball_strike_ms,
+            )
 
             # 根據偵測到的 address/takeaway 與 finish/follow_through 精細對齊揮桿片段邊界
             refined_start = start_ms

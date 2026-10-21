@@ -4,6 +4,25 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## Auto Precision & Clean Motion UI Redesign (2026-10-21)
+- [x] **A. 自動事件辨識多訊號精準化**：
+  - 整合手腕速度零交越、Top Pause 最小速度、肩部/骨盆旋轉反轉、下桿制動峰值、48kHz 音訊瞬態衝擊與真球出發點。
+  - 實作 Waggle / Practice Lift 抑制機制（鎖定起桿前最後靜止基準 Settled Address Anchor）。
+  - 二次局部精修，輸出客觀來源 (`detection_sources`) 與合理不確定區間 (`uncertainty_ms`)。
+  - 客觀標示擊球狀態 (`confirmed_strike` / `estimated_strike` / `strike_unknown` / `no_ball`)。
+- [x] **B. 動態輔助線重新設計 (Clean Motion UI)**：
+  - 獨立封裝全新 `apps/web/src/components/CleanMotionOverlay.tsx`。
+  - 預設「AI 教練模式」極簡設計（最多同時 2 個標記，依 Address/Top/Downswing/Impact/Finish 自動切換主題，無人體文字遮擋，底部 Coach HUD 提示列）。
+  - 統一色彩語義：青綠觀測 (`#00f5d4`)、金黃站姿參考 (`#ffd166`)、亮紅超標警示 (`#ff5470`)。
+  - 保留專業模式（Pro Mode，自選 33 點完整骨架、雙色手部軌跡、Tush Line 等）。
+  - 逐幀同步與 `requestVideoFrameCallback` 零延遲對齊，手部軌跡只畫到當前時間（$t \le \text{currentTime}$），支援精確 `±1f / ±5f` 步進。
+- [x] **C. 個人化體感教練體驗升級**：
+  - 單球側邊欄自動提煉每球最值得改善的 1~2 個具體體感動作核心問題，並配對 2 項建議實體自主 Drill。
+- [x] **D. 驗收存證與回歸測試**：
+  - 截取改版前與改版後基準影格截圖存證（`docs/screenshots/baseline_clean_redesign/`, `docs/screenshots/redesign_clean_motion/`）。
+  - 撰寫完整對比報告 `docs/CLEAN_MOTION_REDESIGN_REPORT.md`。
+  - 全量測試 45/45 通過（包含 11s 與 2min 真實原片 12/12 切球），正式 Golden Set SHA-256 0 污染。
+
 ## R13.1 — Final Integrity Hotfix (2026-10-21)
 - [x] **P0-1 前後端事件資料契約統一**：統一後端 `status`, `source`, `frame`, `verified_at`，前端顯示人工確認徽章、影格號、Delta 偏移量 (`Δ +xx ms (+xf)`)，刷新頁面持久保留。
 - [x] **P0-2 禁止測試污染正式 Golden Set**：清除 6 筆測試 history，備份正式檔案（SHA-256: `efefa02b...`），所有寫入測試改用 tmp_path 與 dependency_overrides 隔離；修復 `reset_swing_to_machine` 之 Round-Trip。

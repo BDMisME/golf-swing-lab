@@ -99,6 +99,11 @@ export interface SwingSegmentItem {
     pose_confidence: number;
     landmarks: Record<string, { x: number; y: number; visibility: number }>;
   }>;
+  quality_metadata?: {
+    wrist_trajectory?: Array<{ time_ms: number; x: number; y: number; conf: number }>;
+    ball_trajectory?: Array<{ time_ms: number; x: number; y: number; point_type: string }>;
+    [key: string]: any;
+  };
   ball_trajectory?: Array<{ time_ms: number; x: number; y: number }>;
   feedback_history?: Array<{
     id: string;

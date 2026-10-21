@@ -200,3 +200,45 @@
   - 測試前 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`
   - 測試後 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954` (完全一致)
 - **前端建置**：`cd apps/web && npm run build` 通過（9/9 靜態頁面生成成功，包含 `/audit`）。
+
+---
+
+## 9. Auto Precision & Clean Motion UI Redesign 測試與驗收證據 (2026-10-21)
+
+### 9.1 核心需求與痛點解決
+- **使用者痛點**：球友不想每天逐球人工校正，也不想在影片上看到五顏六色的骨架和一堆看不懂的交錯線條。
+- **後端多訊號自動判定**：
+  1. 重構 `SwingPhaseStateMachine`，結合手腕速度零交越、Top Pause 最小速度、肩髖旋轉反轉、下桿制動峰值、48kHz 音訊瞬態衝擊與真球出發點。
+  2. 實作 Waggle / Practice Lift 抑制機制（鎖定起桿前最後靜止基準 Settled Address Anchor），排除前置瞄球微晃動。
+  3. 0.18s 極速抽取 8kHz/48kHz 音訊脈衝，結合 Top 後 180~550ms 生理視窗精準輔助鎖定擊球時間點。
+  4. 輸出客觀偵測來源 (`detection_sources`) 與合理不確定區間 (`uncertainty_ms`)，擊球狀態標示為 `confirmed_strike` 或 `estimated_strike`。
+- **前端 Clean Motion UI 重新設計**：
+  1. 獨立組件 `CleanMotionOverlay.tsx`，預設「AI 教練模式」最多同時顯示 2 個標記，隨揮桿階段自動流轉主題。
+  2. 移除所有疊加在人體關節上的文字與雜亂圖例，資訊移至底部 Coach HUD 提示列。
+  3. 統一三色語義：青綠觀測 (`#00f5d4`)、金黃站姿參考 (`#ffd166`)、亮紅超標警示 (`#ff5470`)。
+  4. 支援 `requestVideoFrameCallback` 零延遲對齊，手部軌跡只畫到當前時間點（$t \le \text{currentTime}$），提供精確 `±1f / ±5f` 步進控制。
+  5. 保留 Pro Mode 開關，供深度分析者檢視 33 點完整骨架、雙色手部軌跡與 Tush Line。
+  6. 體感教練升級：單球側邊欄直覺顯示最核心 1~2 項動作問題與兩項實體自主 Drill。
+
+### 9.2 改版前後影格畫面具體對比
+| 階段 | 改版前基準 (Baseline) | 改版後極簡設計 (Clean Motion) | 改進亮點 |
+|---|---|---|---|
+| **整體總覽** | `docs/screenshots/baseline_clean_redesign/00_baseline_overview.png` | `docs/screenshots/redesign_clean_motion/04_full_page_insights_and_drills.png` | 移除全屏繁雜線條，右側新增體感洞察與實體課表卡片 |
+| **Address** | `docs/screenshots/baseline_clean_redesign/01_baseline_address.png` | `docs/screenshots/redesign_clean_motion/02_redesign_address.png` | 金黃色頭部/臀部穩定框 + 脊椎軸線，乾淨無遮擋 |
+| **Top** | `docs/screenshots/baseline_clean_redesign/01_baseline_top.png` | `docs/screenshots/redesign_clean_motion/02_redesign_top.png` | 聚焦青綠手腕最高點與轉肩軸，移除關節雜亂線條 |
+| **Downswing** | `docs/screenshots/baseline_clean_redesign/01_baseline_downswing.png` | `docs/screenshots/redesign_clean_motion/02_redesign_downswing.png` | 手部動態路徑僅畫到當前影格 ($t \le \text{currentTime}$)，不劇透未來 |
+| **Impact** | `docs/screenshots/baseline_clean_redesign/01_baseline_impact.png` | `docs/screenshots/redesign_clean_motion/02_redesign_impact.png` | 僅留釋放平面與出球觀測點，遵守誠信原則無真球不畫假球軌 |
+| **Finish** | `docs/screenshots/baseline_clean_redesign/01_baseline_finish.png` | `docs/screenshots/redesign_clean_motion/02_redesign_finish.png` | 金黃色垂直平衡軸，直觀檢視重心是否穩定留於左腳 |
+| **Pro 專業模式** | (舊版全開五顏六色，無法切換) | `docs/screenshots/redesign_clean_motion/03_redesign_pro_mode.png` | 可自由開啟 33 點骨架、雙色揮桿軌跡與 Tush Line 檢視深層數據 |
+
+### 9.3 自動化回歸測試執行記錄
+- **後端測試**：`uv run pytest tests/ -v`
+  - **測試結果**：**45 passed in 177.49s (100% PASS)**
+  - 真實 11 秒短片測試：`tests/test_r2_long_video_accuracy.py::test_real_11s_accuracy` PASS
+  - 真實 2 分鐘長片切球測試：`tests/test_r2_long_video_accuracy.py::test_real_2min_video_accuracy` PASS (12/12 記全中)
+  - Golden Set Round-Trip 重置與防污染測試：6/6 PASS
+- **正式 Golden Set 防污染校驗**：
+  - 測試前 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`
+  - 測試後 SHA-256：`efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954` (0 污染)
+- **前端建置**：`cd apps/web && npm run build` 通過（9/9 靜態路由頁面打包成功）。
+
