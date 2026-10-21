@@ -439,7 +439,27 @@ class SwingPhaseStateMachine:
             sub_post = speed[cand : min(n, cand + 6)]
             post_accel = float(np.max(sub_post)) - speed[cand] if len(sub_post) > 0 else 0.0
 
-            total_s = h_score * 3.0 + p_score * 2.0 + post_accel * 50.0
+            # (4) 全局擊球動能與音訊支持度：Top 後 180~650ms 內是否有全域最大速度峰值或音訊瞬態 (P0-B)
+            window_max_spd = float(np.max(speed)) if len(speed) > 0 else 1.0
+            ds_end_limit = min(n, cand + max(4, int(650.0 / max(10.0, mean_dt))))
+            ds_window = speed[cand + 1 : ds_end_limit]
+            ds_max_spd = float(np.max(ds_window)) if len(ds_window) > 0 else 0.0
+            kinetic_ratio = ds_max_spd / max(1e-4, window_max_spd)
+
+            has_audio_strike = 0.0
+            if audio_transients_ms:
+                for a_ms in audio_transients_ms:
+                    if 180 <= (a_ms - times[cand]) <= 650:
+                        has_audio_strike = 3.5
+                        break
+
+            total_s = (
+                h_score * 3.0
+                + p_score * 2.0
+                + post_accel * 35.0
+                + kinetic_ratio * 4.5
+                + has_audio_strike
+            )
 
             if total_s > best_top_score:
                 best_top_score = total_s

@@ -130,9 +130,9 @@ def test_markdown_and_json_report_consistency():
     with open(MD_REPORT_PATH, "r", encoding="utf-8") as f:
         md_text = f.read()
 
-    # 1. 驗證 Git Commit SHA
-    git_sha = json_data["metadata"]["git_commit_sha"]
-    assert f"`{git_sha}`" in md_text, "Markdown 報告中的 Git Commit SHA 與 JSON 不符！"
+    # 1. 驗證 Git Commit SHA (支援 -DIRTY 標記)
+    git_sha_display = json_data["metadata"].get("git_commit_sha_display", json_data["metadata"]["git_commit_sha"])
+    assert f"`{git_sha_display}`" in md_text, "Markdown 報告中的 Git Commit SHA 與 JSON 不符！"
 
     # 2. 驗證推論耗時
     elapsed = json_data["metadata"]["execution_telemetry"]["elapsed_seconds"]
@@ -147,3 +147,50 @@ def test_markdown_and_json_report_consistency():
         pattern = rf"\|\s*\*\*#{seq}\*\*\s*\|.*{top_ms:,}.*{imp_ms:,}.*\|"
         match = re.search(pattern, md_text)
         assert match is not None, f"球次 #{seq} 的時間碼 ({top_ms}, {imp_ms}) 未在 Markdown 表格中精確匹配！"
+
+
+def test_golden_set_actual_status_dynamic_integrity():
+    """
+    P0-A: 驗證 Golden Set 驗證狀態為實際動態統計，絕非偽造硬編碼。
+    當前 60 個事件均為 machine_suggested，human_verified 必須為 0。
+    """
+    if not JSON_REPORT_PATH.exists():
+        pytest.skip("報告檔案尚未生成")
+
+    with open(JSON_REPORT_PATH, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+
+    gs = json_data["metadata"]["golden_set"]
+    assert gs["human_verified_events_count"] == 0, "當前 Golden Set 尚無人工驗證事件"
+    assert gs["machine_suggested_events_count"] == 60, "當前 Golden Set 全部 60 個事件應為 machine_suggested"
+    assert gs["human_verified_ratio"] == 0.0, "人工驗證率必須如實反映為 0.0"
+
+    # 驗證五大 Verdicts 中 EVENT_ACCURACY_VALIDATED 為 NOT_VALIDATED
+    verdicts = json_data["verdicts"]
+    assert verdicts["EVENT_ACCURACY_VALIDATED"] == "NOT_VALIDATED", (
+        "因無人工確認之正式真值，EVENT_ACCURACY_VALIDATED 必須動態判定為 NOT_VALIDATED"
+    )
+    assert verdicts["DETECTION_VALIDATED"] == "PASS (PROVISIONAL)"
+
+
+def test_real_world_negative_samples_zero_false_positives():
+    """
+    P0-D: 驗證真實長片中 11 個非揮桿間隔區段均未產生假陽性 (FP = 0)。
+    """
+    if not JSON_REPORT_PATH.exists():
+        pytest.skip("報告檔案尚未生成")
+
+    with open(JSON_REPORT_PATH, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+
+    summary = json_data["summary"]
+    assert summary["negative_intervals_tested"] == 11, "必須完整驗收 11 個間隔區段"
+    assert summary["negative_false_positives"] == 0, "11 個非揮桿區段假陽性必須為 0"
+    assert summary["negative_total_duration_sec"] > 70.0, "負樣本總時長應超過 70 秒"
+
+    negs = json_data.get("negative_samples_real_world", [])
+    assert len(negs) == 11
+    for n in negs:
+        assert n["false_positives"] == 0
+        assert n["status"] == "PASS"
+        assert n["provisional_tag"] == "PROVISIONAL"

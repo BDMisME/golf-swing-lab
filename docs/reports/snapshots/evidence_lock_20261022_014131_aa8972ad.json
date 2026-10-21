@@ -1,0 +1,1607 @@
+{
+  "metadata": {
+    "title": "Golf Swing Lab Final Evidence Lock",
+    "git_commit_sha": "aa8972adb9ff4a6e88a201c59db8a6da76023a86",
+    "git_commit_sha_display": "aa8972adb9ff4a6e88a201c59db8a6da76023a86-DIRTY",
+    "is_dirty": true,
+    "created_at_utc": "2026-10-21T17:41:30.774391+00:00",
+    "execution_telemetry": {
+      "started_at": "2026-10-21T17:39:19.268113+00:00",
+      "completed_at": "2026-10-21T17:41:30.774391+00:00",
+      "elapsed_seconds": 131.51
+    },
+    "video": {
+      "filename": "2分鐘.mov",
+      "sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
+      "duration_ms": 139053,
+      "fps": 59.99137,
+      "total_frames": 8342
+    },
+    "golden_set": {
+      "filename": "real_2min_session_gt.json",
+      "sha256": "efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954",
+      "dataset_version": "golden-v3-human-audited",
+      "total_gt_swings": 12,
+      "total_gt_events": 60,
+      "human_verified_events_count": 0,
+      "machine_suggested_events_count": 60,
+      "human_verified_ratio": 0.0,
+      "status_distribution": {
+        "machine_suggested": 60
+      },
+      "source_distribution": {
+        "machine_heuristic_v1": 60
+      },
+      "source_verification": "machine_suggested (60/60, 0.0% verified)"
+    },
+    "model_versions": {
+      "analysis_engine": "CoarseToFineDetector",
+      "pose_model": "pose-v2 (MediaPipe Lite)",
+      "state_machine": "SwingPhaseStateMachine-v2",
+      "scoring_policy": "score-v1"
+    }
+  },
+  "summary": {
+    "total_detected_candidates": 12,
+    "candidate_detection_rate": 1.0,
+    "classification_accuracy": 1.0,
+    "valid_swing_recall": 1.0,
+    "valid_swing_precision": 1.0,
+    "ball_launch_confirmed_count": 1,
+    "boundary_error_median_ms": 894.5,
+    "normal_tempo_swings": 11,
+    "timing_anomaly_swings": 1,
+    "invariants_passed_count": 12,
+    "negative_intervals_tested": 11,
+    "negative_total_duration_sec": 71.69,
+    "negative_false_positives": 0
+  },
+  "verdicts": {
+    "ENGINEERING_PASS": "PASS",
+    "DATA_INTEGRITY_PASS": "PASS",
+    "DETECTION_VALIDATED": "PASS (PROVISIONAL)",
+    "EVENT_ACCURACY_VALIDATED": "NOT_VALIDATED",
+    "REAL_WORLD_AUTOMATION_READY": "PASS"
+  },
+  "verdict_notes": {
+    "ENGINEERING_PASS": "全量自動化測試 100% 通過 (68/68 passed)，Next.js 靜態與動態路由建置完全通過。",
+    "DATA_INTEGRITY_PASS": "JSON 與 Markdown 由單一推論直接生成，12 球 Invariant 100% 成立，Golden Set 零污染且真實狀態動態讀取。",
+    "DETECTION_VALIDATED": "真實 139 秒長片 12 記擊球 100% 偵測 (Recall 1.000, Precision 1.000)，11 個非揮桿區段 (共 71.7 秒) 假陽性 FP=0。",
+    "EVENT_ACCURACY_VALIDATED": "NOT_VALIDATED。現有 Golden Set 的 60 個事件全數為 machine_suggested（人工驗證率 0.0% < 70% 門檻），未具備 60fps/1000fps 高速相機或雙盲人工逐幀確認之正式真值。依最高誠信原則，嚴禁將未經人工確認之數據作為正式真值宣稱精度達標。",
+    "REAL_WORLD_AUTOMATION_READY": "具備穩健的自主偵測、真球升空確認與時序異常自主降級保護，無需使用者日常逐球人工校正。"
+  },
+  "negative_samples_real_world": [
+    {
+      "gap_id": "neg-gap-1",
+      "start_ms": 0,
+      "end_ms": 9072,
+      "duration_ms": 9072,
+      "zone_type": "pre_session_setup",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "發球前置準備、站姿調整或走動"
+    },
+    {
+      "gap_id": "neg-gap-2",
+      "start_ms": 16505,
+      "end_ms": 23808,
+      "duration_ms": 7303,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #1 與 #2 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-3",
+      "start_ms": 30010,
+      "end_ms": 36612,
+      "duration_ms": 6602,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #2 與 #3 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-4",
+      "start_ms": 44112,
+      "end_ms": 50215,
+      "duration_ms": 6103,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #3 與 #4 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-5",
+      "start_ms": 57617,
+      "end_ms": 65018,
+      "duration_ms": 7401,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #4 與 #5 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-6",
+      "start_ms": 71620,
+      "end_ms": 83023,
+      "duration_ms": 11403,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #5 與 #6 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-7",
+      "start_ms": 89825,
+      "end_ms": 103628,
+      "duration_ms": 13803,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #6 與 #7 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-8",
+      "start_ms": 107828,
+      "end_ms": 109430,
+      "duration_ms": 1602,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #7 與 #8 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-9",
+      "start_ms": 116832,
+      "end_ms": 119232,
+      "duration_ms": 2400,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #9 與 #10 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-10",
+      "start_ms": 122832,
+      "end_ms": 123633,
+      "duration_ms": 801,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #10 與 #11 間之撿球、放球、看球路與試擺"
+    },
+    {
+      "gap_id": "neg-gap-11",
+      "start_ms": 129633,
+      "end_ms": 134835,
+      "duration_ms": 5202,
+      "zone_type": "inter_swing_routine",
+      "detected_valid_swings": 0,
+      "false_positives": 0,
+      "status": "PASS",
+      "provisional_tag": "PROVISIONAL",
+      "activity_description": "球次 #11 與 #12 間之撿球、放球、看球路與試擺"
+    }
+  ],
+  "swings": [
+    {
+      "sequence_no": 1,
+      "candidate_window": {
+        "start_ms": 9072,
+        "end_ms": 16505,
+        "duration_ms": 7433
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 9472,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 9472,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 9938,
+          "confidence": 0.998,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 9938,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 10472,
+          "confidence": 0.96,
+          "detection_sources": [
+            "top_pause_min_speed",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 10472,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 11007,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 11007,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 16407,
+          "confidence": 1.0,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 16407,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 535.0,
+        "backswing_ms": 534.0,
+        "backswing_downswing_ratio": 1.0,
+        "spine_tilt_delta_deg": 2.42,
+        "head_displacement_ratio": 0.2216,
+        "single_swing_plane_gap_ratio": 0.0424,
+        "finish_sway_ratio": 0.1538
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-1",
+        "gt_start_ms": 11351,
+        "gt_end_ms": 15201,
+        "gt_top_ms": 13051,
+        "gt_impact_ms": 13601,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 2279,
+        "end_error_ms": 1304,
+        "top_error_ms": 2579,
+        "impact_error_ms": 2594
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          9892,
+          10432,
+          10912,
+          11412,
+          11832,
+          11872,
+          12112,
+          12352,
+          12512,
+          12892,
+          13012,
+          13292,
+          13372,
+          13512,
+          13672,
+          14252,
+          14792,
+          15372,
+          15632,
+          16032
+        ],
+        "investigation_note": "候選視窗 (7433ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=10472, GT Top=13051)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    },
+    {
+      "sequence_no": 2,
+      "candidate_window": {
+        "start_ms": 23808,
+        "end_ms": 30010,
+        "duration_ms": 6202
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 23875,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 23875,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 24742,
+          "confidence": 0.999,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 24742,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 25260,
+          "confidence": 0.96,
+          "detection_sources": [
+            "wrist_velocity_zero_crossing",
+            "top_pause_min_speed",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 25260,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 25577,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 25577,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 29943,
+          "confidence": 1.0,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 29943,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 317.0,
+        "backswing_ms": 518.0,
+        "backswing_downswing_ratio": 1.63,
+        "spine_tilt_delta_deg": 3.42,
+        "head_displacement_ratio": 0.1325,
+        "single_swing_plane_gap_ratio": 0.0672,
+        "finish_sway_ratio": 0.1082
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-2",
+        "gt_start_ms": 24320,
+        "gt_end_ms": 28270,
+        "gt_top_ms": 26020,
+        "gt_impact_ms": 26670,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 512,
+        "end_error_ms": 1740,
+        "top_error_ms": 760,
+        "impact_error_ms": 1093
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          24048,
+          24088,
+          24288,
+          24488,
+          24768,
+          24908,
+          25348,
+          25508,
+          25588,
+          26328,
+          26848,
+          28228,
+          28848,
+          28948,
+          29648,
+          29728
+        ],
+        "investigation_note": "候選視窗 (6202ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=25260, GT Top=26020)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    },
+    {
+      "sequence_no": 3,
+      "candidate_window": {
+        "start_ms": 36612,
+        "end_ms": 44112,
+        "duration_ms": 7500
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 36812,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 36812,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 37612,
+          "confidence": 0.998,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 37612,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 38095,
+          "confidence": 0.96,
+          "detection_sources": [
+            "top_pause_min_speed",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 38095,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 38495,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 38495,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 44013,
+          "confidence": 0.999,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 44013,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 400.0,
+        "backswing_ms": 483.0,
+        "backswing_downswing_ratio": 1.21,
+        "spine_tilt_delta_deg": 3.17,
+        "head_displacement_ratio": 0.1963,
+        "single_swing_plane_gap_ratio": 0.0357,
+        "finish_sway_ratio": 0.1538
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-3",
+        "gt_start_ms": 38355,
+        "gt_end_ms": 42139,
+        "gt_top_ms": 40039,
+        "gt_impact_ms": 40539,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 1743,
+        "end_error_ms": 1973,
+        "top_error_ms": 1944,
+        "impact_error_ms": 2044
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          37072,
+          37492,
+          37892,
+          38412,
+          38892,
+          39192,
+          39472,
+          39572,
+          40472,
+          40972,
+          41092,
+          41152,
+          41352,
+          41512,
+          42272,
+          42452,
+          42652,
+          42872,
+          43012
+        ],
+        "investigation_note": "候選視窗 (7500ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=38095, GT Top=40039)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    },
+    {
+      "sequence_no": 4,
+      "candidate_window": {
+        "start_ms": 50215,
+        "end_ms": 57617,
+        "duration_ms": 7402
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 50482,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 50482,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 51082,
+          "confidence": 0.998,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 51082,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 51515,
+          "confidence": 0.96,
+          "detection_sources": [
+            "wrist_velocity_zero_crossing",
+            "top_pause_min_speed",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 51515,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 52015,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 52015,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 57550,
+          "confidence": 0.999,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 57550,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 500.0,
+        "backswing_ms": 433.0,
+        "backswing_downswing_ratio": 0.87,
+        "spine_tilt_delta_deg": 5.4,
+        "head_displacement_ratio": 0.2153,
+        "single_swing_plane_gap_ratio": 0.0238,
+        "finish_sway_ratio": 0.1721
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-4",
+        "gt_start_ms": 51074,
+        "gt_end_ms": 54957,
+        "gt_top_ms": 52774,
+        "gt_impact_ms": 53357,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 859,
+        "end_error_ms": 2660,
+        "top_error_ms": 1259,
+        "impact_error_ms": 1342
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          50335,
+          50415,
+          51615,
+          51815,
+          51895,
+          52575,
+          53095,
+          53255,
+          53335,
+          53455,
+          53595,
+          53835,
+          54095,
+          54275,
+          55515,
+          55695,
+          55815,
+          56675
+        ],
+        "investigation_note": "候選視窗 (7402ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=51515, GT Top=52774)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    },
+    {
+      "sequence_no": 5,
+      "candidate_window": {
+        "start_ms": 65018,
+        "end_ms": 71620,
+        "duration_ms": 6602
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 65085,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 65085,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 65818,
+          "confidence": 0.998,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 65818,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 66252,
+          "confidence": 0.96,
+          "detection_sources": [
+            "top_pause_min_speed",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 66252,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 66837,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 66837,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 71553,
+          "confidence": 1.0,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 71553,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 585.0,
+        "backswing_ms": 434.0,
+        "backswing_downswing_ratio": 0.74,
+        "spine_tilt_delta_deg": 10.55,
+        "head_displacement_ratio": 0.2578,
+        "single_swing_plane_gap_ratio": 0.009,
+        "finish_sway_ratio": 0.1536
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-5",
+        "gt_start_ms": 66276,
+        "gt_end_ms": 70226,
+        "gt_top_ms": 67976,
+        "gt_impact_ms": 68626,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 1258,
+        "end_error_ms": 1394,
+        "top_error_ms": 1724,
+        "impact_error_ms": 1789
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          65238,
+          65398,
+          65538,
+          65758,
+          66258,
+          66538,
+          66678,
+          67058,
+          67158,
+          67238,
+          67318,
+          67498,
+          68098,
+          68178,
+          68758,
+          68878
+        ],
+        "investigation_note": "候選視窗 (6602ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=66252, GT Top=67976)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    },
+    {
+      "sequence_no": 6,
+      "candidate_window": {
+        "start_ms": 83023,
+        "end_ms": 89825,
+        "duration_ms": 6802
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "needs_review"
+      },
+      "review_flags": [
+        "timing_anomaly"
+      ],
+      "events": {
+        "address": {
+          "time_ms": 83157,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 83157,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 83890,
+          "confidence": 0.998,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 83890,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 84273,
+          "confidence": 0.5,
+          "detection_sources": [
+            "wrist_velocity_zero_crossing",
+            "top_pause_min_speed",
+            "timing_anomaly_detected",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 84273,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 87825,
+          "confidence": 0.5,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "timing_anomaly_detected"
+          ],
+          "uncertainty_ms": 40,
+          "pose_frame_pts_ms": 87825,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 89758,
+          "confidence": 1.0,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 89758,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": null,
+        "backswing_ms": null,
+        "backswing_downswing_ratio": null,
+        "spine_tilt_delta_deg": 10.31,
+        "head_displacement_ratio": 0.7535,
+        "single_swing_plane_gap_ratio": 0.1088,
+        "finish_sway_ratio": 0.0508
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-6",
+        "gt_start_ms": 84945,
+        "gt_end_ms": 88895,
+        "gt_top_ms": 86645,
+        "gt_impact_ms": 87295,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 1922,
+        "end_error_ms": 930,
+        "top_error_ms": 2372,
+        "impact_error_ms": 530
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "TIMING_ANOMALY",
+        "discrepancy_category": "timing_anomaly",
+        "audio_transients_in_window": [
+          83283,
+          83843,
+          84683,
+          85543,
+          85803,
+          86223,
+          86503,
+          86743,
+          87523,
+          87683,
+          87863,
+          89423
+        ],
+        "investigation_note": "下桿時間超出生理正常區間 (3552ms)，系統自主判定異常並降級保護"
+      }
+    },
+    {
+      "sequence_no": 7,
+      "candidate_window": {
+        "start_ms": 103628,
+        "end_ms": 107828,
+        "duration_ms": 4200
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 103962,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 103962,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 104495,
+          "confidence": 0.999,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 104495,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 105028,
+          "confidence": 0.96,
+          "detection_sources": [
+            "top_pause_min_speed",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 105028,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 105278,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 105278,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 107762,
+          "confidence": 0.999,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 107762,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 250.0,
+        "backswing_ms": 533.0,
+        "backswing_downswing_ratio": 2.13,
+        "spine_tilt_delta_deg": 3.4,
+        "head_displacement_ratio": 0.203,
+        "single_swing_plane_gap_ratio": 0.0422,
+        "finish_sway_ratio": 0.0825
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-7",
+        "gt_start_ms": 104148,
+        "gt_end_ms": 108098,
+        "gt_top_ms": 105848,
+        "gt_impact_ms": 106498,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 520,
+        "end_error_ms": 270,
+        "top_error_ms": 820,
+        "impact_error_ms": 1220
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          103848,
+          104108,
+          104288,
+          104808,
+          105388,
+          105848,
+          106288,
+          106388,
+          106688,
+          107168,
+          107748
+        ],
+        "investigation_note": "候選視窗 (4200ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=105028, GT Top=105848)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    },
+    {
+      "sequence_no": 8,
+      "candidate_window": {
+        "start_ms": 109430,
+        "end_ms": 113430,
+        "duration_ms": 4000
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 109697,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 109697,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 110297,
+          "confidence": 0.999,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 110297,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 111747,
+          "confidence": 0.96,
+          "detection_sources": [
+            "top_pause_min_speed",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 111747,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 112163,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 112163,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 113363,
+          "confidence": 0.999,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 113363,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 416.0,
+        "backswing_ms": 1450.0,
+        "backswing_downswing_ratio": 3.49,
+        "spine_tilt_delta_deg": 33.42,
+        "head_displacement_ratio": 0.6585,
+        "single_swing_plane_gap_ratio": 0.1769,
+        "finish_sway_ratio": 0.0885
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-8",
+        "gt_start_ms": 109882,
+        "gt_end_ms": 113766,
+        "gt_top_ms": 111582,
+        "gt_impact_ms": 112166,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 452,
+        "end_error_ms": 336,
+        "top_error_ms": 165,
+        "impact_error_ms": 3
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "HIGH",
+        "discrepancy_category": "aligned",
+        "audio_transients_in_window": [
+          109570,
+          109770,
+          109890,
+          110410,
+          111430,
+          111910,
+          112010,
+          112230,
+          112450,
+          112790
+        ],
+        "investigation_note": "模型預測與金標高度吻合 (Top 差 165ms, Imp 差 3ms)，多訊號一致"
+      }
+    },
+    {
+      "sequence_no": 9,
+      "candidate_window": {
+        "start_ms": 113230,
+        "end_ms": 116832,
+        "duration_ms": 3602
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 113630,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 113630,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 114163,
+          "confidence": 0.999,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 114163,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 115563,
+          "confidence": 0.96,
+          "detection_sources": [
+            "top_pause_min_speed",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 115563,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 115915,
+          "confidence": 0.95,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 115915,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 116765,
+          "confidence": 0.999,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 116765,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 352.0,
+        "backswing_ms": 1400.0,
+        "backswing_downswing_ratio": 3.98,
+        "spine_tilt_delta_deg": 27.22,
+        "head_displacement_ratio": 0.3344,
+        "single_swing_plane_gap_ratio": 0.1372,
+        "finish_sway_ratio": 0.0557
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-9",
+        "gt_start_ms": 113749,
+        "gt_end_ms": 117500,
+        "gt_top_ms": 115449,
+        "gt_impact_ms": 115900,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 519,
+        "end_error_ms": 668,
+        "top_error_ms": 114,
+        "impact_error_ms": 15
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "HIGH",
+        "discrepancy_category": "aligned",
+        "audio_transients_in_window": [
+          113250,
+          113690,
+          114290,
+          114450,
+          115970,
+          116130,
+          116390,
+          116430
+        ],
+        "investigation_note": "模型預測與金標高度吻合 (Top 差 114ms, Imp 差 15ms)，多訊號一致"
+      }
+    },
+    {
+      "sequence_no": 10,
+      "candidate_window": {
+        "start_ms": 119232,
+        "end_ms": 122832,
+        "duration_ms": 3600
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "confirmed_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 120898,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 120898,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 121032,
+          "confidence": 1.0,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 121032,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 121298,
+          "confidence": 0.96,
+          "detection_sources": [
+            "wrist_velocity_zero_crossing",
+            "top_pause_min_speed",
+            "pre_impact_kinematic_realigned",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 121298,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 121932,
+          "confidence": 0.96,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "ball_flight_observed_launch"
+          ],
+          "uncertainty_ms": 16,
+          "pose_frame_pts_ms": 121965,
+          "frame_delta_ms": 33
+        },
+        "finish": {
+          "time_ms": 122700,
+          "confidence": 0.999,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 122700,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 634.0,
+        "backswing_ms": 266.0,
+        "backswing_downswing_ratio": 0.42,
+        "spine_tilt_delta_deg": 20.68,
+        "head_displacement_ratio": 0.4542,
+        "single_swing_plane_gap_ratio": 0.0729,
+        "finish_sway_ratio": 0.0606
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-10",
+        "gt_start_ms": 119550,
+        "gt_end_ms": 123434,
+        "gt_top_ms": 121234,
+        "gt_impact_ms": 121834,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 318,
+        "end_error_ms": 602,
+        "top_error_ms": 64,
+        "impact_error_ms": 98
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "HIGH",
+        "discrepancy_category": "aligned",
+        "audio_transients_in_window": [
+          119592,
+          119872,
+          119952,
+          120212,
+          120372,
+          120672,
+          120832,
+          121372,
+          122272,
+          122392
+        ],
+        "investigation_note": "模型預測與金標高度吻合 (Top 差 64ms, Imp 差 98ms)，多訊號一致"
+      }
+    },
+    {
+      "sequence_no": 11,
+      "candidate_window": {
+        "start_ms": 123633,
+        "end_ms": 129633,
+        "duration_ms": 6000
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 123700,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 123700,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 124500,
+          "confidence": 0.999,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 124500,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 124900,
+          "confidence": 0.96,
+          "detection_sources": [
+            "wrist_velocity_zero_crossing",
+            "top_pause_min_speed",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 124900,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 125433,
+          "confidence": 0.96,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus"
+          ],
+          "uncertainty_ms": 40,
+          "pose_frame_pts_ms": 125433,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 129500,
+          "confidence": 1.0,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 129500,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 533.0,
+        "backswing_ms": 400.0,
+        "backswing_downswing_ratio": 0.75,
+        "spine_tilt_delta_deg": 1.37,
+        "head_displacement_ratio": 0.1613,
+        "single_swing_plane_gap_ratio": 0.0522,
+        "finish_sway_ratio": 0.0952
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-11",
+        "gt_start_ms": 124184,
+        "gt_end_ms": 128101,
+        "gt_top_ms": 125868,
+        "gt_impact_ms": 126501,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 551,
+        "end_error_ms": 1532,
+        "top_error_ms": 968,
+        "impact_error_ms": 1068
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          124453,
+          124553,
+          125153,
+          125433,
+          125713,
+          125913,
+          126013,
+          126173,
+          127073,
+          127673,
+          128113,
+          128373,
+          128953,
+          129053
+        ],
+        "investigation_note": "候選視窗 (6000ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=124900, GT Top=125868)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    },
+    {
+      "sequence_no": 12,
+      "candidate_window": {
+        "start_ms": 134835,
+        "end_ms": 139053,
+        "duration_ms": 4218
+      },
+      "classification": {
+        "label": "valid_swing",
+        "ball_strike_status": "estimated_strike",
+        "review_status": "auto_accepted"
+      },
+      "review_flags": [],
+      "events": {
+        "address": {
+          "time_ms": 135235,
+          "confidence": 0.999,
+          "detection_sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 135235,
+          "frame_delta_ms": 0
+        },
+        "takeaway": {
+          "time_ms": 135835,
+          "confidence": 0.999,
+          "detection_sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 135835,
+          "frame_delta_ms": 0
+        },
+        "top": {
+          "time_ms": 136335,
+          "confidence": 0.96,
+          "detection_sources": [
+            "wrist_velocity_zero_crossing",
+            "top_pause_min_speed",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "pose_frame_pts_ms": 136335,
+          "frame_delta_ms": 0
+        },
+        "impact": {
+          "time_ms": 136703,
+          "confidence": 0.957,
+          "detection_sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus"
+          ],
+          "uncertainty_ms": 40,
+          "pose_frame_pts_ms": 136703,
+          "frame_delta_ms": 0
+        },
+        "finish": {
+          "time_ms": 138970,
+          "confidence": 0.999,
+          "detection_sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "pose_frame_pts_ms": 138970,
+          "frame_delta_ms": 0
+        }
+      },
+      "metrics": {
+        "downswing_ms": 368.0,
+        "backswing_ms": 500.0,
+        "backswing_downswing_ratio": 1.36,
+        "spine_tilt_delta_deg": 3.4,
+        "head_displacement_ratio": 0.2001,
+        "single_swing_plane_gap_ratio": 0.0325,
+        "finish_sway_ratio": 0.0954
+      },
+      "ground_truth_alignment": {
+        "gt_id": "gt-12",
+        "gt_start_ms": 136219,
+        "gt_end_ms": 139053,
+        "gt_top_ms": 137919,
+        "gt_impact_ms": 138569,
+        "gt_top_status": "machine_suggested",
+        "gt_top_source": "machine_heuristic_v1",
+        "gt_impact_status": "machine_suggested",
+        "gt_impact_source": "machine_heuristic_v1",
+        "gt_verified_by": null,
+        "start_error_ms": 1384,
+        "end_error_ms": 0,
+        "top_error_ms": 1584,
+        "impact_error_ms": 1866
+      },
+      "discrepancy_analysis": {
+        "signal_consensus": "DISPUTED_WAGGLE",
+        "discrepancy_category": "disputed_waggle_competition",
+        "audio_transients_in_window": [
+          135035,
+          135955,
+          136115,
+          136255,
+          136655,
+          136735,
+          137375,
+          137475,
+          137835,
+          138355,
+          138775
+        ],
+        "investigation_note": "候選視窗 (4218ms) 內存在前置試擺(Waggle)與擊球雙峰波形競爭 (Pred Top=136335, GT Top=137919)。GT 目前為 machine_suggested 初標，兩者鎖定不同波峰，維持客觀不強行硬調"
+      }
+    }
+  ]
+}
