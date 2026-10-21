@@ -264,13 +264,16 @@
    - 徹底移除單鏡頭無法測量之「足底壓力」與「重心轉移至前腳/腳跟」偽宣稱，改用可觀測「身體垂直軸線平衡穩定度」。
    - Pro Mode 明確標記 `✓ MediaPipe 33 點骨架`，杜絕與 YOLO 17 點混稱。
    - 加入揮桿時間區間防殘留保護，超出該球範圍立即清空 Canvas。
-6. **WebKit 與 Chrome 實測獨立記錄**：
-   - Chrome 實測截圖保存於 `docs/screenshots/chrome/`。
-   - WebKit 實測截圖透過 macOS 原生 `WebKit.framework` (PyObjC) 保存於 `docs/screenshots/webkit/01_webkit_render.png`。
+6. **WebKit 與 Chrome 真實影片實測畫面雙雙驗收**：
+   - Chrome 實測截圖保存於 `docs/screenshots/chrome/05_swing_player_clean_motion.png`（完整播放器、Letterbox置中、金色頭部基準圈、AI體感洞察與針對性Drill）。
+   - Chrome Pro Mode 實測截圖保存於 `docs/screenshots/chrome/03_redesign_pro_mode.png`（Tush line、手部雙色軌跡、無真球誠實標記）。
+   - WebKit 實測截圖透過 macOS 原生 `WebKit.framework` (PyObjC + NSWindow GPU解碼) 保存於 `docs/screenshots/webkit/02_webkit_swing_player.png` 與 `01_webkit_render.png`（H.264 解碼 readyState=4，100% 排除登入頁、黑畫面與載入失敗）。
+7. **切球測試門檻統一**：
+   - `tests/test_r2_long_video_accuracy.py` 消除註解與 assert 差異，正式鎖定高標準門檻 `Recall >= 0.90` (實測 1.000) 與 `Precision >= 0.85` (實測 1.000)。
 
 ### 10.2 自動化測試執行證據
 - **測試命令**：`uv run pytest tests/ -v`
-- **測試結果**：**50 passed in 168.50s (100% PASS)**
+- **測試結果**：**50 passed in 204.07s (100% PASS)**
   - `tests/test_precision_and_clean_motion_calibration.py`: 5 passed
   - `tests/test_r13_golden_set_integrity.py`: 6 passed
   - `tests/test_r1_mac_app_independence.py`: 6 passed

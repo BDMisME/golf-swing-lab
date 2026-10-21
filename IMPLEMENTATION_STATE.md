@@ -19,15 +19,17 @@
    - 徹底移除單鏡頭無法測量之「足底壓力」與「重心轉移至前腳/腳跟」偽宣稱，改用可觀測「身體垂直軸線平衡穩定度」。
    - Pro Mode 明確標記 `✓ MediaPipe 33 點骨架`，杜絕與 YOLO 17 點混稱。
    - 加入揮桿時間區間防殘留保護，超出該球範圍立即清空 Canvas。
-6. **WebKit 與 Chrome 實測分別記錄**：`PASS`
-   - Chrome 實測截圖保存於 `docs/screenshots/chrome/`。
-   - WebKit 實測截圖透過 macOS 原生 `WebKit.framework` (PyObjC) 保存於 `docs/screenshots/webkit/01_webkit_render.png`。
+6. **WebKit 與 Chrome 真實影片實測畫面雙雙驗收**：`PASS`
+   - Chrome 實測截圖保存於 `docs/screenshots/chrome/05_swing_player_clean_motion.png`（完整播放器、Letterbox置中、金色頭部基準圈、AI體感洞察與針對性Drill）。
+   - Chrome Pro Mode 實測截圖保存於 `docs/screenshots/chrome/03_redesign_pro_mode.png`（Tush line、手部雙色軌跡、無真球誠實標記）。
+   - WebKit 實測截圖透過 macOS 原生 `WebKit.framework` (PyObjC + NSWindow GPU解碼) 保存於 `docs/screenshots/webkit/02_webkit_swing_player.png` 與 `01_webkit_render.png`（H.264 解碼 readyState=4，100% 排除登入頁、黑畫面與載入失敗）。
 7. **全量品質與回歸驗證**：`PASS`
-   - 後端全量測試：**50 / 50 PASSED (100%)** in 168.50s（包含新加入的 5 個回歸校準專項測試）。
+   - 後端全量測試：**50 / 50 PASSED (100%)** in 204.07s（包含 5 個精度校準專項測試與真實長片高門檻測試）。
+   - 切球測試門檻：正式同步鎖定 `Recall >= 0.90` (實測 1.000) 與 `Precision >= 0.85` (實測 1.000)。
    - 正式真值校驗：`tests/golden/real_2min_session_gt.json` SHA-256 恆為 `efefa02b2bd3d6c4cb461e9882cf63995694df37846ee57d0badef78b0d07954`（0 污染）。
    - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功。
-   - 真實原片評估基準：`docs/PRECISION_CALIBRATION_EVALUATION.md` 完整輸出逐球時間碼、多訊號來源與真值指標（11s 與 2min 原片 True Recall 100%, Precision 100%）。
-- **最後更新時間**：2026-10-21T12:50:00+08:00
+   - 真實原片評估基準：`docs/PRECISION_CALIBRATION_EVALUATION.md` 完整輸出改版前後時間碼對比、多訊號參與審計與誠信揭露。
+- **最後更新時間**：2026-10-21T15:30:00+08:00
 - **最新驗收報告**：`docs/PRECISION_CALIBRATION_EVALUATION.md`、`docs/CLEAN_MOTION_REDESIGN_REPORT.md` 與 `docs/TEST_REPORT.md`
 
 ## 前期重大里程碑狀態（Auto Precision & Clean Motion UI Redesign）

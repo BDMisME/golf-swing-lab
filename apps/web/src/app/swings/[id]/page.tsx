@@ -275,8 +275,10 @@ export default function SwingDetailPage() {
             <video
               ref={videoRef}
               controls
+              muted
               playsInline
-              preload="metadata"
+              preload="auto"
+              crossOrigin="anonymous"
               src={`${API_BASE_URL}/api/videos/${swing.video_id}/stream?token=${encodeURIComponent(
                 getAuthToken() || ""
               )}#t=${(swing.start_ms / 1000).toFixed(2)},${(

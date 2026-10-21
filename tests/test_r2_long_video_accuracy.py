@@ -124,8 +124,8 @@ def test_long_video_2min_12_swings_benchmark():
         f"邊界誤差中位數: {summary.combined_boundary_median_ms:.1f}ms, 耗時: {elapsed:.2f}s"
     )
 
-    # 嚴格一對一真實配對標準 (基於真實人工校準時間碼)
-    assert summary.true_positives >= 10, f"真實一對一配對命中數未達門檻: {summary.true_positives} / 12"
-    assert summary.recall >= 0.80, f"逐球真 Recall 未達標: {summary.recall:.4f}"
-    assert summary.precision >= 0.75, f"逐球真 Precision 未達標: {summary.precision:.4f}"
+    # 嚴格一對一真實配對標準 (基於真實人工校準時間碼，正式目標 Recall >= 0.90, Precision >= 0.85)
+    assert summary.true_positives >= 11, f"真實一對一配對命中數未達門檻: {summary.true_positives} / 12"
+    assert summary.recall >= 0.90, f"逐球真 Recall 未達標 (門檻 >= 0.90): {summary.recall:.4f}"
+    assert summary.precision >= 0.85, f"逐球真 Precision 未達標 (門檻 >= 0.85): {summary.precision:.4f}"
     assert elapsed < 180, f"處理時間過長: {elapsed:.2f}s"

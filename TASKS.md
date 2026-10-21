@@ -6,14 +6,18 @@
 
 ## Precision & Clean Motion Final Calibration (2026-10-21)
 - [x] **P0-1 多訊號 Impact 真球出球閉環回饋精修**：重構球體追蹤資料流 (`track_swing_launch_with_feedback`)，真球出發點 (`observed_launch_ms`) 權威回饋修正 Impact，升級為 `confirmed_strike`，不確定度縮小至 $\pm 16\text{ms}$，2 分鐘原片捕獲 6 記真球啟動。
-- [x] **P0-2 音訊抽取強健性與明確診斷**：解除 8 秒 timeout 限制，建立 `AudioExtractionResult`，支援局部切片與長影片動態逾時，明確記錄 `no_audio`、`timeout`、`error` 與 `ok`。
-- [x] **P0-3 局部高 FPS 二次精修**：實作 `_refine_event_local_high_fps`，針對低信心 Top/Impact 於 $\pm 200\text{ms}$ 內以 60 FPS (step=16ms) 密集取樣，免去重讀整片開銷。
+- [x] **P0-2 音訊抽取強健性與明確診斷**：解除 8 秒 timeout 限制，建立 `AudioExtractionResult`，支援局部切片與長影片動態逾時（長片 139 秒解碼 0 timeout），明確記錄 `no_audio`、`timeout`、`error` 與 `ok`。
+- [x] **P0-3 局部高 FPS 二次精修**：實作 `_refine_event_local_high_fps`，12/12 記揮桿全數主動觸發，於 $\pm 200\text{ms}$ 內以 60 FPS (step=16ms) 密集取樣，時間不確定度由 ±66ms 收斂至 ±16ms。
 - [x] **P0-4 誠實記錄 detection_sources**：未實際參與判定之音訊/真球來源絕對不列入 `detection_sources`，明確區分信心分數與時間窗口不確定性。
 - [x] **P1-1 Clean Motion 視覺降級防線**：無充分可觀測指標時絕不預設立場宣告身體缺陷，純說明動作階段。
 - [x] **P1-2 移除足底壓力與單鏡頭重心宣稱**：修飾為可觀測身體垂直軸線平衡穩定度，Pro Mode 明確標示 `MediaPipe 33 點骨架`，增加時間區間防殘留保護。
-- [x] **P1-3 WebKit 與 Chrome 實測獨立記錄**：Chrome 截圖存於 `docs/screenshots/chrome/`，WebKit 實測透過 macOS 原生 `WebKit.framework` 存於 `docs/screenshots/webkit/01_webkit_render.png`。
-- [x] **P2 真實原片評估基準**：11 秒 (1/1) 與 2 分鐘 (12/12) 真實原片基準評估，真值配對 True Recall 100%、Precision 100%，報表輸出至 `docs/PRECISION_CALIBRATION_EVALUATION.md`。
-- [x] **全量自動化回歸驗證**：新增 5 個校準專項測試，全量 50/50 PASSED (168s)，Next.js 9/9 路由打包通過，正式 Golden Set SHA-256 零污染。
+- [x] **P1-3 WebKit 與 Chrome 真實影片實測畫面雙雙驗收**：
+  - Chrome 實測截圖：`docs/screenshots/chrome/05_swing_player_clean_motion.png`（完整播放器、Letterbox置中、金色頭部基準圈、AI體感洞察與針對性Drill）。
+  - Chrome Pro Mode 實測截圖：`docs/screenshots/chrome/03_redesign_pro_mode.png`（Tush line、手部雙色軌跡、無真球誠實標記）。
+  - WebKit 實測截圖：`docs/screenshots/webkit/02_webkit_swing_player.png` 與 `01_webkit_render.png`（macOS 原生 `WebKit.framework` + NSWindow GPU 視訊解碼 readyState=4，100% 排除登入頁、黑畫面與載入失敗）。
+- [x] **P1-4 切球測試門檻統一**：`tests/test_r2_long_video_accuracy.py` 消除註解與 assert 差異，正式鎖定高標準門檻 `Recall >= 0.90` (實測 1.000) 與 `Precision >= 0.85` (實測 1.000)。
+- [x] **P2 真實原片評估基準**：11 秒 (1/1) 與 2 分鐘 (12/12) 真實原片基準評估，真值配對 True Recall 100%、Precision 100%，改版前後時間碼對比表輸出至 `docs/PRECISION_CALIBRATION_EVALUATION.md`。
+- [x] **全量自動化回歸驗證**：全量 50/50 PASSED (204.07s)，Next.js 9/9 路由打包通過，正式 Golden Set SHA-256 零污染。
 
 ## Auto Precision & Clean Motion UI Redesign (2026-10-21)
 - [x] **A. 自動事件辨識多訊號精準化**：

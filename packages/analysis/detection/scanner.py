@@ -488,9 +488,9 @@ class CoarseToFineDetector:
                 except Exception as b_exc:
                     logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
 
-            # 局部高 FPS 二次精修 (針對信心度偏低之 Top 或未被球體鎖定之 Impact)
+            # 局部高 FPS 二次精修 (在初步以 ~15 FPS 抽樣後，針對關鍵 Top 與未獲真球鎖定之 Impact，進行前後 ±200ms 的 60 FPS 精修)
             local_refinements: dict[str, Any] = {}
-            if top_ev and top_ev.confidence < 0.75:
+            if top_ev and (top_ev.uncertainty_ms > 20 or top_ev.confidence < 0.95):
                 top_ref = self._refine_event_local_high_fps(
                     video_path=video_path,
                     extractor=ext,
@@ -508,7 +508,7 @@ class CoarseToFineDetector:
                             top_ev.detection_sources.append(s)
                     local_refinements["top"] = top_ref
 
-            if imp_ev and not ball_feedback_info.get("applied") and imp_ev.confidence < 0.75:
+            if imp_ev and not ball_feedback_info.get("applied") and (imp_ev.uncertainty_ms > 20 or imp_ev.confidence < 0.95):
                 imp_ref = self._refine_event_local_high_fps(
                     video_path=video_path,
                     extractor=ext,
