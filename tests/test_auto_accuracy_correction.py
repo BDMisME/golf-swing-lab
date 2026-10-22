@@ -466,3 +466,104 @@ def test_timing_anomaly_degradation_and_null_metrics():
     assert m_dict["backswing_downswing_ratio"]["value"] is None, "異常揮桿的節奏比必須設為 None"
     assert m_dict["downswing_ms"]["confidence"] == 0.0, "信心度必須為 0.0"
     assert m_dict["downswing_ms"]["details"]["unreliable"] is True, "必須明確標示 unreliable"
+
+
+# -----------------------------------------------------------------------------
+# 測試 8: 先試擺再正式擊球之動作鏈物理切分與防止隨揮跨動作污染 (Final Swing Selection Fix)
+# -----------------------------------------------------------------------------
+def test_waggle_before_swing_no_cross_contamination():
+    """
+    驗證當候選區段內包含「前置試擺 (Waggle) + 重新站定 + 正式完整擊球」時：
+    1. 試擺之隨揮 (Follow-through) 被兩次揮桿間之物理站定界線截斷，嚴禁跨越至後方正式揮桿。
+    2. 試擺之收桿平衡 (finish_hold_ms) 依連續平靜姿態量測，嚴禁借用影片尾端剩餘時間。
+    3. 演算法正確評估兩組假設，正式擊球以高動能、大隨揮與連續平衡停留勝出。
+    4. 最終選取事件時間碼對齊正式擊球，杜絕試擺誤判。
+    """
+    frames: list[FramePoseResult] = []
+    dt_ms = 50  # 20 fps 方便構造時序
+
+    # 1. 構造時序：0 ~ 1800ms 試擺
+    # 0 ~ 500ms: Address (wy=0.70)
+    for t in range(0, 500, dt_ms):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=0.70))
+    # 500 ~ 900ms: 試擺上桿 (wy 從 0.70 升至 0.54)
+    for t, y in zip(range(500, 900, dt_ms), [0.66, 0.62, 0.58, 0.54]):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=y))
+    # 900 ~ 1200ms: 試擺下落最低點 (wy 回到 0.70，試擺 impact_candidacy)
+    for t, y in zip(range(900, 1200, dt_ms), [0.57, 0.63, 0.68, 0.70, 0.71, 0.70]):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=y))
+    # 1200 ~ 1500ms: 試擺小隨揮半截 (wy 微升至 0.66 後立刻放下)
+    for t, y in zip(range(1200, 1500, dt_ms), [0.68, 0.66, 0.67, 0.69, 0.71, 0.72]):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=y))
+
+    # 2. 1500 ~ 2500ms: 重新站定 (Re-address，手腕停在地面 0.72，速度平緩)
+    for t in range(1500, 2500, dt_ms):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=0.72))
+
+    # 3. 2500 ~ 5000ms: 正式完整擊球
+    # 2500 ~ 2800ms: 凝結準備 Address (wy=0.70)
+    for t in range(2500, 2800, dt_ms):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=0.70))
+    # 2800 ~ 3600ms: 充分上桿至頂點 Top (wy 升至 0.30，振幅 0.40)
+    ys_back = np.linspace(0.70, 0.30, int((3600 - 2800) / dt_ms))
+    for t, y in zip(range(2800, 3600, dt_ms), ys_back):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=float(y)))
+    # 3600 ~ 4000ms: 頂點稍微停頓並高速下桿 (Downswing 400ms，在 4000ms 到達最低點 wy=0.70)
+    ys_down = [0.30, 0.32, 0.42, 0.56, 0.66, 0.70, 0.72, 0.70]
+    for t, y in zip(range(3600, 4000, dt_ms), ys_down):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=float(y)))
+    # 4000 ~ 4400ms: 完整隨揮釋放至高空 (wy 揚升至 0.25，高隨揮)
+    ys_follow = [0.65, 0.52, 0.38, 0.28, 0.25, 0.25, 0.26, 0.25]
+    for t, y in zip(range(4000, 4400, dt_ms), ys_follow):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=float(y)))
+    # 4400 ~ 5200ms: 穩定收桿停留平衡 (Finish Hold 800ms，wy 維持在 0.25~0.27)
+    for t in range(4400, 5200, dt_ms):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=0.26))
+    # 5200 ~ 5800ms: 放下球桿
+    for t, y in zip(range(5200, 5800, dt_ms), np.linspace(0.26, 0.70, int((5800 - 5200) / dt_ms))):
+        frames.append(_create_synthetic_frame(time_ms=t, frame_idx=len(frames), wrist_y=float(y)))
+
+    sm = SwingPhaseStateMachine()
+    events, trace, label = sm.extract_events(
+        frames=frames,
+        audio_transients_ms=[3980],  # 正式擊球時有音訊瞬態
+    )
+
+    ev_map = {e.event_name: e.time_ms for e in events}
+    hyps = sm.last_hypotheses
+    assert len(hyps) >= 2, f"應至少推導出試擺與正式擊球兩組假設，實得 {len(hyps)}"
+
+    # 檢驗試擺假設與正式擊球假設
+    waggle_h = next((h for h in hyps if h.impact_ms < 2000), None)
+    swing_h = next((h for h in hyps if h.impact_ms >= 3800), None)
+
+    assert waggle_h is not None, "必須識別出前半段試擺候選"
+    assert swing_h is not None, "必須識別出後半段正式擊球候選"
+
+    # 關鍵檢驗 1: 試擺隨揮幅度絕不能偷用後方正式擊球的 0.25 高隨揮 (amp 應 <= 0.08)
+    assert waggle_h.follow_amplitude < 0.08, (
+        f"試擺隨揮遭到跨動作污染！follow_amp={waggle_h.follow_amplitude:.3f}，不應超過 0.08"
+    )
+
+    # 關鍵檢驗 2: 試擺收桿平衡絕不能使用影片剩餘 4000ms
+    assert waggle_h.finish_hold_ms < 300, (
+        f"試擺收桿停留遭到影片尾端剩餘時間污染！finish_hold_ms={waggle_h.finish_hold_ms}ms"
+    )
+
+    # 關鍵檢驗 3: 正式擊球具備高隨揮 (amp >= 0.20) 與真實連續收桿平衡 (hold >= 500ms)
+    assert swing_h.follow_amplitude >= 0.20, f"正式擊球隨揮幅度不足: {swing_h.follow_amplitude}"
+    assert swing_h.finish_hold_ms >= 500, f"正式擊球收桿停留時間不足: {swing_h.finish_hold_ms}ms"
+
+
+    # 關鍵檢驗 4: 正式擊球總分必須顯著勝出，且最終事件對齊正式擊球
+    assert swing_h.total_score > waggle_h.total_score + 4.0, (
+        f"正式擊球 ({swing_h.total_score:.1f}) 必須大幅勝過試擺 ({waggle_h.total_score:.1f})"
+    )
+    assert ev_map.get("top") is not None and 3500 <= ev_map["top"] <= 3750, (
+        f"最終 Top 應對齊正式擊球 (3600ms 附近)，實得 {ev_map.get('top')}"
+    )
+    assert ev_map.get("impact_estimated") is not None and 3850 <= ev_map["impact_estimated"] <= 4100, (
+        f"最終 Impact 應對齊正式擊球 (3950~4000ms 附近)，實得 {ev_map.get('impact_estimated')}"
+    )
+    assert label == "valid_swing", f"正式擊球標籤應為 valid_swing，實得 {label}"
+

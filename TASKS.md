@@ -4,6 +4,11 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## Final Swing Selection & Ranking Fix (2026-10-22)
+- [x] **P0-1 修正 Follow-through 跨動作污染**：重構 `packages/analysis/events/state_machine.py`，建立物理邊界偵測機制。若存在下一個擊球候選，以兩者之間的放桿／重新站定點作為動作終止界線，切斷跨動作隨揮。隨揮頂點搜尋嚴格限制在 `imp_t + 650ms` 生理區間內。實作連續姿態穩定性計算 `finish_hold_ms`，從隨揮頂點逐幀檢查手腕是否維持在收桿高度（`<= follow_y + 0.08`）且運動速度維持平靜，嚴禁使用 `times[-1]` 借用影片剩餘時間。新增「先試擺再正式擊球」獨立回歸測試（`test_waggle_before_swing_no_cross_contamination`）。
+- [x] **P0-2 修正多候選選擇造成的精度回退**：消除試擺因跨動作隨揮與虛假收桿獲得的虛高分數。重構為 Score-ranked NMS，徹底消除滑動順序連鎖吞食（Sliding Chaining Bug）。若試擺與正式擊球得分接近無法區分，客觀標記為 `is_ambiguous=True`（`candidate_ambiguous`、`needs_review`），不強行選取；同一次推論輸出前後候選時間碼與支持／反對理由。#8 與 #9 正式擊球以顯著優勢勝出，#10 客觀標記雙峰爭議保留審核。
+- [x] **P0-3 修正正式 Top 5 資料流與驗收**：`apps/api/main.py` 在 `_serialize_segment(..., include_detail=False)` 中完整暴露 `unreliable_for_ranking` 與 `quality_metadata`。`rank_session_swings` 嚴格將爭議球（`unreliable_for_ranking`、`is_ambiguous`、`candidate_ambiguous`、`timing_anomaly` 或 `needs_review`）排除於 `posture` 和 `tempo` 排行榜外。新增 `test_rank_session_swings_reliable_vs_disputed_exclusion` 驗證可靠球入榜、爭議球排除、手動置頂優先（`manual_pinned=True`），合規球存在時嚴禁排行榜全空。
+
 ## Resolve Double-Peak Swing Detection (2026-10-22)
 - [x] **P0-1 修正雙峰候選判斷（多候選揮桿鏈推導架構）**：重構 `packages/analysis/events/state_machine.py`，徹底捨棄依據單一最高手腕點鎖定 Top 的缺陷，實作 `SwingHypothesis` 與 `_generate_swing_hypotheses`。從多個潛在 Impact 候選向前回溯完整的 `Address → Takeaway → Top → Downswing → Impact → Follow Through → Finish`，綜合下桿時序合理性、上下桿垂直幅度、下桿峰值速度、Impact 減速制動、隨揮延伸幅度、收桿停留平衡、重新站定沉靜度進行多維度確定性客觀評分。
 - [x] **P0-2 音訊不能當成無條件權威**：音訊瞬態必須與手腕衝擊速度峰值時間差 $\le 45\text{ms}$，大於 $120\text{ms}$ 標記為 `isolated_background_audio` 負向扣分，排除練習場隔壁球道干擾。無可靠音訊或真球追蹤時安全回退至純運動學特徵。不預設正式擊球動能一定遠大於前置試擺，以隨揮延伸與收桿停頓作為區分試擺的最強運動學判據。

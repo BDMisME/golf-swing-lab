@@ -1,28 +1,25 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Resolve Double-Peak Swing Detection）
-1. **P0-1：修正雙峰候選判斷（多候選揮桿鏈推導架構）**：`PASS`
-   - 重構 `packages/analysis/events/state_machine.py`，徹底捨棄依據單一最高手腕點鎖定 Top 的缺陷，實作 `SwingHypothesis` 與 `_generate_swing_hypotheses`：
-     - 從多個潛在 Impact 候選（NMS 聚合相距 $\ge 250\text{ms}$，優先考量手腕垂直深度與擊球煞車）向前回溯完整的 `Address → Takeaway → Top → Downswing → Impact → Follow Through → Finish`。
-     - 綜合下桿時序合理性（180–650ms 參考區間）、上下桿垂直幅度、下桿峰值速度、Impact 減速制動、隨揮延伸幅度（$\ge 0.12$）、收桿停留平衡（$\ge 350\text{ms}$）、重新站定沉靜度進行多維度確定性客觀評分。
-     - 嚴禁在無多重證據前強制選擇「第一組」或「最後一組」。當多組候選總分相近（$< 15\%$ 分差）時，標記為 `is_ambiguous` 並在 `review_status` 中提示 `needs_review`。
-2. **P0-2：音訊瞬態與運動學一致性約束**：`PASS`
-   - 解決練習場隔壁球道背景擊球雜音干擾：音訊瞬態必須與手腕衝擊速度峰值時間差 $\le 45\text{ms}$（若 $> 120\text{ms}$ 則標記為 `isolated_background_audio` 負向扣分）。
-   - 當無可靠音訊或真球追蹤時，安全回退至純運動學特徵，如實反映在訊號來源中，絕不捏造來源。
-   - 不預設正式擊球動能一定遠大於前置試擺，以隨揮延伸與收桿停頓作為區分試擺的最強運動學判據。
-3. **P0-3：8 顆雙峰波形爭議球與第 6 球多候選假設證據表**：`PASS`
-   - 在唯一正式報告 `docs/FINAL_EVIDENCE_LOCK_REPORT.md` 與 `docs/reports/final_evidence_lock.json` 中逐球列出多候選假設證據表（每球 2~4 組候選，包含 cand-1 與 cand-2 的 Top/Impact 時間碼、下桿時長、綜合評分、支持證據與反對理由）。
-   - 第 6 球（原因試擺與擊球跨峰誤拼導致下桿 2.4 秒時序異常）經揮桿鏈閉合推導，成功鎖定生理正常之正式擊球（下桿 400ms，對齊後 550ms），時序異常完全歸零。
-4. **P0-4：修正不合理驗收邏輯與動態五大 Verdicts**：`PASS`
-   - 將長片未擊球間隔區段（12 個區段，共 74.09 秒）重新命名為 `unlabeled_candidate_negatives`，正式狀態動態回傳 `NOT_VALIDATED`，禁止謊稱 PASS。
-   - `ENGINEERING_PASS`：由本機自動化測試（61/61 passed）與 Next.js build（9/9 routes）的實際 exit code 動態判定為 `PASS`，禁止寫死。
-   - `EVENT_ACCURACY_VALIDATED`：因 Golden Set 60 個事件均為 `machine_suggested`（人工驗證率 0.0% < 70% 門檻），動態判定為 `NOT_VALIDATED`。
-   - `REAL_WORLD_AUTOMATION_READY`：長片自主跑通無崩潰，具備多候選雙峰假設推導，但因尚缺高精獨立人工金標驗證，客觀標記為 `PROVISIONAL`。
-5. **P0-5：避免錯誤的最佳球推薦（Top 5 排行榜安全排除）**：`PASS`
-   - 在 `packages/analysis/scoring/engine.py` 的 `rank_session_swings` 中加入 `_is_unreliable_for_category` 過濾機制：凡存在 `unreliable_for_ranking`、`is_ambiguous`、`timing_anomaly` 或 `needs_review` 爭議之球次，嚴格於 `posture`（姿勢最佳）與 `tempo`（節奏最佳）排行榜中排除。
-   - IG 畫面（9:16）維持獨立視覺呈現，但排行榜資料流維持嚴格保護。
-- **最後更新時間**：2026-10-22T12:31:00+08:00
-- **最新基準版本**：`579ed39`
+## 最新開發策略執行狀態（Final Swing Selection & Ranking Fix）
+1. **修正 Follow-through 跨動作污染**：`PASS`
+   - 重構 `packages/analysis/events/state_machine.py`：
+     - **物理動作鏈邊界截斷**：若存在後續 Impact 候選，隨揮與收桿嚴格在兩次動作之間的放桿／重新站定點截斷（避免跨越下一次完整揮桿），隨揮頂點搜尋嚴格限制在 `imp_t + 650ms` 生理區間內。
+     - **真實連續姿態穩定性計算 `finish_hold_ms`**：從隨揮頂點逐幀檢查手腕是否維持在收桿平衡高度（`<= follow_y + 0.08`）且運動速度維持平靜（`<= max(0.0025, 0.25 * max_speed)`），統計真實維持時長，**嚴禁使用 `times[-1]` 借用影片剩餘長度**。
+     - 新增「先試擺再正式擊球」獨立回歸測試（`test_waggle_before_swing_no_cross_contamination`），驗證試擺隨揮被截斷、收桿時長不溢出、正式擊球大幅勝出。
+2. **修正多候選選擇造成的精度回退**：`PASS`
+   - **Score-ranked NMS 重構**：徹底根除時間順序滑動替換產生的連鎖吞食（Sliding Chaining Bug），改採基於物理衝擊強度的非極大值抑制。
+   - **客觀雙峰爭議標記**：當試擺與正式擊球得分接近時，客觀標記為 `is_ambiguous=True`、`review_flags` 加入 `candidate_ambiguous`，`review_status` 設為 `needs_review`，不強行選取；同一次推論輸出候選時間碼與支持/反對理由。
+   - 經物理特徵精確對齊，#8（Top=111697ms, Imp=112497ms, 5.0分 vs 3.0分）與 #9（Top=115363ms, Imp=115898ms, 11.5分 vs 7.0分）皆以顯著優勢裁決正式擊球；#10（120432ms/121098ms, 12.0分 vs 11.5分）客觀標記雙峰爭議保留審核。
+3. **修正正式 Top 5 資料流與驗收**：`PASS`
+   - **打通真實分數與安全過濾**：`apps/api/main.py` 在 `_serialize_segment(..., include_detail=False)` 中完整暴露 `unreliable_for_ranking` 與 `quality_metadata`。
+   - **爭議球嚴格排除**：具有 `unreliable_for_ranking`、`is_ambiguous`、`candidate_ambiguous`、`timing_anomaly` 或 `needs_review` 爭議之球次，嚴格於 `posture`（姿勢最佳）與 `tempo`（節奏最佳）排行榜中排除。
+   - **排行榜非空保證與手動置頂**：新增 `test_rank_session_swings_reliable_vs_disputed_exclusion` 驗證可靠球正常入榜、爭議球徹底排除、手動置頂標記 `manual_pinned=True`，合規球存在時嚴禁全空。
+4. **全量品質與回歸驗證**：`PASS`
+   - 後端全量測試：**74 / 74 PASSED (100%)** in 202.81s。
+   - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功。
+   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 保持 0 污染。
+- **最後更新時間**：2026-10-22T13:30:00+08:00
+- **最新基準版本**：`8040609`
 - **正式驗收檔案**：`docs/reports/final_evidence_lock.json` 與 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`
 
 ## 前期重大里程碑狀態（Final Reliability Gate）

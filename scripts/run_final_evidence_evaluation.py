@@ -493,13 +493,21 @@ def run_evaluation() -> dict[str, Any]:
         verdict_notes["REAL_WORLD_AUTOMATION_READY"] = "自動分析穩定性或異常保護未完全滿足。"
 
     # ----------------------------------------------------
-    # P0-5: 排行榜過濾安全保護驗收
+    # P0-5: 排行榜過濾安全保護驗收 (包含真實指標與分類評分)
     # ----------------------------------------------------
-    from packages.analysis.scoring.engine import rank_session_swings
+    from packages.analysis.scoring.engine import compute_swing_score, rank_session_swings
     ranking_items = []
     for idx, c in enumerate(candidates):
         m_dict = {m["metric_key"]: m for m in c.metrics}
         q_meta = c.quality_metadata or {}
+        score_res = compute_swing_score(metrics=c.metrics, quality_metadata=q_meta)
+        is_unreliable = bool(
+            q_meta.get("unreliable_for_ranking", False)
+            or q_meta.get("is_ambiguous", False)
+            or "candidate_ambiguous" in c.review_flags
+            or "timing_anomaly" in c.review_flags
+            or c.review_status == "needs_review"
+        )
         ranking_items.append({
             "id": f"swing_{idx + 1}",
             "sequence_no": idx + 1,
@@ -507,17 +515,17 @@ def run_evaluation() -> dict[str, Any]:
             "ball_strike_status": c.ball_strike_status,
             "review_status": c.review_status,
             "review_flags": c.review_flags,
-            "unreliable_for_ranking": q_meta.get("unreliable_for_ranking", False),
+            "unreliable_for_ranking": is_unreliable,
             "quality_metadata": q_meta,
             "metrics": m_dict,
-            "scores": {
-                "overall": 80.0 if c.review_status == "auto_accepted" else None,
-                "posture": 82.0 if c.review_status == "auto_accepted" else None,
-                "tempo": 78.0 if c.review_status == "auto_accepted" else None,
-                "ig_score": 85.0,
-            },
+            "overall_score": score_res.overall_nullable,
+            "subscores": score_res.subscores,
+            "ig_visual_score": score_res.ig_visual_score,
+            "confidence": score_res.confidence,
+            "coverage": score_res.coverage,
         })
     ranked_dict = rank_session_swings(ranking_items)
+
 
     # 5. 組裝完整 Evidence Lock JSON 物件
     evidence_data: dict[str, Any] = {
@@ -581,12 +589,28 @@ def run_evaluation() -> dict[str, Any]:
         "verdicts": verdicts,
         "verdict_notes": verdict_notes,
         "ranking_validation": {
-            "posture_top5": [item["id"] for item in ranked_dict.get("posture", [])[:5]],
-            "tempo_top5": [item["id"] for item in ranked_dict.get("tempo", [])[:5]],
-            "overall_top5": [item["id"] for item in ranked_dict.get("overall", [])[:5]],
-            "ig_top5": [item["id"] for item in ranked_dict.get("ig_story", [])[:5]],
+            "posture_top5": [item["segment_id"] for item in ranked_dict.get("posture", [])[:5]],
+            "tempo_top5": [item["segment_id"] for item in ranked_dict.get("tempo", [])[:5]],
+            "finish_top5": [item["segment_id"] for item in ranked_dict.get("finish", [])[:5]],
+            "ig_top5": [item["segment_id"] for item in ranked_dict.get("ig", [])[:5]],
+            "details": {
+                cat: [
+                    {
+                        "rank": it["rank"],
+                        "segment_id": it["segment_id"],
+                        "sequence_no": it.get("sequence_no"),
+                        "category_score": it.get("category_score"),
+                        "overall_score": it.get("overall_score"),
+                        "reason": it.get("reason"),
+                        "manual_pinned": it.get("manual_pinned", False),
+                    }
+                    for it in ranked_dict.get(cat, [])[:5]
+                ]
+                for cat in ("posture", "tempo", "finish", "ig")
+            },
             "disputed_swings_excluded_from_posture_and_tempo": True,
         },
+
         "negative_samples_real_world": negative_intervals,
         "swings": swings_detail,
     }
@@ -791,9 +815,38 @@ def generate_markdown_report(data: dict[str, Any], out_path: Path) -> None:
         "- **排除策略**：凡存在未解決雙峰爭議（`ambiguous` / `needs_review` / `timing_anomaly`）之球次，嚴格於 `posture`（姿勢最佳）與 `tempo`（節奏最佳）排行榜中排除，確保不將可能有裁切爭議之動作推薦給球友作為模範揮桿。",
         "- **IG 視覺呈現**：IG 9:16 直式畫面獨立計算視覺構圖評分，但若該球具備爭議，排行榜資料流維持排除保護。",
         "",
+    ])
+
+    rv = data.get("ranking_validation", {})
+    rv_details = rv.get("details", {})
+    for cat_name, cat_label in [
+        ("posture", "姿勢最佳排行榜 (Posture Top 5)"),
+        ("tempo", "節奏最佳排行榜 (Tempo Consistency Top 5)"),
+        ("finish", "收桿最佳排行榜 (Finish Balance Top 5)"),
+        ("ig", "IG 短影音推薦榜 (IG Visual Appeal Top 5)"),
+    ]:
+        cat_items = rv_details.get(cat_name, [])
+        lines.append(f"### {cat_label}")
+        if not cat_items:
+            lines.append("*（本分類暫無合規推薦球次）*<br>")
+        else:
+            lines.append("| 排名 | 球次 | 分類得分 | 綜合動作分 | 推薦理由 | 手動置頂標記 |")
+            lines.append("|:---:|:---:|:---:|:---:|---|:---:|")
+            for it in cat_items:
+                pinned_str = "⭐ 使用者指定置頂" if it.get("manual_pinned") else "自動推薦"
+                c_score = f"{it.get('category_score', 'N/A')}"
+                o_score = f"{it.get('overall_score', 'N/A')}"
+                lines.append(
+                    f"| **第 {it['rank']} 名** | **#{it.get('sequence_no', 'N/A')}** | {c_score} | {o_score} | {it.get('reason', '')} | `{pinned_str}` |"
+                )
+            lines.append("")
+
+    lines.extend([
+        "",
         "## 9. 6 類獨立合成負樣本自動化測試結果 (P0-D 回歸)",
         "",
         "| 負樣本類型 | 物理運動特徵 | 預期判定 | 實測判定 | 判定結果 |",
+
         "|---|---|---|---|:---:|",
         "| **Practice Swing** (空揮練習) | 完整上下桿，但下桿速度平緩且收桿未平衡停留 | `practice_swing` | `practice_swing` | `PASS` |",
         "| **Waggle** (試擺微動) | 準備位置微動，垂直幅度 $< 0.065$ | `practice_swing` 或抑制 | `practice_swing` | `PASS` |",

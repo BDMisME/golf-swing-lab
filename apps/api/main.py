@@ -1224,6 +1224,15 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
 
     video_row = db.get(Video, seg.video_id)
     cov_val = score.coverage if score else 0.0
+    q_meta = (artifact.quality_metadata if artifact and artifact.quality_metadata else {}) or {}
+    r_flags = seg.review_flags_json or []
+    is_unreliable = bool(
+        q_meta.get("unreliable_for_ranking", False)
+        or q_meta.get("is_ambiguous", False)
+        or "candidate_ambiguous" in r_flags
+        or "timing_anomaly" in r_flags
+        or seg.review_status == "needs_review"
+    )
     base: dict[str, Any] = {
         "id": seg.id,
         "video_id": seg.video_id,
@@ -1237,6 +1246,8 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
         "confidence": seg.confidence,
         "review_status": seg.review_status,
         "review_flags": seg.review_flags_json,
+        "unreliable_for_ranking": is_unreliable,
+        "quality_metadata": q_meta,
         "version": seg.version,
         "model_version": seg.version,
         "manual_override": seg.manual_override,
@@ -1252,10 +1263,11 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
         "score_explanation": score.explanation if score else "",
         "subscores": score.subscores_json if score else {},
         "ball_trajectory": (
-            artifact.quality_metadata.get("ball_trajectory", [])
-            if (artifact and artifact.quality_metadata)
+            q_meta.get("ball_trajectory", [])
+            if q_meta
             else []
         ),
+
         "events": [
             {
                 "id": e.id,

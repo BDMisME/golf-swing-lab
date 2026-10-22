@@ -16,6 +16,7 @@
 
 | 輪次 | 測試範圍 | 執行指令 | 通過 / 失敗 | 性質 (Real / Mock) | 狀態 |
 |---|---|---|---|---|---|
+| **揮桿選擇與排行榜修復** | 修正隨揮跨動作污染 (動作鏈物理邊界截斷 + 真實連續收桿姿態穩定度 finish_hold_ms，嚴禁借用影片尾端)；修正 Score-ranked NMS 消除連鎖吞食；客觀標記雙峰爭議不硬選；API 暴露 unreliable_for_ranking，排行榜嚴格排除爭議球，非空防呆保證與手動置頂優先 | `uv run pytest tests/` + `npm --prefix apps/web run build` | 74 / 74 通過 (100%), 9/9 靜態路由編譯成功 | Real (測試影片/2分鐘.mov) | `PASS` (事件精度動態判定 `NOT_VALIDATED`，自動化就緒標記 `PROVISIONAL`) |
 | **雙峰波形解決** | 建立多候選揮桿鏈推導架構 (SwingHypothesis)，逐球評估 Address-Top-Downswing-Impact-FollowThrough-Finish 完整鏈條；區分隨揮延伸與收桿停頓；音訊與手腕速度一致性約束 (<=45ms)；第 6 球時序異常成功收斂為生理正常擊球；Top 5 推薦排除爭議球；unlabeled_candidate_negatives 標記 NOT_VALIDATED | `uv run pytest tests/test_final_evidence_lock.py -v` | 8 / 8 通過 (全量核心測試 69/69 通過) | Real (測試影片/2分鐘.mov) | `PASS` (人工真值動態判定 `NOT_VALIDATED`，自動化就緒標記 `PROVISIONAL`) |
 | **R14 精度完結** | 自動分析精度定案：動態讀取 Golden Set 真實狀態 (machine_suggested 60/60, human_verified 0/60, 0% < 70% 門檻)，EVENT_ACCURACY_VALIDATED 動態判定 NOT_VALIDATED；客觀診斷 #3,#4,#5,#7 前置試擺波峰雙峰競爭，嚴禁以 180-650ms 硬調；補齊真實長片 11 個間隔區段負樣本驗收 (FP=0, PROVISIONAL)；單一推論不可修改 JSON 與快照追溯 | `uv run pytest tests/test_final_evidence_lock.py -v` | 6 / 6 通過 (全量 70/70 通過) | Real (測試影片/2分鐘.mov) | `PASS` (事件精度動態判定 `NOT_VALIDATED`) |
 | **R0** | 架構文件、合約與環境工具鏈盤點 | `git status` / `ffmpeg -version` / `docs/*` | 100% 齊全 | Real | `PASS` |

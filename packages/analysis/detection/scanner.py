@@ -405,6 +405,8 @@ class CoarseToFineDetector:
                 or "multi_person" in flags_set
                 or "low_light" in flags_set
                 or "incomplete_swing_phases" in flags_set
+                or "candidate_ambiguous" in flags_set
+                or "timing_anomaly" in flags_set
                 or label == "practice_swing"
             ):
                 review_status = "needs_review"

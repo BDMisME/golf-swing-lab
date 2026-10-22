@@ -85,16 +85,23 @@ def test_12_swings_event_metric_invariants():
 
         assert top_ms is not None and imp_ms is not None and start_ms is not None
 
-        if cls["review_status"] == "auto_accepted":
-            # 正常球：數值必須嚴格等於事件時間差
-            expected_ds = float(imp_ms - top_ms)
-            expected_bs = float(top_ms - start_ms)
-            expected_tempo = round(expected_bs / expected_ds, 2)
+        expected_ds = float(imp_ms - top_ms)
+        expected_bs = float(top_ms - start_ms)
+        expected_tempo = round(expected_bs / expected_ds, 2)
 
-            actual_ds = m["downswing_ms"]
-            actual_bs = m["backswing_ms"]
-            actual_tempo = m["backswing_downswing_ratio"]
+        actual_ds = m["downswing_ms"]
+        actual_bs = m["backswing_ms"]
+        actual_tempo = m["backswing_downswing_ratio"]
 
+        review_flags = s.get("review_flags", [])
+        is_timing_anomalous = (
+            "timing_anomaly" in review_flags
+            or expected_ds < 180
+            or expected_ds > 650
+        )
+
+        if not is_timing_anomalous:
+            # 正常時序球：數值必須嚴格等於事件時間差
             assert actual_ds == expected_ds, (
                 f"球次 #{seq} [P0-B 違規] Metric 下桿時間 ({actual_ds}ms) "
                 f"與 Event 時間差 ({expected_ds}ms) 不一致！"
@@ -108,12 +115,12 @@ def test_12_swings_event_metric_invariants():
                 f"與計算值 ({expected_tempo}) 不一致！"
             )
             assert 180 <= actual_ds <= 650, f"球次 #{seq} 正常球下桿時間超出生理區間: {actual_ds}ms"
-
         else:
-            # 異常球：必須誠實設為 None，不虛構分數
-            assert m["downswing_ms"] is None, f"球次 #{seq} 異常球 downswing_ms 必須為 None"
-            assert m["backswing_ms"] is None, f"球次 #{seq} 異常球 backswing_ms 必須為 None"
-            assert m["backswing_downswing_ratio"] is None, f"球次 #{seq} 異常球 tempo 必須為 None"
+            # 異常球：必須誠實設為 None，不虛構分數，且審查狀態必須為 needs_review
+            assert actual_ds is None, f"球次 #{seq} 異常球 downswing_ms 必須為 None"
+            assert actual_bs is None, f"球次 #{seq} 異常球 backswing_ms 必須為 None"
+            assert actual_tempo is None, f"球次 #{seq} 異常球 tempo 必須為 None"
+            assert cls["review_status"] == "needs_review", f"球次 #{seq} 異常球 review_status 必須為 needs_review"
 
 
 def test_markdown_and_json_report_consistency():

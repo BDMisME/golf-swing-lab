@@ -176,3 +176,101 @@ def test_rank_session_swings_strict_filtering_and_reasons():
     assert ranked["ig"][0]["segment_id"] == "swing-a"
     assert ranked["ig"][0]["category_score"] == 88.0
 
+
+def test_rank_session_swings_reliable_vs_disputed_exclusion():
+    """
+    P0-5 驗證排行榜安全過濾：
+    1. 建立至少一球可靠、一球爭議的真實測試。
+    2. 確保可靠球正常入榜，具有爭議 (unreliable_for_ranking/candidate_ambiguous/needs_review) 之球次嚴格排除於 posture 與 tempo 榜外。
+    3. 確保排行榜非空 (若有合規球，禁止全空)。
+    4. 手動置頂球 (manual_overrides) 必須明確標記 manual_pinned=True 且優先置頂。
+    """
+    swings = [
+        # 球 1: 可靠球 (正常入榜)
+        {
+            "id": "swing-reliable-1",
+            "sequence_no": 1,
+            "label": "valid_swing",
+            "review_status": "auto_accepted",
+            "review_flags": [],
+            "unreliable_for_ranking": False,
+            "overall_score": 85.0,
+            "confidence": 0.92,
+            "subscores": {
+                "spine_tilt_stability": {"score": 85.0, "raw_value": 2.5},
+                "tempo_consistency": {"score": 88.0, "raw_value": 3.01},
+                "finish_balance": {"score": 82.0, "hold_ms": 900, "raw_value": 0.04},
+                "ig_visual_breakdown": {"framing_30": 85.0},
+            },
+            "ig_visual_score": 86.0,
+        },
+        # 球 2: 爭議球 (分數極高，但因具有候選雙峰爭議，必須被排除於 posture 與 tempo 榜外)
+        {
+            "id": "swing-disputed-2",
+            "sequence_no": 2,
+            "label": "valid_swing",
+            "review_status": "needs_review",
+            "review_flags": ["candidate_ambiguous"],
+            "unreliable_for_ranking": True,
+            "overall_score": 96.0,  # 分數極高
+            "confidence": 0.70,
+            "subscores": {
+                "spine_tilt_stability": {"score": 96.0, "raw_value": 1.1},
+                "tempo_consistency": {"score": 99.0, "raw_value": 3.00},
+                "finish_balance": {"score": 95.0, "hold_ms": 1500, "raw_value": 0.02},
+                "ig_visual_breakdown": {"framing_30": 95.0},
+            },
+            "ig_visual_score": 90.0,
+        },
+        # 球 3: 第二顆可靠球
+        {
+            "id": "swing-reliable-3",
+            "sequence_no": 3,
+            "label": "valid_swing",
+            "review_status": "auto_accepted",
+            "review_flags": [],
+            "unreliable_for_ranking": False,
+            "overall_score": 78.0,
+            "confidence": 0.88,
+            "subscores": {
+                "spine_tilt_stability": {"score": 78.0, "raw_value": 3.2},
+                "tempo_consistency": {"score": 80.0, "raw_value": 2.80},
+                "finish_balance": {"score": 75.0, "hold_ms": 700, "raw_value": 0.05},
+                "ig_visual_breakdown": {"framing_30": 80.0},
+            },
+            "ig_visual_score": 79.0,
+        },
+    ]
+
+    # 設定手動置頂：使用者將 swing-reliable-3 在 posture 類別手動置頂為第一名
+    favs = [
+        {"segment_id": "swing-reliable-3", "category": "posture", "rank_override": 1}
+    ]
+
+    ranked = rank_session_swings(swings, favorites=favs, top_k=5)
+
+    # 1. 確保排行榜非空
+    assert len(ranked["posture"]) > 0, "posture 排行榜不可為空"
+    assert len(ranked["tempo"]) > 0, "tempo 排行榜不可為空"
+    assert len(ranked["finish"]) > 0, "finish 排行榜不可為空"
+    assert len(ranked["ig"]) > 0, "ig 排行榜不可為空"
+
+    # 2. 檢驗爭議球 (swing-disputed-2) 嚴格排除於 posture 與 tempo 榜外
+    posture_ids = [it["segment_id"] for it in ranked["posture"]]
+    tempo_ids = [it["segment_id"] for it in ranked["tempo"]]
+    assert "swing-disputed-2" not in posture_ids, "爭議球 swing-disputed-2 必須排除於 posture 榜外！"
+    assert "swing-disputed-2" not in tempo_ids, "爭議球 swing-disputed-2 必須排除於 tempo 榜外！"
+
+    # 3. 檢驗可靠球正常入榜
+    assert "swing-reliable-1" in posture_ids
+    assert "swing-reliable-1" in tempo_ids
+
+    # 4. 檢驗手動置頂球 (swing-reliable-3) 在 posture 榜排第一，且標記為 manual_pinned=True
+    assert ranked["posture"][0]["segment_id"] == "swing-reliable-3"
+    assert ranked["posture"][0]["manual_pinned"] is True, "手動置頂必須標記 manual_pinned=True"
+
+    # 非手動置頂者 manual_pinned 必須為 False
+    assert ranked["posture"][1]["segment_id"] == "swing-reliable-1"
+    assert ranked["posture"][1]["manual_pinned"] is False
+
+

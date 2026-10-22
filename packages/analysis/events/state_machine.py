@@ -382,19 +382,23 @@ class SwingPhaseStateMachine:
         max_speed = float(np.max(speed)) if len(speed) > 0 else 1.0
 
         # 1. 搜尋潛在 Impact 候選點 (Kinematic / Audio / Ball Launch)
+        # 放寬手腕高度限制：只要遠離頂點區域 (深度 >= 28% 全振幅) 或具備顯著衝擊速度 (>= 35% max_speed) 或有近音訊瞬態即納入
         raw_imp_cands: list[int] = []
         for i in range(1, n - 2):
-            if wrist_ys[i] < y_40:
+            stroke_depth = wrist_ys[i] - min_wrist_y
+            is_deep_enough = stroke_depth >= 0.28 * full_amplitude
+            is_fast_enough = speed[i] >= 0.35 * max_speed
+            has_near_audio = bool(
+                audio_transients_ms
+                and any(abs(a - times[i]) <= 65 for a in audio_transients_ms)
+            )
+            has_near_ball = bool(ball_strike_ms is not None and abs(ball_strike_ms - times[i]) <= 90)
+
+            if not (is_deep_enough or is_fast_enough or has_near_audio or has_near_ball):
                 continue
 
             is_speed_peak = bool(speed[i] >= speed[i - 1] and speed[i] >= speed[i + 1] and speed[i] >= spd_40)
-            is_decel = bool((speed[i - 1] - speed[i]) >= 0.00025 and speed[i - 1] >= spd_40)
-            has_near_audio = bool(
-                audio_transients_ms
-                and any(abs(a - times[i]) <= 55 for a in audio_transients_ms)
-                and speed[i] >= 0.35 * max_speed
-            )
-            has_near_ball = bool(ball_strike_ms is not None and abs(ball_strike_ms - times[i]) <= 90)
+            is_decel = bool((speed[i - 1] - speed[i]) >= 0.00020 and speed[i - 1] >= spd_40)
 
             if is_speed_peak or is_decel or has_near_audio or has_near_ball:
                 raw_imp_cands.append(i)
@@ -402,23 +406,39 @@ class SwingPhaseStateMachine:
         if not raw_imp_cands:
             raw_imp_cands = [int(np.argmax(speed))]
 
-        # NMS 聚合 (相距 >= 250ms)
+        # 標準 Score-ranked NMS 抑制機制 (徹底杜絕鏈條式滑動吞食 Bug)
+        scored_cands: list[tuple[float, int]] = []
+        for idx in raw_imp_cands:
+            cur_brake = (speed[idx] - speed[idx + 1]) if idx < n - 1 else 0.0
+            aud_dist = min([abs(a - times[idx]) for a in (audio_transients_ms or [])], default=999)
+            aud_bonus = 2.0 if aud_dist <= 60 else (1.0 if aud_dist <= 90 else 0.0)
+            ball_bonus = 2.5 if (ball_strike_ms is not None and abs(ball_strike_ms - times[idx]) <= 80) else 0.0
+            # 物理衝擊強度：速度峰值能量 + 擊球衝擊減速 + 音訊/球體一致性 + 垂直深度
+            s_val = (
+                (speed[idx] / max(1e-4, max_speed)) * 4.0
+                + max(0.0, cur_brake / max(1e-4, max_speed)) * 3.0
+                + aud_bonus
+                + ball_bonus
+                + ((wrist_ys[idx] - min_wrist_y) / max(1e-4, full_amplitude)) * 1.0
+            )
+            scored_cands.append((s_val, idx))
+
+        scored_cands.sort(key=lambda x: x[0], reverse=True)
         nms_imps: list[int] = []
-        for idx in sorted(raw_imp_cands, key=lambda i: times[i]):
-            if not nms_imps or (times[idx] - times[nms_imps[-1]]) >= 250:
-                nms_imps.append(idx)
-            else:
-                prev = nms_imps[-1]
-                # 綜合考量：手腕垂直深度 (擊球最低點)、擊球後衝擊煞車 (speed[i] - speed[i+1])、速度能量
-                cur_brake = (speed[idx] - speed[idx + 1]) if idx < n - 1 else 0.0
-                prev_brake = (speed[prev] - speed[prev + 1]) if prev < n - 1 else 0.0
-                cur_val = wrist_ys[idx] * 2.0 + speed[idx] + max(0.0, cur_brake) * 1.5
-                prev_val = wrist_ys[prev] * 2.0 + speed[prev] + max(0.0, prev_brake) * 1.5
-                if cur_val > prev_val:
-                    nms_imps[-1] = idx
+        suppressed: set[int] = set()
+        for _, idx in scored_cands:
+            if idx in suppressed:
+                continue
+            nms_imps.append(idx)
+            for _, other_idx in scored_cands:
+                if abs(times[other_idx] - times[idx]) <= 280:
+                    suppressed.add(other_idx)
+
+        nms_imps.sort()
 
         hypotheses: list[SwingHypothesis] = []
         cand_counter = 1
+
 
         for imp_idx in nms_imps:
             imp_t = times[imp_idx]
@@ -491,21 +511,48 @@ class SwingPhaseStateMachine:
             takeaway_idx = min(best_top_idx, takeaway_idx)
             downswing_idx = max(best_top_idx, (best_top_idx + imp_idx) // 2)
 
-            # 4. 向後搜尋 Follow-through & Finish
-            post_window = list(range(imp_idx + 1, min(n, imp_idx + 35)))
+            # 4. 向後搜尋 Follow-through & Finish (切斷跨動作污染，計算真實連續收桿穩定度)
+            # (A) 動作鏈物理邊界偵測：若存在下一個擊球候選，以兩者之間的放桿/重新站定點作為動作終止界線
+            next_imp_list = [i for i in nms_imps if i > imp_idx]
+            if next_imp_list:
+                next_imp = next_imp_list[0]
+                between_window = list(range(imp_idx + 1, next_imp))
+                if between_window:
+                    split_idx = max(between_window, key=lambda i: (wrist_ys[i] * 2.0 - speed[i] * 20.0))
+                else:
+                    split_idx = (imp_idx + next_imp) // 2
+                motion_end_idx = split_idx
+            else:
+                motion_end_idx = n
+
+            # (B) 隨揮搜尋：嚴格限制在當前動作鏈邊界內，且在生理合理的 650ms 內到達頂點
+            post_window = [
+                i for i in range(imp_idx + 1, min(motion_end_idx, n))
+                if times[i] <= imp_t + 650
+            ]
             if post_window:
                 follow_idx = min(post_window, key=lambda i: wrist_ys[i])
                 follow_y = wrist_ys[follow_idx]
                 follow_amp = imp_y - follow_y
-                finish_idx = min(n - 1, max(follow_idx + 1, imp_idx + max(3, (follow_idx - imp_idx) * 2)))
-                finish_hold_ms = times[-1] - times[follow_idx]
+
+                # (C) 真實連續姿態穩定性計算 finish_hold_ms (嚴禁使用 times[-1]！)
+                # 從隨揮頂點逐幀檢查姿態是否維持在收桿平衡狀態
+                hold_end_idx = follow_idx
+                for k in range(follow_idx + 1, min(motion_end_idx, n)):
+                    # 姿態維持條件：手腕保持在收桿高度 (<= follow_y + 0.08) 且 運動速度維持平靜
+                    if wrist_ys[k] <= follow_y + 0.08 and speed[k] <= max(0.0025, 0.25 * max_speed):
+                        hold_end_idx = k
+                    else:
+                        break
+                finish_hold_ms = times[hold_end_idx] - times[follow_idx]
+                finish_idx = hold_end_idx
             else:
                 follow_idx = imp_idx
-                finish_idx = n - 1
+                finish_idx = imp_idx
                 follow_amp = 0.0
                 finish_hold_ms = 0
 
-            # 5. 計算各維度物理特徵與證據
+            # 5. 計算各維度物理特徵與客觀證據
             supporting: list[str] = []
             opposing: list[str] = []
 
@@ -515,16 +562,19 @@ class SwingPhaseStateMachine:
 
             k_score = 0.0
             if 180 <= ds_ms <= 650:
-                k_score += 4.0
+                k_score += 5.0
                 supporting.append(f"physiologically_valid_downswing ({ds_ms}ms)")
-            elif 150 <= ds_ms < 180 or 650 < ds_ms <= 850:
+            elif 150 <= ds_ms < 180:
                 k_score += 2.0
                 supporting.append(f"acceptable_downswing ({ds_ms}ms)")
+            elif 650 < ds_ms <= 850:
+                k_score += 0.0
+                opposing.append(f"slow_downswing_duration ({ds_ms}ms)")
             else:
-                k_score -= 2.5
+                k_score -= 3.0
                 opposing.append(f"extreme_downswing_duration ({ds_ms}ms)")
 
-            if stroke_amp >= 0.10:
+            if stroke_amp >= 0.09:
                 k_score += 3.0
                 supporting.append("adequate_stroke_amplitude")
             else:
@@ -532,27 +582,29 @@ class SwingPhaseStateMachine:
                 opposing.append("shallow_stroke_amplitude")
 
             if ds_spd_peak >= 0.0010:
-                k_score += 2.5
+                k_score += 3.0
+                supporting.append(f"high_impact_speed_peak ({ds_spd_peak:.4f})")
             if decel >= 0.0003:
-                k_score += 1.5
-                supporting.append("impact_deceleration_brake")
+                k_score += 2.0
+                supporting.append(f"impact_deceleration_brake ({decel:.4f})")
 
             # (B) 隨揮與收桿延伸 (核心區分試擺與正式擊球)
             f_score = 0.0
-            if follow_amp >= 0.12:
-                f_score += 5.0
+            if follow_amp >= 0.10:
+                f_score += 4.0
                 supporting.append(f"full_follow_through_extension (amp={follow_amp:.3f})")
-            elif follow_amp >= 0.08:
-                f_score += 2.5
+            elif follow_amp >= 0.05:
+                f_score += 2.0
                 supporting.append(f"moderate_follow_through (amp={follow_amp:.3f})")
-            else:
-                f_score -= 4.0
+            elif follow_amp < 0.0:
+                f_score -= 2.0
                 opposing.append(f"weak_follow_through_waggle_like (amp={follow_amp:.3f})")
 
-            if finish_hold_ms >= 350:
+            if finish_hold_ms >= 300:
                 f_score += 2.0
-                supporting.append("finish_balance_hold")
-            elif finish_hold_ms < 150:
+                supporting.append(f"finish_balance_hold ({finish_hold_ms}ms)")
+            elif finish_hold_ms < 100:
+                f_score -= 1.0
                 opposing.append("abrupt_cutoff_no_finish_hold")
 
             # (C) 試擺後重新站定沉靜度
@@ -564,7 +616,7 @@ class SwingPhaseStateMachine:
                 r_score += 2.0
                 supporting.append("settled_readdress_before_takeaway")
 
-            # (D) 音訊瞬態時間與姿態一致性 (P0-2)
+            # (D) 音訊瞬態時間與姿態一致性
             aud_score = 0.0
             closest_aud_ms = None
             min_aud_diff = None
@@ -576,10 +628,10 @@ class SwingPhaseStateMachine:
                         closest_aud_ms = a
 
                 if min_aud_diff is not None:
-                    if min_aud_diff <= 45 and speed[imp_idx] >= 0.35 * max_speed:
+                    if min_aud_diff <= 60 and speed[imp_idx] >= 0.35 * max_speed:
                         aud_score += 4.5
                         supporting.append(f"audio_aligned_with_strike (diff={min_aud_diff}ms)")
-                    elif min_aud_diff <= 85 and speed[imp_idx] >= 0.30 * max_speed:
+                    elif min_aud_diff <= 90 and speed[imp_idx] >= 0.30 * max_speed:
                         aud_score += 2.0
                         supporting.append(f"audio_near_strike (diff={min_aud_diff}ms)")
                     elif min_aud_diff > 120:
@@ -633,10 +685,16 @@ class SwingPhaseStateMachine:
             cand_counter += 1
 
         hypotheses.sort(
-            key=lambda h: (round(h.total_score, 4), round(h.follow_amplitude, 4), h.impact_ms),
+            key=lambda h: (
+                round(h.total_score, 4),
+                round(h.downswing_speed_peak, 5),
+                round(h.follow_amplitude, 4),
+                h.impact_ms,
+            ),
             reverse=True,
         )
         return hypotheses
+
 
     def extract_events(
         self,
