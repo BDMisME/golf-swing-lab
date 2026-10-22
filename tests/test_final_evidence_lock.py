@@ -173,9 +173,37 @@ def test_golden_set_actual_status_dynamic_integrity():
     assert verdicts["DETECTION_VALIDATED"] == "PASS (PROVISIONAL)"
 
 
-def test_real_world_negative_samples_zero_false_positives():
+def test_dynamic_verdicts_accuracy_and_provisional():
     """
-    P0-D: 驗證真實長片中 11 個非揮桿間隔區段均未產生假陽性 (FP = 0)。
+    P0-4: 驗證五大 Verdicts 之動態裁決規則：
+    1. ENGINEERING_PASS: 由自動化測試與建置 exit code 動態判定為 PASS
+    2. DATA_INTEGRITY_PASS: PASS
+    3. DETECTION_VALIDATED: PASS (PROVISIONAL)
+    4. EVENT_ACCURACY_VALIDATED: 因無人工確認之正式真值，動態判定為 NOT_VALIDATED
+    5. REAL_WORLD_AUTOMATION_READY: 在具備外部獨立人工標註前，客觀標記為 PROVISIONAL
+    """
+    if not JSON_REPORT_PATH.exists():
+        pytest.skip("報告檔案尚未生成")
+
+    with open(JSON_REPORT_PATH, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+
+    verdicts = json_data["verdicts"]
+    assert verdicts["ENGINEERING_PASS"] == "PASS"
+    assert verdicts["DATA_INTEGRITY_PASS"] == "PASS"
+    assert verdicts["DETECTION_VALIDATED"] == "PASS (PROVISIONAL)"
+    assert verdicts["EVENT_ACCURACY_VALIDATED"] == "NOT_VALIDATED", (
+        "因無人工確認之正式真值，EVENT_ACCURACY_VALIDATED 必須動態判定為 NOT_VALIDATED"
+    )
+    assert verdicts["REAL_WORLD_AUTOMATION_READY"] == "PROVISIONAL", (
+        "長片雖跑通 12 球偵測，但尚缺高精獨立人工金標驗證，依 P0-4 規範必須標記為 PROVISIONAL"
+    )
+
+
+def test_unlabeled_candidate_negatives_marked_not_validated():
+    """
+    P0-4: 驗證真實長片中 11 個未擊球區段標記為 unlabeled_candidate_negatives，
+    因缺乏第三方獨立人工標註，其正式狀態必須動態回傳 NOT_VALIDATED，禁止謊稱 PASS。
     """
     if not JSON_REPORT_PATH.exists():
         pytest.skip("報告檔案尚未生成")
@@ -184,13 +212,57 @@ def test_real_world_negative_samples_zero_false_positives():
         json_data = json.load(f)
 
     summary = json_data["summary"]
-    assert summary["negative_intervals_tested"] == 11, "必須完整驗收 11 個間隔區段"
-    assert summary["negative_false_positives"] == 0, "11 個非揮桿區段假陽性必須為 0"
-    assert summary["negative_total_duration_sec"] > 70.0, "負樣本總時長應超過 70 秒"
+    assert summary["unlabeled_candidate_negatives_tested"] >= 11, "必須完整檢驗非揮桿間隔區段"
+    assert summary["unlabeled_candidate_negatives_status"] == "NOT_VALIDATED"
+    assert summary["unlabeled_candidate_negatives_false_positives"] == 0
+    assert summary["unlabeled_candidate_negatives_total_duration_sec"] > 70.0
 
     negs = json_data.get("negative_samples_real_world", [])
-    assert len(negs) == 11
+    assert len(negs) >= 11
     for n in negs:
+        assert n["category"] == "unlabeled_candidate_negatives"
+        assert n["status"] == "NOT_VALIDATED"
         assert n["false_positives"] == 0
-        assert n["status"] == "PASS"
-        assert n["provisional_tag"] == "PROVISIONAL"
+
+
+def test_multi_hypothesis_and_best_swings_ranking_protection():
+    """
+    P0-3 & P0-5: 驗證多候選雙峰假設推導資料結構，以及爭議球在 Top 5 排行榜中之安全排除。
+    """
+    if not JSON_REPORT_PATH.exists():
+        pytest.skip("報告檔案尚未生成")
+
+    with open(JSON_REPORT_PATH, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+
+    swings = json_data["swings"]
+    disputed_ids = set()
+
+    for s in swings:
+        seq = s["sequence_no"]
+        m_hyp = s.get("multi_hypothesis_analysis", {})
+        assert "hypotheses_count" in m_hyp
+        assert "selection_rationale" in m_hyp
+        hyps = m_hyp.get("hypotheses", [])
+        assert len(hyps) >= 1, f"球次 #{seq} 必須具備至少 1 組候選假設"
+        for h in hyps:
+            assert "top_ms" in h
+            assert "impact_ms" in h
+            assert "total_score" in h
+            assert "supporting_evidence" in h
+            assert "opposing_evidence" in h
+
+        # 檢驗爭議標記
+        if m_hyp.get("is_ambiguous") or s["classification"]["review_status"] == "needs_review":
+            disputed_ids.add(f"swing_{seq}")
+
+    # 驗證 P0-5: 爭議球絕不出現在 posture 與 tempo 排行榜
+    rv = json_data.get("ranking_validation", {})
+    assert rv.get("disputed_swings_excluded_from_posture_and_tempo") is True
+    posture_top5 = set(rv.get("posture_top5", []))
+    tempo_top5 = set(rv.get("tempo_top5", []))
+
+    for disp in disputed_ids:
+        assert disp not in posture_top5, f"爭議球 {disp} 違規進入了 posture 排行榜！"
+        assert disp not in tempo_top5, f"爭議球 {disp} 違規進入了 tempo 排行榜！"
+

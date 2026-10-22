@@ -1,33 +1,28 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Automatic Accuracy Finalization）
-1. **P0-A：立即修正不實的 Golden Set 驗證狀態**：`PASS`
-   - 審查 `tests/golden/real_2min_session_gt.json` 全部 60 個事件（12 球 × 5 事件），確認其在資料結構中 100% 均為 `machine_suggested`（`source: "machine_heuristic_v1"`, `verified_by: null`）。
-   - 徹底移除 `scripts/run_final_evidence_evaluation.py` 中硬編碼之 `human_verified` 與 `human_verified_pcm_audio_60fps`，全面改為從 Golden Set 檔案動態即時讀取各事件的真實 `status`、`source`、`verified_by`。
-   - 正式報告如實公佈：Golden Set 人工已確認數為 `0/60`（`0.0%`），機器推算建議數為 `60/60`（`100.0%`）。保持 Golden Set 零污染（SHA-256 恆為 `efefa02b...`），絕不擅改真值假充人工確認。
-2. **P0-B：真正釐清自動接受但事件差距巨大球次 (#3, #4, #5, #7 等)**：`PASS`
-   - 客觀診斷 12 記擊球原片候選影格、PCM 音訊瞬態、手腕極大值與動能峰值：
-     - 球次 #8, #9, #10 與金標高度吻合（Top 偏差 64~165ms，Impact 偏差 3~98ms，多訊號一致）。
-     - 球次 #6 下桿達 3552ms，系統自主標記 `timing_anomaly` 並降級為 `needs_review`，下桿與節奏指標設為 `None`。
-     - 球次 #1, #2, #3, #4, #5, #7, #11, #12 在 4~8 秒候選視窗內存在前置試擺（Waggle / Pre-swing motion）波峰與擊球波峰雙峰競爭。模型鎖定前段試擺波峰，而同為機器推算的 GT 初標鎖定後段波峰。
-   - 依最高誠信原則，不預設模型錯或 GT 對，維持客觀記錄 `DISPUTED_WAGGLE`，不強行以固定 180–650ms 門檻硬調時間假造精確。
-3. **P0-C：讓真實準確度報告由數據決定（動態判定五大 Verdicts）**：`PASS`
-   - 五大 Verdicts 完全由客觀數據與客觀規則動態計算產生，嚴禁手動寫死 PASS：
-     - `ENGINEERING_PASS`: **`PASS`**（全量測試 70/70 通過，Next.js 9/9 靜態路由 build 成功）。
-     - `DATA_INTEGRITY_PASS`: **`PASS`**（Golden Set 零污染，12 球 Invariant 100% 成立，GT 狀態動態讀取）。
-     - `DETECTION_VALIDATED`: **`PASS (PROVISIONAL)`**（候選偵測率 100.0%，分類正確率 100.0%，FP = 0）。
-     - `EVENT_ACCURACY_VALIDATED`: **`NOT_VALIDATED`**（動態計算規則：人工驗證率必須 $\ge 70\%$；當前人工驗證率為 0.0% < 70%，動態回傳 `NOT_VALIDATED`，誠實揭露缺少高速攝影雙盲人工標註）。
-     - `REAL_WORLD_AUTOMATION_READY`: **`PASS`**（長片自主跑通無崩潰，具備真球確認與時序異常自主降級保護，無需使用者日常逐球人工校正）。
-4. **P0-D：補齊真正的負樣本驗收**：`PASS`
-   - 自動提取 139 秒長片中 12 記擊球外的 11 個未擊球間隔區段（共 71.69 秒，佔片長 51.6%），涵蓋撿球、放球、看球路、站姿調整等真實練習場動作。
-   - 驗證在 11 個間隔區段中，Valid Swing 數量為 0，假陽性 `FP = 0`。
-   - 依規範如實將長片負樣本標註為 `PROVISIONAL`，並結合 6 類獨立合成負樣本自動化測試（6/6 通過）。
-5. **P0-E：讓 Evidence Lock 真正可追溯**：`PASS`
-   - 推論輸出包含 Git SHA、Dirty 狀態檢測、影片與金標 SHA-256、精確執行耗時與時間戳。
-   - 每次推論自動於 `docs/reports/snapshots/` 保存時間戳快照（例如 `evidence_lock_20261022_014715_4f49f838.json`），避免意外覆寫。
-   - 單一執行同時渲染不可修改之唯一 Markdown 報告 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`。
-- **最後更新時間**：2026-10-22T01:48:00+08:00
-- **最新基準版本**：`4f49f83`
+## 最新開發策略執行狀態（Resolve Double-Peak Swing Detection）
+1. **P0-1：修正雙峰候選判斷（多候選揮桿鏈推導架構）**：`PASS`
+   - 重構 `packages/analysis/events/state_machine.py`，徹底捨棄依據單一最高手腕點鎖定 Top 的缺陷，實作 `SwingHypothesis` 與 `_generate_swing_hypotheses`：
+     - 從多個潛在 Impact 候選（NMS 聚合相距 $\ge 250\text{ms}$，優先考量手腕垂直深度與擊球煞車）向前回溯完整的 `Address → Takeaway → Top → Downswing → Impact → Follow Through → Finish`。
+     - 綜合下桿時序合理性（180–650ms 參考區間）、上下桿垂直幅度、下桿峰值速度、Impact 減速制動、隨揮延伸幅度（$\ge 0.12$）、收桿停留平衡（$\ge 350\text{ms}$）、重新站定沉靜度進行多維度確定性客觀評分。
+     - 嚴禁在無多重證據前強制選擇「第一組」或「最後一組」。當多組候選總分相近（$< 15\%$ 分差）時，標記為 `is_ambiguous` 並在 `review_status` 中提示 `needs_review`。
+2. **P0-2：音訊瞬態與運動學一致性約束**：`PASS`
+   - 解決練習場隔壁球道背景擊球雜音干擾：音訊瞬態必須與手腕衝擊速度峰值時間差 $\le 45\text{ms}$（若 $> 120\text{ms}$ 則標記為 `isolated_background_audio` 負向扣分）。
+   - 當無可靠音訊或真球追蹤時，安全回退至純運動學特徵，如實反映在訊號來源中，絕不捏造來源。
+   - 不預設正式擊球動能一定遠大於前置試擺，以隨揮延伸與收桿停頓作為區分試擺的最強運動學判據。
+3. **P0-3：8 顆雙峰波形爭議球與第 6 球多候選假設證據表**：`PASS`
+   - 在唯一正式報告 `docs/FINAL_EVIDENCE_LOCK_REPORT.md` 與 `docs/reports/final_evidence_lock.json` 中逐球列出多候選假設證據表（每球 2~4 組候選，包含 cand-1 與 cand-2 的 Top/Impact 時間碼、下桿時長、綜合評分、支持證據與反對理由）。
+   - 第 6 球（原因試擺與擊球跨峰誤拼導致下桿 2.4 秒時序異常）經揮桿鏈閉合推導，成功鎖定生理正常之正式擊球（下桿 400ms，對齊後 550ms），時序異常完全歸零。
+4. **P0-4：修正不合理驗收邏輯與動態五大 Verdicts**：`PASS`
+   - 將長片未擊球間隔區段（12 個區段，共 74.09 秒）重新命名為 `unlabeled_candidate_negatives`，正式狀態動態回傳 `NOT_VALIDATED`，禁止謊稱 PASS。
+   - `ENGINEERING_PASS`：由本機自動化測試（61/61 passed）與 Next.js build（9/9 routes）的實際 exit code 動態判定為 `PASS`，禁止寫死。
+   - `EVENT_ACCURACY_VALIDATED`：因 Golden Set 60 個事件均為 `machine_suggested`（人工驗證率 0.0% < 70% 門檻），動態判定為 `NOT_VALIDATED`。
+   - `REAL_WORLD_AUTOMATION_READY`：長片自主跑通無崩潰，具備多候選雙峰假設推導，但因尚缺高精獨立人工金標驗證，客觀標記為 `PROVISIONAL`。
+5. **P0-5：避免錯誤的最佳球推薦（Top 5 排行榜安全排除）**：`PASS`
+   - 在 `packages/analysis/scoring/engine.py` 的 `rank_session_swings` 中加入 `_is_unreliable_for_category` 過濾機制：凡存在 `unreliable_for_ranking`、`is_ambiguous`、`timing_anomaly` 或 `needs_review` 爭議之球次，嚴格於 `posture`（姿勢最佳）與 `tempo`（節奏最佳）排行榜中排除。
+   - IG 畫面（9:16）維持獨立視覺呈現，但排行榜資料流維持嚴格保護。
+- **最後更新時間**：2026-10-22T12:31:00+08:00
+- **最新基準版本**：`579ed39`
 - **正式驗收檔案**：`docs/reports/final_evidence_lock.json` 與 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`
 
 ## 前期重大里程碑狀態（Final Reliability Gate）

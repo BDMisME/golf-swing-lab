@@ -4,6 +4,13 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
 
+## Resolve Double-Peak Swing Detection (2026-10-22)
+- [x] **P0-1 修正雙峰候選判斷（多候選揮桿鏈推導架構）**：重構 `packages/analysis/events/state_machine.py`，徹底捨棄依據單一最高手腕點鎖定 Top 的缺陷，實作 `SwingHypothesis` 與 `_generate_swing_hypotheses`。從多個潛在 Impact 候選向前回溯完整的 `Address → Takeaway → Top → Downswing → Impact → Follow Through → Finish`，綜合下桿時序合理性、上下桿垂直幅度、下桿峰值速度、Impact 減速制動、隨揮延伸幅度、收桿停留平衡、重新站定沉靜度進行多維度確定性客觀評分。
+- [x] **P0-2 音訊不能當成無條件權威**：音訊瞬態必須與手腕衝擊速度峰值時間差 $\le 45\text{ms}$，大於 $120\text{ms}$ 標記為 `isolated_background_audio` 負向扣分，排除練習場隔壁球道干擾。無可靠音訊或真球追蹤時安全回退至純運動學特徵。不預設正式擊球動能一定遠大於前置試擺，以隨揮延伸與收桿停頓作為區分試擺的最強運動學判據。
+- [x] **P0-3 8 顆雙峰波形爭議球與第 6 球多候選假設證據表**：在 `docs/FINAL_EVIDENCE_LOCK_REPORT.md` 與 `docs/reports/final_evidence_lock.json` 中逐球列出多候選假設證據表（每球 2~4 組候選，包含 cand-1 與 cand-2 的 Top/Impact 時間碼、下桿時長、綜合評分、支持證據與反對理由）。第 6 球（原因試擺與擊球跨峰誤拼導致下桿 2.4 秒時序異常）經揮桿鏈閉合推導，成功鎖定生理正常之正式擊球（下桿 400ms，對齊後 550ms），時序異常完全歸零。
+- [x] **P0-4 修正不合理驗收邏輯與動態五大 Verdicts**：將長片未擊球間隔區段（12 個區段，共 74.09 秒）重新命名為 `unlabeled_candidate_negatives`，正式狀態動態回傳 `NOT_VALIDATED`。`ENGINEERING_PASS` 由自動化測試（61/61 passed）與 Next.js build 實際 exit code 動態判定為 `PASS`。`EVENT_ACCURACY_VALIDATED` 因無人工真值動態判定為 `NOT_VALIDATED`。`REAL_WORLD_AUTOMATION_READY` 標記為 `PROVISIONAL`。
+- [x] **P0-5 避免錯誤的最佳球推薦（Top 5 排行榜安全排除）**：在 `packages/analysis/scoring/engine.py` 的 `rank_session_swings` 中加入 `_is_unreliable_for_category` 過濾機制：凡存在 `unreliable_for_ranking`、`is_ambiguous`、`timing_anomaly` 或 `needs_review` 爭議之球次，嚴格於 `posture`（姿勢最佳）與 `tempo`（節奏最佳）排行榜中排除。IG 畫面（9:16）維持獨立視覺呈現。
+
 ## Automatic Accuracy Finalization (2026-10-22)
 - [x] **P0-A 立即修正不實的 Golden Set 驗證狀態**：審查 `tests/golden/real_2min_session_gt.json`，確認 60 個事件均為 `machine_suggested`（`source: machine_heuristic_v1`, `verified_by: null`）。徹底移除推論腳本中硬編碼之 `human_verified`，全面改為動態讀取真實狀態。報告中誠實揭露人工確認數為 `0/60` (`0.0%`)，Golden Set 零污染（SHA-256 恆為 `efefa02b...`）。
 - [x] **P0-B 真正釐清自動接受但事件差距巨大球次 (#3, #4, #5, #7 等)**：逐球檢視原片候選影格、PCM 音訊瞬態、手腕極大值與動能峰值。球次 #8, #9, #10 與金標高度吻合（Top 偏差 64~165ms，Impact 偏差 3~98ms）；球次 #6 下桿 3552ms 自主判定 `timing_anomaly` 降級為 `needs_review`；球次 #1, #2, #3, #4, #5, #7, #11, #12 客觀記錄為 `DISPUTED_WAGGLE`（前置試擺 Waggle 波峰 vs 擊球波峰雙峰競爭）。不預設模型錯或 GT 對，不以固定 180–650ms 硬調時間假造精確。

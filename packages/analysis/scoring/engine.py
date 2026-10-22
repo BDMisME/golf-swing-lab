@@ -484,11 +484,31 @@ def rank_session_swings(
             if f.get("category") == cat_name
         }
 
-        # 嚴格過濾：該球在此分類必須具有真實有效分數 (not None)，或有手動置頂
+        def _is_unreliable_for_category(item: dict[str, Any], cat: str) -> bool:
+            """P0-5: 檢驗該球在指定推薦類別中是否具有不可靠爭議。"""
+            r_flags = set(item.get("review_flags") or [])
+            q_meta = item.get("quality_metadata") or {}
+            is_ambiguous = bool(
+                item.get("unreliable_for_ranking")
+                or q_meta.get("unreliable_for_ranking")
+                or q_meta.get("is_ambiguous")
+                or "candidate_ambiguous" in r_flags
+                or "timing_anomaly" in r_flags
+                or item.get("review_status") == "needs_review"
+            )
+            # 姿勢 (posture) 與 節奏 (tempo) 依賴精確的時序與事件對齊，嚴格排除爭議球
+            if cat in ("posture", "tempo") and is_ambiguous:
+                return True
+            return False
+
+        # 嚴格過濾：該球在此分類必須具有真實有效分數 (not None)，且不可具有多候選/時序爭議 (除非手動置頂)
         cat_candidates = [
             s
             for s in base_eligible
-            if score_getter(s) is not None or str(s.get("id")) in manual_overrides
+            if (
+                str(s.get("id")) in manual_overrides
+                or (score_getter(s) is not None and not _is_unreliable_for_category(s, cat_name))
+            )
         ]
 
         def sort_key(item: dict[str, Any]) -> tuple[int, int, float, float, int]:

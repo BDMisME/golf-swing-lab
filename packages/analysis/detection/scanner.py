@@ -352,7 +352,14 @@ class CoarseToFineDetector:
                 ball_strike_ms=ball_strike_ms,
             )
 
+            last_hyps = getattr(self.state_machine, "last_hypotheses", [])
+            last_rationale = getattr(self.state_machine, "last_selection_rationale", "")
+            last_is_ambiguous = getattr(self.state_machine, "last_is_ambiguous", False)
+
             flags_set: set[str] = set()
+            if last_is_ambiguous:
+                flags_set.add("candidate_ambiguous")
+                review_status = "needs_review"
             confs: list[float] = []
             brights: list[float] = []
             sharps: list[float] = []
@@ -663,6 +670,10 @@ class CoarseToFineDetector:
                 "local_refinements": local_refinements,
                 "audio_status": audio_status,
                 "audio_error": audio_error,
+                "hypotheses": [h.to_dict() for h in last_hyps],
+                "selection_rationale": last_rationale,
+                "is_ambiguous": last_is_ambiguous,
+                "unreliable_for_ranking": bool(last_is_ambiguous or "timing_anomaly" in flags_set),
             }
 
             return CandidateSegmentResult(

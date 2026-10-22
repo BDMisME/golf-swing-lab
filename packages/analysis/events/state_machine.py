@@ -47,6 +47,61 @@ class DetectedEvent:
         }
 
 
+@dataclass
+class SwingHypothesis:
+    hypothesis_id: str
+    top_idx: int
+    downswing_idx: int
+    impact_idx: int
+    addr_idx: int
+    takeaway_idx: int
+    follow_idx: int
+    finish_idx: int
+    top_ms: int
+    impact_ms: int
+    addr_ms: int
+    downswing_ms: int
+    backswing_ms: int
+    stroke_amplitude: float
+    downswing_speed_peak: float
+    decel_at_impact: float
+    follow_amplitude: float
+    finish_hold_ms: int
+    readdress_calm_ratio: float
+    audio_transient_ms: int | None
+    audio_diff_ms: float | None
+    audio_score: float
+    ball_strike_applied: bool
+    kinematic_score: float
+    follow_through_score: float
+    total_score: float
+    supporting_evidence: list[str] = field(default_factory=list)
+    opposing_evidence: list[str] = field(default_factory=list)
+    is_ambiguous: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "hypothesis_id": self.hypothesis_id,
+            "top_ms": self.top_ms,
+            "impact_ms": self.impact_ms,
+            "addr_ms": self.addr_ms,
+            "downswing_ms": self.downswing_ms,
+            "backswing_ms": self.backswing_ms,
+            "stroke_amplitude": round(self.stroke_amplitude, 4),
+            "downswing_speed_peak": round(self.downswing_speed_peak, 6),
+            "decel_at_impact": round(self.decel_at_impact, 6),
+            "follow_amplitude": round(self.follow_amplitude, 4),
+            "finish_hold_ms": self.finish_hold_ms,
+            "readdress_calm_ratio": round(self.readdress_calm_ratio, 4),
+            "audio_transient_ms": self.audio_transient_ms,
+            "audio_diff_ms": round(self.audio_diff_ms, 1) if self.audio_diff_ms is not None else None,
+            "total_score": round(self.total_score, 2),
+            "supporting_evidence": self.supporting_evidence,
+            "opposing_evidence": self.opposing_evidence,
+            "is_ambiguous": self.is_ambiguous,
+        }
+
+
 def _get_lm_xyv(lm: Any) -> tuple[float, float, float] | None:
     if lm is None:
         return None
@@ -100,6 +155,9 @@ class SwingPhaseStateMachine:
 
     def __init__(self, model_version: str = "pose-v2") -> None:
         self.model_version = model_version
+        self.last_hypotheses: list[SwingHypothesis] = []
+        self.last_selection_rationale: str = ""
+        self.last_is_ambiguous: bool = False
 
     @staticmethod
     def _select_best_top_realign_candidate(
@@ -299,6 +357,287 @@ class SwingPhaseStateMachine:
 
         return top_idx, impact_idx, addr_idx, takeaway_idx, t_sources, i_sources, has_anomaly
 
+    def _generate_swing_hypotheses(
+        self,
+        times: list[int],
+        wrist_xs: list[float],
+        wrist_ys: list[float],
+        speed: np.ndarray,
+        v_y: np.ndarray,
+        confs: list[float],
+        energies: list[float],
+        audio_transients_ms: list[int] | None,
+        ball_strike_ms: int | None,
+        mean_dt: float,
+        full_amplitude: float,
+        min_wrist_y: float,
+        max_wrist_y: float,
+    ) -> list[SwingHypothesis]:
+        n = len(times)
+        if n < 5:
+            return []
+
+        y_40 = float(np.percentile(wrist_ys, 40))
+        spd_40 = float(np.percentile(speed, 40)) if len(speed) > 0 else 0.0005
+        max_speed = float(np.max(speed)) if len(speed) > 0 else 1.0
+
+        # 1. 搜尋潛在 Impact 候選點 (Kinematic / Audio / Ball Launch)
+        raw_imp_cands: list[int] = []
+        for i in range(1, n - 2):
+            if wrist_ys[i] < y_40:
+                continue
+
+            is_speed_peak = bool(speed[i] >= speed[i - 1] and speed[i] >= speed[i + 1] and speed[i] >= spd_40)
+            is_decel = bool((speed[i - 1] - speed[i]) >= 0.00025 and speed[i - 1] >= spd_40)
+            has_near_audio = bool(
+                audio_transients_ms
+                and any(abs(a - times[i]) <= 55 for a in audio_transients_ms)
+                and speed[i] >= 0.35 * max_speed
+            )
+            has_near_ball = bool(ball_strike_ms is not None and abs(ball_strike_ms - times[i]) <= 90)
+
+            if is_speed_peak or is_decel or has_near_audio or has_near_ball:
+                raw_imp_cands.append(i)
+
+        if not raw_imp_cands:
+            raw_imp_cands = [int(np.argmax(speed))]
+
+        # NMS 聚合 (相距 >= 250ms)
+        nms_imps: list[int] = []
+        for idx in sorted(raw_imp_cands, key=lambda i: times[i]):
+            if not nms_imps or (times[idx] - times[nms_imps[-1]]) >= 250:
+                nms_imps.append(idx)
+            else:
+                prev = nms_imps[-1]
+                # 綜合考量：手腕垂直深度 (擊球最低點)、擊球後衝擊煞車 (speed[i] - speed[i+1])、速度能量
+                cur_brake = (speed[idx] - speed[idx + 1]) if idx < n - 1 else 0.0
+                prev_brake = (speed[prev] - speed[prev + 1]) if prev < n - 1 else 0.0
+                cur_val = wrist_ys[idx] * 2.0 + speed[idx] + max(0.0, cur_brake) * 1.5
+                prev_val = wrist_ys[prev] * 2.0 + speed[prev] + max(0.0, prev_brake) * 1.5
+                if cur_val > prev_val:
+                    nms_imps[-1] = idx
+
+        hypotheses: list[SwingHypothesis] = []
+        cand_counter = 1
+
+        for imp_idx in nms_imps:
+            imp_t = times[imp_idx]
+            imp_y = wrist_ys[imp_idx]
+
+            # 2. 為該 Impact 向前搜尋 Top (涵蓋生理下桿時間 150~950ms)
+            top_window = [
+                i for i in range(imp_idx)
+                if (imp_t - 950) <= times[i] <= (imp_t - 150)
+            ]
+            if not top_window:
+                top_window = [
+                    i for i in range(imp_idx)
+                    if (imp_t - 1300) <= times[i] <= (imp_t - 130)
+                ]
+            if not top_window:
+                continue
+
+            top_cands = []
+            for k in top_window:
+                stroke_h = imp_y - wrist_ys[k]
+                if stroke_h < 0.05 and stroke_h < 0.25 * full_amplitude:
+                    continue
+
+                has_zc = bool(k < n - 1 and v_y[k] <= 0 and v_y[k + 1] > 0)
+                has_pause = bool(0 < k < n - 1 and speed[k] <= speed[k - 1] and speed[k] <= speed[k + 1])
+                sub_ys = [wrist_ys[j] for j in top_window]
+                min_w_y = min(sub_ys)
+                max_w_y = max(sub_ys)
+                h_score = (max_w_y - wrist_ys[k]) / max(1e-3, max_w_y - min_w_y)
+                post_s = speed[k : min(imp_idx + 1, k + 5)]
+                acc = float(np.max(post_s)) - speed[k] if len(post_s) > 0 else 0.0
+
+                cand_score = h_score * 3.5 + (2.0 if has_zc else 0.0) + (1.5 if has_pause else 0.0) + acc * 35.0
+                top_cands.append((cand_score, k))
+
+            if not top_cands:
+                continue
+
+            top_cands.sort(key=lambda x: (round(x[0], 5), -wrist_ys[x[1]], times[x[1]]), reverse=True)
+            best_top_idx = top_cands[0][1]
+            top_t = times[best_top_idx]
+            top_y = wrist_ys[best_top_idx]
+            stroke_amp = imp_y - top_y
+            ds_ms = imp_t - top_t
+
+            # 3. 向前搜尋 Settled Address & Takeaway
+            addr_window = [
+                i for i in range(best_top_idx)
+                if (top_t - 2200) <= times[i] <= (top_t - 220)
+            ]
+            if addr_window:
+                best_addr_idx = max(
+                    addr_window,
+                    key=lambda i: (wrist_ys[i] * 2.0 - speed[i] * 40.0)
+                )
+            else:
+                best_addr_idx = max(0, best_top_idx - max(2, int(0.18 * n)))
+
+            addr_t = times[best_addr_idx]
+            addr_y = wrist_ys[best_addr_idx]
+            bs_ms = top_t - addr_t
+
+            takeaway_target = addr_y - 0.22 * max(0.04, addr_y - top_y)
+            takeaway_idx = best_addr_idx + 1
+            for k in range(best_addr_idx + 1, best_top_idx):
+                if wrist_ys[k] <= takeaway_target:
+                    takeaway_idx = k
+                    break
+            takeaway_idx = min(best_top_idx, takeaway_idx)
+            downswing_idx = max(best_top_idx, (best_top_idx + imp_idx) // 2)
+
+            # 4. 向後搜尋 Follow-through & Finish
+            post_window = list(range(imp_idx + 1, min(n, imp_idx + 35)))
+            if post_window:
+                follow_idx = min(post_window, key=lambda i: wrist_ys[i])
+                follow_y = wrist_ys[follow_idx]
+                follow_amp = imp_y - follow_y
+                finish_idx = min(n - 1, max(follow_idx + 1, imp_idx + max(3, (follow_idx - imp_idx) * 2)))
+                finish_hold_ms = times[-1] - times[follow_idx]
+            else:
+                follow_idx = imp_idx
+                finish_idx = n - 1
+                follow_amp = 0.0
+                finish_hold_ms = 0
+
+            # 5. 計算各維度物理特徵與證據
+            supporting: list[str] = []
+            opposing: list[str] = []
+
+            # (A) 運動學完整度
+            ds_spd_peak = float(np.max(speed[best_top_idx : imp_idx + 1])) if imp_idx > best_top_idx else float(speed[imp_idx])
+            decel = max(0.0, float(speed[imp_idx - 1] - speed[imp_idx])) if imp_idx > 0 else 0.0
+
+            k_score = 0.0
+            if 180 <= ds_ms <= 650:
+                k_score += 4.0
+                supporting.append(f"physiologically_valid_downswing ({ds_ms}ms)")
+            elif 150 <= ds_ms < 180 or 650 < ds_ms <= 850:
+                k_score += 2.0
+                supporting.append(f"acceptable_downswing ({ds_ms}ms)")
+            else:
+                k_score -= 2.5
+                opposing.append(f"extreme_downswing_duration ({ds_ms}ms)")
+
+            if stroke_amp >= 0.10:
+                k_score += 3.0
+                supporting.append("adequate_stroke_amplitude")
+            else:
+                k_score -= 1.5
+                opposing.append("shallow_stroke_amplitude")
+
+            if ds_spd_peak >= 0.0010:
+                k_score += 2.5
+            if decel >= 0.0003:
+                k_score += 1.5
+                supporting.append("impact_deceleration_brake")
+
+            # (B) 隨揮與收桿延伸 (核心區分試擺與正式擊球)
+            f_score = 0.0
+            if follow_amp >= 0.12:
+                f_score += 5.0
+                supporting.append(f"full_follow_through_extension (amp={follow_amp:.3f})")
+            elif follow_amp >= 0.08:
+                f_score += 2.5
+                supporting.append(f"moderate_follow_through (amp={follow_amp:.3f})")
+            else:
+                f_score -= 4.0
+                opposing.append(f"weak_follow_through_waggle_like (amp={follow_amp:.3f})")
+
+            if finish_hold_ms >= 350:
+                f_score += 2.0
+                supporting.append("finish_balance_hold")
+            elif finish_hold_ms < 150:
+                opposing.append("abrupt_cutoff_no_finish_hold")
+
+            # (C) 試擺後重新站定沉靜度
+            r_score = 0.0
+            addr_sub_spd = speed[max(0, best_addr_idx - 2) : min(best_top_idx, best_addr_idx + 3)]
+            mean_addr_spd = float(np.mean(addr_sub_spd)) if len(addr_sub_spd) > 0 else 0.001
+            calm_ratio = ds_spd_peak / max(1e-4, mean_addr_spd)
+            if calm_ratio >= 2.0:
+                r_score += 2.0
+                supporting.append("settled_readdress_before_takeaway")
+
+            # (D) 音訊瞬態時間與姿態一致性 (P0-2)
+            aud_score = 0.0
+            closest_aud_ms = None
+            min_aud_diff = None
+            if audio_transients_ms:
+                for a in audio_transients_ms:
+                    diff = abs(a - imp_t)
+                    if min_aud_diff is None or diff < min_aud_diff:
+                        min_aud_diff = diff
+                        closest_aud_ms = a
+
+                if min_aud_diff is not None:
+                    if min_aud_diff <= 45 and speed[imp_idx] >= 0.35 * max_speed:
+                        aud_score += 4.5
+                        supporting.append(f"audio_aligned_with_strike (diff={min_aud_diff}ms)")
+                    elif min_aud_diff <= 85 and speed[imp_idx] >= 0.30 * max_speed:
+                        aud_score += 2.0
+                        supporting.append(f"audio_near_strike (diff={min_aud_diff}ms)")
+                    elif min_aud_diff > 120:
+                        opposing.append(f"isolated_background_audio (diff={min_aud_diff}ms)")
+            else:
+                opposing.append("no_audio_evidence_available")
+
+            # (E) 真球位移觀測
+            ball_applied = False
+            b_score = 0.0
+            if ball_strike_ms is not None and abs(ball_strike_ms - imp_t) <= 75:
+                ball_applied = True
+                b_score += 5.0
+                supporting.append(f"ball_flight_observed_launch (diff={abs(ball_strike_ms - imp_t)}ms)")
+
+            total = k_score + f_score + r_score + aud_score + b_score
+
+            hypotheses.append(
+                SwingHypothesis(
+                    hypothesis_id=f"cand-{cand_counter}",
+                    addr_idx=best_addr_idx,
+                    takeaway_idx=takeaway_idx,
+                    top_idx=best_top_idx,
+                    downswing_idx=downswing_idx,
+                    impact_idx=imp_idx,
+                    follow_idx=follow_idx,
+                    finish_idx=finish_idx,
+                    top_ms=top_t,
+                    impact_ms=imp_t,
+                    addr_ms=addr_t,
+                    downswing_ms=ds_ms,
+                    backswing_ms=bs_ms,
+                    stroke_amplitude=stroke_amp,
+                    downswing_speed_peak=ds_spd_peak,
+                    decel_at_impact=decel,
+                    follow_amplitude=follow_amp,
+                    finish_hold_ms=finish_hold_ms,
+                    readdress_calm_ratio=calm_ratio,
+                    audio_transient_ms=closest_aud_ms,
+                    audio_diff_ms=min_aud_diff,
+                    audio_score=aud_score,
+                    ball_strike_applied=ball_applied,
+                    kinematic_score=k_score,
+                    follow_through_score=f_score,
+                    total_score=total,
+                    supporting_evidence=supporting,
+                    opposing_evidence=opposing,
+                    is_ambiguous=False,
+                )
+            )
+            cand_counter += 1
+
+        hypotheses.sort(
+            key=lambda h: (round(h.total_score, 4), round(h.follow_amplitude, 4), h.impact_ms),
+            reverse=True,
+        )
+        return hypotheses
+
     def extract_events(
         self,
         frames: list[FramePoseResult],
@@ -307,7 +646,7 @@ class SwingPhaseStateMachine:
     ) -> tuple[list[DetectedEvent], list[str], str]:
         """
         從單一候選揮桿區段之細掃影格序列推導階段事件與狀態轉換軌跡。
-        只依據可見 2D 關鍵點與多訊號證據轉換，遇跳幀或缺關鍵點則保守降級。
+        採用多候選揮桿鏈假設生成與客觀證據裁決架構 (P0-1 ~ P0-3)。
         """
         valid_frames = [
             f
@@ -316,9 +655,12 @@ class SwingPhaseStateMachine:
             and ("right_wrist" in f.landmarks or "left_wrist" in f.landmarks)
         ]
         if len(valid_frames) < 5:
+            self.last_hypotheses = []
+            self.last_selection_rationale = "有效關鍵點不足"
+            self.last_is_ambiguous = True
             return [], ["IDLE"], "swing_candidate"
 
-        # 1. 抽取多維時間特徵序列
+        # 1. 抽取特徵時序
         times: list[int] = []
         wrist_xs: list[float] = []
         wrist_ys: list[float] = []
@@ -343,13 +685,11 @@ class SwingPhaseStateMachine:
             confs.append(f.pose_confidence)
             energies.append(f.wrist_motion_energy)
 
-            # 估算軀幹參考長度
             t_len = 0.25
             if sh_mid and hp_mid:
                 t_len = max(0.08, math.hypot(sh_mid[0] - hp_mid[0], sh_mid[1] - hp_mid[1]))
             torso_lengths.append(t_len)
 
-            # 肩部旋轉指標 (左右肩橫向間距或傾角)
             sh_rot = 0.0
             if l_sh and r_sh and min(l_sh[2], r_sh[2]) >= 0.35:
                 sh_rot = math.hypot(l_sh[0] - r_sh[0], l_sh[1] - r_sh[1])
@@ -357,248 +697,108 @@ class SwingPhaseStateMachine:
 
         n = len(times)
         if n < 5:
+            self.last_hypotheses = []
+            self.last_selection_rationale = "有效時間點不足"
+            self.last_is_ambiguous = True
             return [], ["IDLE"], "swing_candidate"
 
-        # 計算一階中心差分速度 (像素/ms, y 向上為負)
         dt_arr = np.diff(times).astype(float)
-        dt_arr[dt_arr <= 0] = 33.3  # 避免除以零
+        dt_arr[dt_arr <= 0] = 33.3
         mean_dt = float(np.mean(dt_arr)) if len(dt_arr) > 0 else 33.3
 
-        v_y = np.gradient(wrist_ys, times)  # 負值代表向上運動，正值代表向下運動
+        v_y = np.gradient(wrist_ys, times)
         v_x = np.gradient(wrist_xs, times)
         speed = np.hypot(v_x, v_y)
 
-        # -------------------------------------------------------------
-        # 2. Waggle / Practice Lift 抑制機制 (Settled Address 定位)
-        # -------------------------------------------------------------
         min_wrist_y = float(np.min(wrist_ys))
         max_wrist_y = float(np.max(wrist_ys))
         full_amplitude = max_wrist_y - min_wrist_y
 
         if full_amplitude < 0.06:
+            self.last_hypotheses = []
+            self.last_selection_rationale = "垂直振幅不足"
+            self.last_is_ambiguous = False
             return [], ["IDLE", "ADDRESS_CANDIDATE", "IDLE"], "swing_candidate"
 
-        # 尋找前 30% 區段內手腕高度較低且速度平緩的準備低點
-        addr_end_idx = max(2, int(n * 0.30))
-        best_addr_score = -1e9
-        addr_idx = 0
-        mean_spd = float(np.mean(speed)) if len(speed) > 0 else 1e-4
-
-        for i in range(addr_end_idx):
-            # y 越大越低 (DTL 站姿地面球位上方)，速度越慢代表身體處於沉靜準備狀態 (抑制微晃動)
-            h_s = (wrist_ys[i] - min_wrist_y) / max(1e-3, full_amplitude)
-            spd_penalty = speed[i] / max(1e-4, mean_spd)
-            score = h_s * 2.5 - spd_penalty * 1.2
-            if score > best_addr_score:
-                best_addr_score = score
-                addr_idx = i
-
-        addr_y = wrist_ys[addr_idx]
-
-        # -------------------------------------------------------------
-        # 3. 多訊號 Top of Backswing 頂點判定
-        # -------------------------------------------------------------
-        peak_speed_idx = int(np.argmax(speed))
-        # 搜尋區間：Address 之後至少 2 幀，到前 78% 區間或速度峰值之前
-        top_search_start = addr_idx + 1
-        top_search_end = max(top_search_start + 2, min(n - 1, int(n * 0.78)))
-
-        # 訊號 1: 手腕垂直速度零交越點 (v_y 由負變正，即向上轉向下)
-        zero_crossings: list[int] = []
-        for i in range(top_search_start, top_search_end - 1):
-            if v_y[i] <= 0 and v_y[i + 1] > 0:
-                zero_crossings.append(i)
-
-        # 訊號 2: 手腕速度局部極小值 (Top Pause 頂點轉折停頓)
-        pause_candidates: list[int] = []
-        for i in range(top_search_start + 1, top_search_end - 1):
-            if speed[i] <= speed[i - 1] and speed[i] <= speed[i + 1]:
-                pause_candidates.append(i)
-
-        # 訊號 3: 手腕垂直最高點 (y 最小)
-        sub_ys = wrist_ys[top_search_start:top_search_end]
-        y_min_local = top_search_start + int(np.argmin(sub_ys)) if len(sub_ys) > 0 else top_search_start
-
-        # 多訊號融合評分
-        top_candidates = set(zero_crossings + pause_candidates + [y_min_local])
-        best_top_score = -1e9
-        best_top_idx = y_min_local
-        top_sources: list[str] = []
-
-        for cand in top_candidates:
-            if cand < top_search_start or cand >= top_search_end:
-                continue
-
-            # (1) 高度權重：越靠近最高點得分越高
-            h_score = (max_wrist_y - wrist_ys[cand]) / max(1e-3, full_amplitude)
-
-            # (2) 速度停頓權重：轉折處速度越小越可信
-            p_score = 1.0 - min(1.0, speed[cand] / max(1e-4, float(np.mean(speed))))
-
-            # (3) 下桿加速驗證：Top 後必須有持續強烈下桿
-            sub_post = speed[cand : min(n, cand + 6)]
-            post_accel = float(np.max(sub_post)) - speed[cand] if len(sub_post) > 0 else 0.0
-
-            # (4) 全局擊球動能與音訊支持度：Top 後 180~650ms 內是否有全域最大速度峰值或音訊瞬態 (P0-B)
-            window_max_spd = float(np.max(speed)) if len(speed) > 0 else 1.0
-            ds_end_limit = min(n, cand + max(4, int(650.0 / max(10.0, mean_dt))))
-            ds_window = speed[cand + 1 : ds_end_limit]
-            ds_max_spd = float(np.max(ds_window)) if len(ds_window) > 0 else 0.0
-            kinetic_ratio = ds_max_spd / max(1e-4, window_max_spd)
-
-            has_audio_strike = 0.0
-            if audio_transients_ms:
-                for a_ms in audio_transients_ms:
-                    if 180 <= (a_ms - times[cand]) <= 650:
-                        has_audio_strike = 3.5
-                        break
-
-            total_s = (
-                h_score * 3.0
-                + p_score * 2.0
-                + post_accel * 35.0
-                + kinetic_ratio * 4.5
-                + has_audio_strike
-            )
-
-            if total_s > best_top_score:
-                best_top_score = total_s
-                best_top_idx = cand
-
-        top_idx = best_top_idx
-        top_y = wrist_ys[top_idx]
-        vertical_amplitude = addr_y - top_y
-
-        # 收集 Top 證據來源
-        if top_idx in zero_crossings:
-            top_sources.append("wrist_velocity_zero_crossing")
-        if top_idx in pause_candidates:
-            top_sources.append("top_pause_min_speed")
-        if abs(top_idx - y_min_local) <= 1:
-            top_sources.append("wrist_y_local_minimum")
-        if not top_sources:
-            top_sources.append("multi_signal_energy_consensus")
-
-        # -------------------------------------------------------------
-        # 4. Takeaway & Backswing 判定
-        # -------------------------------------------------------------
-        takeaway_target_y = addr_y - 0.22 * vertical_amplitude
-        takeaway_idx = addr_idx + 1
-        for i in range(addr_idx + 1, top_idx):
-            if wrist_ys[i] <= takeaway_target_y:
-                takeaway_idx = i
-                break
-
-        backswing_idx = min(top_idx, max(takeaway_idx, (takeaway_idx + top_idx) // 2))
-
-        # -------------------------------------------------------------
-        # 5. 多訊號 Impact 擊球瞬態判定
-        # -------------------------------------------------------------
-        # 搜尋區間：Top 之後到揮桿後段 (若有音訊或真球，搜尋區間開放到揮桿區段末端；若無亦給予充足餘裕)
-        impact_search_start = top_idx + 1
-        if audio_transients_ms or ball_strike_ms is not None:
-            impact_search_end = max(impact_search_start + 1, n - 2)
-        else:
-            impact_search_end = min(n - 1, max(top_idx + 4, int(n * 0.88)))
-
-        impact_sources: list[str] = []
-        best_imp_idx = min(n - 1, top_idx + 2)
-        best_imp_score = -1e9
-
-        # 若有真球觀測，直接作為權威錨點
-        if ball_strike_ms is not None:
-            closest_idx = int(np.argmin([abs(t - ball_strike_ms) for t in times]))
-            if top_idx < closest_idx <= impact_search_end:
-                best_imp_idx = closest_idx
-                impact_sources.append("ball_flight_observed_launch")
-
-        if not impact_sources:
-            for i in range(impact_search_start, impact_search_end + 1):
-                # (1) 手腕回到低點程度 (y 越大越低)
-                h_weight = (wrist_ys[i] - top_y) / max(1e-3, vertical_amplitude)
-
-                # (2) 下桿速度峰值與減速轉折
-                # 擊球時球桿釋放與人體制動會造成速度峰值後急劇減速
-                cur_s = speed[i]
-                prev_s = speed[i - 1] if i > 0 else cur_s
-                decel = max(0.0, prev_s - cur_s) * 30.0
-
-                # (3) 音訊瞬態融合：音訊必須伴隨真實下桿動能，避免收桿靜止時誤採背景雜音
-                audio_bonus = 0.0
-                max_spd = float(np.max(speed)) if len(speed) > 0 else 1.0
-                if audio_transients_ms and cur_s >= 0.30 * max_spd:
-                    closest_audio = min(audio_transients_ms, key=lambda a: abs(a - times[i]))
-                    audio_diff = abs(closest_audio - times[i])
-                    if audio_diff <= 40:
-                        audio_bonus = 3.5
-                    elif audio_diff <= 80:
-                        audio_bonus = 2.0
-                    elif audio_diff <= 120:
-                        audio_bonus = 1.0
-
-                s = h_weight * 2.5 + cur_s * 60.0 + decel * 40.0 + audio_bonus
-                if s > best_imp_score:
-                    best_imp_score = s
-                    best_imp_idx = i
-
-            impact_sources.append("wrist_kinematic_deceleration")
-            if audio_transients_ms:
-                closest_audio = min(audio_transients_ms, key=lambda a: abs(a - times[best_imp_idx]))
-                if abs(closest_audio - times[best_imp_idx]) <= 60:
-                    impact_sources.append("audio_transient_consensus")
-
-        impact_idx = best_imp_idx
-
-        # -------------------------------------------------------------
-        # 5.5 高爾夫時序合理性檢核與自動重新對齊 (P0-B)
-        # -------------------------------------------------------------
-        (
-            top_idx,
-            impact_idx,
-            addr_idx,
-            takeaway_idx,
-            top_sources,
-            impact_sources,
-            timing_anomaly,
-        ) = self._validate_and_realign_swing_timing(
+        # 2. 多候選假設生成 (Multi-Hypothesis Swing Generation)
+        hypotheses = self._generate_swing_hypotheses(
             times=times,
-            wrist_ys=wrist_ys,
             wrist_xs=wrist_xs,
+            wrist_ys=wrist_ys,
             speed=speed,
             v_y=v_y,
-            top_idx=top_idx,
-            impact_idx=impact_idx,
-            addr_idx=addr_idx,
-            takeaway_idx=takeaway_idx,
+            confs=confs,
+            energies=energies,
             audio_transients_ms=audio_transients_ms,
             ball_strike_ms=ball_strike_ms,
-            top_sources=top_sources,
-            impact_sources=impact_sources,
+            mean_dt=mean_dt,
+            full_amplitude=full_amplitude,
+            min_wrist_y=min_wrist_y,
+            max_wrist_y=max_wrist_y,
         )
 
-        backswing_idx = min(top_idx, max(takeaway_idx, (takeaway_idx + top_idx) // 2))
-        downswing_idx = max(top_idx, (top_idx + impact_idx) // 2)
+        if not hypotheses:
+            self.last_hypotheses = []
+            self.last_selection_rationale = "無有效揮桿假設"
+            self.last_is_ambiguous = True
+            return [], ["IDLE"], "swing_candidate"
 
-        # -------------------------------------------------------------
-        # 6. Follow-through & Finish 判定
-        # -------------------------------------------------------------
-        if impact_idx < n - 2:
-            post_impact_ys = wrist_ys[impact_idx + 1 :]
-            finish_rel = int(np.argmin(post_impact_ys))
-            follow_idx = min(n - 1, impact_idx + 1 + max(0, finish_rel // 2))
-            finish_idx = min(n - 1, max(follow_idx, n - 2))
+        # 3. 雙峰/多候選比較與裁決 (Resolution & Ambiguity Detection)
+        best_h = hypotheses[0]
+        is_ambiguous = False
+        rationale = ""
+
+        if len(hypotheses) >= 2:
+            second_h = hypotheses[1]
+            diff_score = best_h.total_score - second_h.total_score
+
+            # 若兩組候選得分極為接近 (< 15%) 且皆具備合理性
+            if diff_score < 1.8 and second_h.total_score >= 5.0:
+                is_ambiguous = True
+                best_h.is_ambiguous = True
+                second_h.is_ambiguous = True
+                rationale = (
+                    f"雙峰爭議：候選1 ({best_h.top_ms}/{best_h.impact_ms}ms, 分數={best_h.total_score:.1f}) "
+                    f"與候選2 ({second_h.top_ms}/{second_h.impact_ms}ms, 分數={second_h.total_score:.1f}) "
+                    f"得分接近且皆具備揮桿特徵，證據未達絕對優勢，標記爭議保留審核。"
+                )
+            else:
+                rationale = (
+                    f"優勢裁決：候選1 (Top={best_h.top_ms}ms, Imp={best_h.impact_ms}ms, 得分={best_h.total_score:.1f}) "
+                    f"顯著優於次佳候選 (得分={second_h.total_score:.1f})。"
+                    f"關鍵優勢: {', '.join(best_h.supporting_evidence[:2])}。"
+                    f"次佳候選反對理由: {', '.join(second_h.opposing_evidence[:2]) if second_h.opposing_evidence else '動能較低'}。"
+                )
         else:
-            follow_idx = impact_idx
-            finish_idx = n - 1
+            rationale = f"唯一明確候選：Top={best_h.top_ms}ms, Impact={best_h.impact_ms}ms, 得分={best_h.total_score:.1f}。"
 
-        # -------------------------------------------------------------
-        # 7. 二次精修與不確定區間估算 (Two-Pass Refinement & P1-A 精度拆分)
-        # -------------------------------------------------------------
-        # 取樣解析度 (實際影格間隔時間)
+        self.last_hypotheses = hypotheses
+        self.last_selection_rationale = rationale
+        self.last_is_ambiguous = is_ambiguous
+
+        # 4. 提取最終事件
+        addr_idx = best_h.addr_idx
+        takeaway_idx = best_h.takeaway_idx
+        top_idx = best_h.top_idx
+        downswing_idx = best_h.downswing_idx
+        impact_idx = best_h.impact_idx
+        follow_idx = best_h.follow_idx
+        finish_idx = best_h.finish_idx
+
+        top_sources = ["multi_signal_hypothesis_consensus"]
+        if best_h.stroke_amplitude >= 0.10:
+            top_sources.append("wrist_vertical_amplitude")
+        if any("physiologically_valid_downswing" in s for s in best_h.supporting_evidence):
+            top_sources.append("kinematic_downswing_timing")
+
+        impact_sources = ["wrist_kinematic_deceleration"]
+        if best_h.ball_strike_applied:
+            impact_sources.append("ball_flight_observed_launch")
+        if best_h.audio_diff_ms is not None and best_h.audio_diff_ms <= 60:
+            impact_sources.append("audio_transient_consensus")
+
         frame_interval_ms = int(round(mean_dt))
         sampling_res = frame_interval_ms
-
-        # 不確定度估計 (根據感測模式與特徵清晰度)
         top_uncertainty = max(24, frame_interval_ms)
         impact_uncertainty = max(24, frame_interval_ms)
         if "audio_transient_consensus" in impact_sources:
@@ -606,10 +806,9 @@ class SwingPhaseStateMachine:
         if "ball_flight_observed_launch" in impact_sources:
             impact_uncertainty = max(16, int(round(frame_interval_ms * 0.5)))
 
-        # 信心度動態加權 (異常時降級)
         top_conf = min(0.96, max(0.60, confs[top_idx] * (0.85 + 0.05 * len(top_sources))))
         impact_conf = min(0.96, max(0.60, confs[impact_idx] * (0.80 + 0.08 * len(impact_sources))))
-        if timing_anomaly:
+        if is_ambiguous:
             top_conf = min(top_conf, 0.55)
             impact_conf = min(impact_conf, 0.55)
 
@@ -625,6 +824,8 @@ class SwingPhaseStateMachine:
             "FINISH",
             "IDLE",
         ]
+
+        backswing_idx = min(top_idx, max(takeaway_idx, (takeaway_idx + top_idx) // 2))
 
         events: list[DetectedEvent] = [
             DetectedEvent(
@@ -717,11 +918,8 @@ class SwingPhaseStateMachine:
             ),
         ]
 
-        # 判斷是正式揮桿 (valid_swing) 還是空揮練習 (practice_swing)
-        finish_hold_ms = max(0, times[-1] - times[follow_idx])
         downswing_peak_energy = max(energies[top_idx : impact_idx + 1] or [0.0])
-        max_ds_speed = float(np.max(speed[top_idx : impact_idx + 1])) if impact_idx > top_idx else 0.0
-
+        max_ds_speed = best_h.downswing_speed_peak
         has_impact_evidence = bool(
             "audio_transient_consensus" in impact_sources
             or "ball_flight_observed_launch" in impact_sources
@@ -729,9 +927,9 @@ class SwingPhaseStateMachine:
         )
 
         is_practice = (
-            vertical_amplitude < 0.065
+            best_h.stroke_amplitude < 0.065
             or (downswing_peak_energy < 0.015 and max_ds_speed < 0.0009)
-            or (max_ds_speed < 0.0010 and not has_impact_evidence and finish_hold_ms < 400)
+            or (max_ds_speed < 0.0010 and not has_impact_evidence and best_h.finish_hold_ms < 400)
         )
         if is_practice:
             label = "practice_swing"
