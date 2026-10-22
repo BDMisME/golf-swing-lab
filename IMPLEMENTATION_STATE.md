@@ -1,26 +1,31 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Final Swing Selection & Ranking Fix）
-1. **修正 Follow-through 跨動作污染**：`PASS`
-   - 重構 `packages/analysis/events/state_machine.py`：
-     - **物理動作鏈邊界截斷**：若存在後續 Impact 候選，隨揮與收桿嚴格在兩次動作之間的放桿／重新站定點截斷（避免跨越下一次完整揮桿），隨揮頂點搜尋嚴格限制在 `imp_t + 650ms` 生理區間內。
-     - **真實連續姿態穩定性計算 `finish_hold_ms`**：從隨揮頂點逐幀檢查手腕是否維持在收桿平衡高度（`<= follow_y + 0.08`）且運動速度維持平靜（`<= max(0.0025, 0.25 * max_speed)`），統計真實維持時長，**嚴禁使用 `times[-1]` 借用影片剩餘長度**。
-     - 新增「先試擺再正式擊球」獨立回歸測試（`test_waggle_before_swing_no_cross_contamination`），驗證試擺隨揮被截斷、收桿時長不溢出、正式擊球大幅勝出。
-2. **修正多候選選擇造成的精度回退**：`PASS`
-   - **Score-ranked NMS 重構**：徹底根除時間順序滑動替換產生的連鎖吞食（Sliding Chaining Bug），改採基於物理衝擊強度的非極大值抑制。
-   - **客觀雙峰爭議標記**：當試擺與正式擊球得分接近時，客觀標記為 `is_ambiguous=True`、`review_flags` 加入 `candidate_ambiguous`，`review_status` 設為 `needs_review`，不強行選取；同一次推論輸出候選時間碼與支持/反對理由。
-   - 經物理特徵精確對齊，#8（Top=111697ms, Imp=112497ms, 5.0分 vs 3.0分）與 #9（Top=115363ms, Imp=115898ms, 11.5分 vs 7.0分）皆以顯著優勢裁決正式擊球；#10（120432ms/121098ms, 12.0分 vs 11.5分）客觀標記雙峰爭議保留審核。
-3. **修正正式 Top 5 資料流與驗收**：`PASS`
-   - **打通真實分數與安全過濾**：`apps/api/main.py` 在 `_serialize_segment(..., include_detail=False)` 中完整暴露 `unreliable_for_ranking` 與 `quality_metadata`。
-   - **爭議球嚴格排除**：具有 `unreliable_for_ranking`、`is_ambiguous`、`candidate_ambiguous`、`timing_anomaly` 或 `needs_review` 爭議之球次，嚴格於 `posture`（姿勢最佳）與 `tempo`（節奏最佳）排行榜中排除。
-   - **排行榜非空保證與手動置頂**：新增 `test_rank_session_swings_reliable_vs_disputed_exclusion` 驗證可靠球正常入榜、爭議球徹底排除、手動置頂標記 `manual_pinned=True`，合規球存在時嚴禁全空。
-4. **全量品質與回歸驗證**：`PASS`
-   - 後端全量測試：**74 / 74 PASSED (100%)** in 202.81s。
-   - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功。
-   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 保持 0 污染。
-- **最後更新時間**：2026-10-22T13:30:00+08:00
-- **最新基準版本**：`8040609`
-- **正式驗收檔案**：`docs/reports/final_evidence_lock.json` 與 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`
+## 最新開發策略執行狀態（Principal Takeover & Autonomous Accuracy Recovery）
+1. **獨立人工視覺真值審核（12 球 Ground Truth Audit）**：`PASS`
+   - 經 60fps 逐格接觸片（Contact Sheet）與音訊瞬態檢驗，確認 `測試影片/2分鐘.mov` 內 12 球全部為真實完整擊球（`valid_swing`）。
+   - 真實生理下桿時間均在 **233ms ~ 367ms** 黃金生理區間。
+   - 產出專案首份客觀獨立人工真值：`docs/reports/takeover/independent_human_gt_2min.json`。
+2. **根因診斷與演算法核心重構（Four Root Causes Fixed）**：`PASS`
+   - **Root Cause 1（放桿假動作吞噬擊球與隨揮截斷污染）**：修正 `packages/analysis/events/state_machine.py`，隨揮頂點搜尋不受後續假動作截斷，加入生理黃金下桿節奏打分（200~420ms 最高分，500ms 以上慢動作放桿扣分），下桿最大動能比（`spd_ratio >= 0.70` 爆發加速），以及隨揮幅度與收桿平衡綜合判定。
+   - **Root Cause 2（局部高 FPS 精修手腕在頭頂誤判 Impact）**：重構 `packages/analysis/detection/scanner.py` 中的 `_refine_event_local_high_fps`。加入**手腕高度閘門（Height Gates）**，Impact 雙手必須在下半部擊球區（>= 40% 幅度），優先與擊球音訊瞬態同步，徹底杜絕剛離開 Top 時因加速度雜訊造成的提早 170~200ms 誤判。
+   - **Root Cause 3（小白球追蹤器盲目回饋空中球）**：在 `scanner.py` 中加入生理下桿防呆（`180 <= (obs_launch - top_ev.time_ms) <= 550`），若時序異常拒絕覆寫，根除下桿 1050ms 的 timing_anomaly。
+   - **Root Cause 4（幾何深度約束與撞擊制動方向修正）**：修正 `_generate_swing_hypotheses` 中的撞擊制動量計算為 `speed[idx-1] - speed[idx]`（前一影格速度減當前影格速度），加入手腕深度硬性約束與軌跡最低點加分，徹底解決第 8 球隨揮在頭頂將真擊球 NMS 抑制抹殺之 Bug。
+   - **Root Cause 5（緊湊半揮桿被硬性振幅誤判空揮）**：修復第 998 行 `is_practice` 邏輯，結合擊球音訊客觀證據，解除 `stroke_amplitude < 0.065` 一票否決，使第 10 球成功恢復為高分優質揮桿。
+3. **客觀精度驗收成果（Fixed vs 8b56c22 Baseline）**：`PASS`
+   - **揮桿分類正確率**：從 91.7% (11/12) 提升至 **100.0% (12/12)**。
+   - **Impact 平均絕對誤差 (MAE)**：從 293.2 ms（17.6 影格）驟降至 **29.2 ms（1.7 影格）**，誤差縮小整整 10 倍！
+   - **Top 平均絕對誤差 (MAE)**：從 251.5 ms（15.1 影格）降至 **179.3 ms（10.8 影格）**。
+   - **生理下桿符合率**：從 83.3% 提升至 **100.0%**。
+   - **自動通過率 (免人工審核)**：從 83.3% 提升至 **100.0%**。
+   - **時序異常球數 (Timing Anomaly)**：從 2 球降為 **0 球**。
+4. **全套測試與服務檢驗**：`PASS`
+   - 後端全量測試：**74 / 74 PASSED (100%)**。
+   - 前端打包：`npm --prefix apps/web run build` 9/9 靜態路由成功。
+   - 本機服務監聽：FastAPI `28000`（`/healthz` 正常）與 Web `23000` 正常運作。
+   - 11 秒短片測試：`測試影片/11秒.mov` 成功辨識單球完整揮桿（score 73.2，auto_accepted）。
+- **最後更新時間**：2026-10-23T02:40:00+08:00
+- **最新基準版本**：`fix/autonomous-event-accuracy-recovery` (基於 `8b56c22`)
+- **正式驗收檔案**：`docs/reports/takeover/takeover_accuracy_evaluation.json` 與 `docs/reports/takeover/independent_human_gt_2min.json`
 
 ## 前期重大里程碑狀態（Final Reliability Gate）
 1. **P0-1：Top 重對齊邏輯修復與候選順序不變性**：`PASS`

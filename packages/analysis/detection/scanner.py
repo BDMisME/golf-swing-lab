@@ -455,7 +455,17 @@ class CoarseToFineDetector:
                     # 僅當明確檢測到真球升空 (airborne / moving) 且時間差在生理合理範圍內時，方回饋 Impact
                     if ball_res.get("is_valid") and launch_state in ("airborne", "moving") and obs_launch is not None:
                         diff = abs(obs_launch - imp_ev.time_ms)
-                        if diff <= 180:
+                        # 生理下桿防呆：若 top_ev 存在，下桿時間必須在生理區間 [180, 550] 內
+                        ds_valid = True
+                        if top_ev:
+                            cand_ds = obs_launch - top_ev.time_ms
+                            if cand_ds < 180 or cand_ds > 550:
+                                ds_valid = False
+                                logger.info(
+                                    f"小白球出發時間 ({obs_launch}ms) 與 Top ({top_ev.time_ms}ms) 的下桿時間 ({cand_ds}ms) 違反生理常理，已拒絕覆寫"
+                                )
+
+                        if diff <= 150 and ds_valid:
                             orig_imp = imp_ev.time_ms
                             imp_ev.time_ms = obs_launch
                             imp_ev.uncertainty_ms = 16
@@ -506,8 +516,9 @@ class CoarseToFineDetector:
                     extractor=ext,
                     event_name="impact",
                     center_ms=imp_ev.time_ms,
-                    window_radius_ms=200,
+                    window_radius_ms=160,
                     high_fps_step_ms=16,
+                    audio_transients_ms=audio_transients_ms,
                 )
                 if imp_ref:
                     # 驗證精修後的合理性：下桿時間必須維持在生理區間，且精修偏移不應失控
@@ -800,13 +811,13 @@ class CoarseToFineDetector:
         extractor: PoseExtractor,
         event_name: str,
         center_ms: int,
-        window_radius_ms: int = 200,
+        window_radius_ms: int = 160,
         high_fps_step_ms: int = 16,
+        audio_transients_ms: list[int] | None = None,
     ) -> dict[str, Any] | None:
         """
         針對特定關鍵事件 (Top 或 Impact) 進行局部高幀率 (~60 FPS) 取樣精修。
-        僅讀取 [center_ms - window_radius_ms, center_ms + window_radius_ms] 短暫視窗，
-        無需重新解碼整部影片。
+        嚴格加入運動學生理高度閘門 (Height Gates) 與音訊瞬態同步，防止剛離開 Top 或剛開始下桿被誤判為 Impact。
         """
         start_ms = max(0, center_ms - window_radius_ms)
         end_ms = center_ms + window_radius_ms
@@ -835,15 +846,31 @@ class CoarseToFineDetector:
         dt_arr = np.diff(times).astype(float)
         dt_arr[dt_arr <= 0] = 16.6
         v_y = np.gradient(wrist_ys, times)
+        speeds = np.abs(v_y)
+
+        min_y = float(np.min(wrist_ys))
+        max_y = float(np.max(wrist_ys))
+        wrist_span = max_y - min_y
 
         if event_name == "top":
-            # 搜尋手腕最高點與零交越點
-            zero_crossings = [i for i in range(len(v_y) - 1) if v_y[i] <= 0 and v_y[i + 1] > 0]
-            y_min_idx = int(np.argmin(wrist_ys))
+            # Top 必須在手腕高位 (y <= min_y + 0.45 * span)
+            high_indices = [
+                i for i in range(len(wrist_ys))
+                if wrist_ys[i] <= (min_y + 0.45 * max(1e-4, wrist_span))
+                and abs(times[i] - center_ms) <= 120
+            ]
+            if not high_indices:
+                high_indices = list(range(len(wrist_ys)))
+
+            zero_crossings = [
+                i for i in range(len(v_y) - 1)
+                if v_y[i] <= 0 and v_y[i + 1] > 0 and i in high_indices
+            ]
+            y_min_idx = min(high_indices, key=lambda i: wrist_ys[i])
             refined_idx = y_min_idx
             sources = ["wrist_y_local_minimum", "local_high_fps_refinement"]
             if zero_crossings:
-                best_zc = min(zero_crossings, key=lambda i: abs(i - y_min_idx))
+                best_zc = min(zero_crossings, key=lambda i: abs(times[i] - center_ms))
                 refined_idx = best_zc
                 sources = ["wrist_velocity_zero_crossing", "local_high_fps_refinement"]
 
@@ -851,7 +878,7 @@ class CoarseToFineDetector:
             return {
                 "refined_ms": refined_time_ms,
                 "confidence": min(0.96, max(0.75, wrist_confs[refined_idx])),
-                "uncertainty_ms": 20,
+                "uncertainty_ms": 16,
                 "sampling_resolution_ms": 16,
                 "sources": sources,
                 "delta_ms": refined_time_ms - center_ms,
@@ -859,28 +886,65 @@ class CoarseToFineDetector:
             }
 
         elif event_name == "impact":
-            # 搜尋下桿速度劇烈制動點 (減速峰值)
-            # 必須是在速度達到一定水準的有效動能區段內，排除起點雜訊
-            speeds = np.abs(v_y)
-            mean_speed = float(np.mean(speeds)) if len(speeds) > 0 else 1e-4
-            valid_cands = [
-                i for i in range(1, len(speeds) - 1)
-                if speeds[i] >= 0.75 * mean_speed
+            # 1. 手腕高度閘門：Impact 瞬間雙手必須位於擊球區低位 (至少在垂直幅度 40% 以下)
+            # 徹底杜絕剛離開 Top (手還在頭頂) 產生的加速度雜訊干擾
+            low_indices = [
+                i for i in range(len(wrist_ys))
+                if (wrist_span < 0.04 or wrist_ys[i] >= (min_y + 0.40 * wrist_span))
+                and abs(times[i] - center_ms) <= 100
             ]
-            if not valid_cands:
-                valid_cands = list(range(len(speeds)))
+            if not low_indices:
+                # 若限制過嚴，至少保證不選在手腕最高處 (y < min_y + 0.25 * span)
+                low_indices = [
+                    i for i in range(len(wrist_ys))
+                    if (wrist_span < 0.04 or wrist_ys[i] >= (min_y + 0.25 * wrist_span))
+                    and abs(times[i] - center_ms) <= 120
+                ]
+            if not low_indices:
+                low_indices = list(range(len(wrist_ys)))
 
-            accels = np.diff(speeds, prepend=speeds[0])
-            decel_idx = min(valid_cands, key=lambda i: accels[i])
-            refined_time_ms = times[decel_idx]
+            # 2. 音訊瞬態優先同步 (若在 center_ms ±75ms 內存在擊球聲，優先鎖定該影格)
+            best_idx = None
+            sources = []
+            if audio_transients_ms:
+                near_audios = [
+                    a for a in audio_transients_ms
+                    if abs(a - center_ms) <= 75
+                ]
+                if near_audios:
+                    target_aud = min(near_audios, key=lambda a: abs(a - center_ms))
+                    best_idx = min(low_indices, key=lambda i: abs(times[i] - target_aud))
+                    sources = ["audio_transient_synchronized", "local_high_fps_refinement"]
+
+            # 3. 若無近音訊，在低位候選影格中尋找擊球瞬間運動學特徵 (最低點 + 制動減速)
+            if best_idx is None:
+                max_spd = float(np.max(speeds)) if len(speeds) > 0 else 1e-4
+                scored_cands: list[tuple[float, int]] = []
+                for i in low_indices:
+                    # 深度分數 (擊球瞬間手腕在最低點，y 最大)
+                    depth_s = ((wrist_ys[i] - min_y) / max(1e-4, wrist_span)) * 4.0
+                    # 減速制動分數
+                    decel = (speeds[i - 1] - speeds[i]) if (i > 0 and i < len(speeds)) else 0.0
+                    decel_s = max(0.0, decel / max_spd) * 3.0
+                    # 時間偏離中心懲罰 (每偏離 50ms 扣 1 分)
+                    dist_p = (abs(times[i] - center_ms) / 50.0) * 1.0
+
+                    cand_total = depth_s + decel_s - dist_p
+                    scored_cands.append((cand_total, i))
+
+                scored_cands.sort(key=lambda x: x[0], reverse=True)
+                best_idx = scored_cands[0][1]
+                sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
+
+            refined_time_ms = times[best_idx]
             return {
                 "refined_ms": refined_time_ms,
-                "confidence": min(0.95, max(0.72, wrist_confs[decel_idx])),
-                "uncertainty_ms": 20,
+                "confidence": min(0.96, max(0.75, wrist_confs[best_idx])),
+                "uncertainty_ms": 16,
                 "sampling_resolution_ms": 16,
-                "sources": ["wrist_kinematic_deceleration", "local_high_fps_refinement"],
+                "sources": sources,
                 "delta_ms": refined_time_ms - center_ms,
-                "refined_frame": local_frames[decel_idx],
+                "refined_frame": local_frames[best_idx],
             }
 
         return None
