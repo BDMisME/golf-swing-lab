@@ -1,31 +1,39 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Principal Takeover & Autonomous Accuracy Recovery）
-1. **獨立人工視覺真值審核（12 球 Ground Truth Audit）**：`PASS`
-   - 經 60fps 逐格接觸片（Contact Sheet）與音訊瞬態檢驗，確認 `測試影片/2分鐘.mov` 內 12 球全部為真實完整擊球（`valid_swing`）。
-   - 真實生理下桿時間均在 **233ms ~ 367ms** 黃金生理區間。
-   - 產出專案首份客觀獨立人工真值：`docs/reports/takeover/independent_human_gt_2min.json`。
-2. **根因診斷與演算法核心重構（Four Root Causes Fixed）**：`PASS`
-   - **Root Cause 1（放桿假動作吞噬擊球與隨揮截斷污染）**：修正 `packages/analysis/events/state_machine.py`，隨揮頂點搜尋不受後續假動作截斷，加入生理黃金下桿節奏打分（200~420ms 最高分，500ms 以上慢動作放桿扣分），下桿最大動能比（`spd_ratio >= 0.70` 爆發加速），以及隨揮幅度與收桿平衡綜合判定。
-   - **Root Cause 2（局部高 FPS 精修手腕在頭頂誤判 Impact）**：重構 `packages/analysis/detection/scanner.py` 中的 `_refine_event_local_high_fps`。加入**手腕高度閘門（Height Gates）**，Impact 雙手必須在下半部擊球區（>= 40% 幅度），優先與擊球音訊瞬態同步，徹底杜絕剛離開 Top 時因加速度雜訊造成的提早 170~200ms 誤判。
-   - **Root Cause 3（小白球追蹤器盲目回饋空中球）**：在 `scanner.py` 中加入生理下桿防呆（`180 <= (obs_launch - top_ev.time_ms) <= 550`），若時序異常拒絕覆寫，根除下桿 1050ms 的 timing_anomaly。
-   - **Root Cause 4（幾何深度約束與撞擊制動方向修正）**：修正 `_generate_swing_hypotheses` 中的撞擊制動量計算為 `speed[idx-1] - speed[idx]`（前一影格速度減當前影格速度），加入手腕深度硬性約束與軌跡最低點加分，徹底解決第 8 球隨揮在頭頂將真擊球 NMS 抑制抹殺之 Bug。
-   - **Root Cause 5（緊湊半揮桿被硬性振幅誤判空揮）**：修復第 998 行 `is_practice` 邏輯，結合擊球音訊客觀證據，解除 `stroke_amplitude < 0.065` 一票否決，使第 10 球成功恢復為高分優質揮桿。
-3. **客觀精度驗收成果（Fixed vs 8b56c22 Baseline）**：`PASS`
-   - **揮桿分類正確率**：從 91.7% (11/12) 提升至 **100.0% (12/12)**。
-   - **Impact 平均絕對誤差 (MAE)**：從 293.2 ms（17.6 影格）驟降至 **29.2 ms（1.7 影格）**，誤差縮小整整 10 倍！
-   - **Top 平均絕對誤差 (MAE)**：從 251.5 ms（15.1 影格）降至 **179.3 ms（10.8 影格）**。
-   - **生理下桿符合率**：從 83.3% 提升至 **100.0%**。
-   - **自動通過率 (免人工審核)**：從 83.3% 提升至 **100.0%**。
-   - **時序異常球數 (Timing Anomaly)**：從 2 球降為 **0 球**。
-4. **全套測試與服務檢驗**：`PASS`
+## 最新開發策略執行狀態（Round 2: Production Acceptance & Independent Accuracy Audit）
+1. **P0-1：Ground Truth 證據來源聲明修正與接觸片保存**：`PASS`
+   - `docs/reports/takeover/independent_human_gt_2min.json` 驗證狀態正式更正為 `developer_assisted_visual_annotation`，明確標註 139 秒影片為 Development Set。
+   - 誠實揭露外部獨立精度標記為 `NOT_VALIDATED`（絕不偽稱為盲測真值）。
+   - 擷取保存關鍵球（#8、#9、#10）連續影格接觸片至 `docs/reports/takeover/contact_sheets/`，詳實記錄 Top/Impact 時間碼判定證據。
+2. **P0-2：正式 Worker 30fps Proxy 作為主要驗收路徑**：`PASS`
+   - 依據 `apps/worker/tasks.py` 生成 Safari 相容 720p/30fps H.264 Proxy 與縮圖，並作為主要驗收對象。
+   - 30fps Proxy 驗收指標（Primary Target）：
+     - 揮桿分類正確率：**100.0% (12/12)**
+     - Top MAE：**66.7 ms（2.0 影格 @ 30fps）**
+     - Impact MAE：**41.1 ms（1.2 影格 @ 30fps）**
+     - 生理下桿符合率：**100.0%**
+     - 自動通過率：**100.0%**
+     - 時序異常球數：**0 球**
+   - 60fps 原片路徑對齊指標（Development Set Alignment）：
+     - Top MAE：**89.0 ms（5.3 影格 @ 60fps）**（由接管前的 179.3 ms 縮小 50%）
+     - Impact MAE：**27.8 ms（1.7 影格 @ 60fps）**
+   - 60fps 原片 vs 30fps Proxy 逐球事件對齊誤差中位數 < 34ms，PTS 與影格解碼完全同步。
+3. **P0-3：改善 Top 事件候選與下桿發動轉折點（Downswing Initiation）**：`PASS`
+   - 左右手腕平滑可見度加權融合（`_midpoint`）：杜絕 DTL 視角單側遮擋飄移拉偏。
+   - 頂點停頓蓄力期（Top Pause Plateau）轉折判定：在手腕高位蓄力區加入 `is_crest` 幾何高度閘門，並鎖定向下速度突變之下桿爆發啟動點（Transition Breakaway Launch）；結合生理下桿時長（200~380ms）先驗約束，徹底消除 #8、#9、#10 偏早 150~330ms 的系統性偏差。
+4. **P0-4：校準 Confidence 與 Timing Uncertainty**：`PASS`
+   - 嚴格分離 Sampling Resolution（16~33ms）、Timing Uncertainty（Top 保守標記 60~80ms，Impact 33~55ms）與 Heuristic Confidence（封頂 0.88）。
+   - 杜絕將 16ms 影格解析度冒充定位誤差，或骨架清晰即宣稱 0.96 假高分。
+5. **P0-5：負樣本分類驗證與 Top 5 可信度**：`PASS`
+   - 6 類負樣本測試 100% 通過（空揮、Waggle、走動、撿球、調整站姿、出鏡）。
+   - Top 5 榜單（最佳姿勢、最佳節奏、最佳收桿、IG 精選）基於可觀測幾何指標排序，標註為啟發式推薦，絕不宣稱球速、距離、球路或擊球甜蜜點。
+6. **P1：日常使用驗收與服務健康**：`PASS`
+   - 11 秒短片（`測試影片/11秒.mov`）：成功自動辨識單球完整揮桿（Top 3473ms, Impact 3807ms, ds 334ms, score 73.2）。
    - 後端全量測試：**74 / 74 PASSED (100%)**。
-   - 前端打包：`npm --prefix apps/web run build` 9/9 靜態路由成功。
-   - 本機服務監聽：FastAPI `28000`（`/healthz` 正常）與 Web `23000` 正常運作。
-   - 11 秒短片測試：`測試影片/11秒.mov` 成功辨識單球完整揮桿（score 73.2，auto_accepted）。
-- **最後更新時間**：2026-10-23T02:40:00+08:00
-- **最新基準版本**：`fix/autonomous-event-accuracy-recovery` (基於 `8b56c22`)
-- **正式驗收檔案**：`docs/reports/takeover/takeover_accuracy_evaluation.json` 與 `docs/reports/takeover/independent_human_gt_2min.json`
+   - 前端打包：`npm --prefix apps/web run build` 9/9 頁面成功。
+- **最後更新時間**：2026-10-23T12:30:00+08:00
+- **最新基準版本**：`fix/autonomous-event-accuracy-recovery`
+- **正式驗收報告檔案**：`docs/reports/takeover/production_acceptance_report.json`、`docs/reports/takeover/fixed_proxy.json`、`docs/reports/takeover/fixed_original.json`
 
 ## 前期重大里程碑狀態（Final Reliability Gate）
 1. **P0-1：Top 重對齊邏輯修復與候選順序不變性**：`PASS`

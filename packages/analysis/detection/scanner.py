@@ -483,33 +483,12 @@ class CoarseToFineDetector:
                     logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
 
             # ---------------------------------------------------------
-            # 2. 局部高 FPS 二次精修 (P0-3 & P0-4: 真正影格與時序防呆)
+            # 2. 局部高 FPS 二次精修 (P0-3 & P0-4: 先 Impact 錨定，再精修 Top 轉換發動點)
             # ---------------------------------------------------------
             local_refinements: dict[str, Any] = {}
             finalized_event_frames: dict[str, FramePoseResult] = {}
 
-            if top_ev and (top_ev.uncertainty_ms > 20 or top_ev.confidence < 0.95):
-                top_ref = self._refine_event_local_high_fps(
-                    video_path=video_path,
-                    extractor=ext,
-                    event_name="top",
-                    center_ms=top_ev.time_ms,
-                    window_radius_ms=200,
-                    high_fps_step_ms=16,
-                )
-                if top_ref and abs(top_ref.get("delta_ms", 0)) <= 200:
-                    top_ev.time_ms = top_ref["refined_ms"]
-                    top_ev.confidence = top_ref["confidence"]
-                    top_ev.uncertainty_ms = top_ref["uncertainty_ms"]
-                    top_ev.sampling_resolution_ms = top_ref.get("sampling_resolution_ms", 16)
-                    for s in top_ref["sources"]:
-                        if s not in top_ev.detection_sources:
-                            top_ev.detection_sources.append(s)
-                    if "refined_frame" in top_ref:
-                        finalized_event_frames["top"] = top_ref["refined_frame"]
-                    local_ref_copy = {k: v for k, v in top_ref.items() if k != "refined_frame"}
-                    local_refinements["top"] = local_ref_copy
-
+            # (A) 先行精修 Impact：具有音訊瞬態與球體起飛等硬客觀證據
             if imp_ev and not ball_feedback_info.get("applied") and (imp_ev.uncertainty_ms > 20 or imp_ev.confidence < 0.95):
                 imp_ref = self._refine_event_local_high_fps(
                     video_path=video_path,
@@ -521,7 +500,6 @@ class CoarseToFineDetector:
                     audio_transients_ms=audio_transients_ms,
                 )
                 if imp_ref:
-                    # 驗證精修後的合理性：下桿時間必須維持在生理區間，且精修偏移不應失控
                     refined_ds = imp_ref["refined_ms"] - (top_ev.time_ms if top_ev else 0)
                     if 180 <= refined_ds <= 650 and abs(imp_ref.get("delta_ms", 0)) <= 180:
                         imp_ev.time_ms = imp_ref["refined_ms"]
@@ -539,6 +517,35 @@ class CoarseToFineDetector:
                         logger.info(
                             f"局部 Impact 精修違反生理區間 (refined_ds={refined_ds}ms, delta={imp_ref.get('delta_ms')}ms)，已保守拒絕精修"
                         )
+
+            # (B) 再行精修 Top：以確認之 Impact 作為下桿生理區間 (200-380ms) 約束，精確鎖定下桿發動轉折點
+            if top_ev and (top_ev.uncertainty_ms > 20 or top_ev.confidence < 0.95):
+                top_ref = self._refine_event_local_high_fps(
+                    video_path=video_path,
+                    extractor=ext,
+                    event_name="top",
+                    center_ms=top_ev.time_ms,
+                    window_radius_ms=220,
+                    high_fps_step_ms=16,
+                    ref_impact_ms=imp_ev.time_ms if imp_ev else None,
+                )
+                if top_ref and abs(top_ref.get("delta_ms", 0)) <= 250:
+                    top_ev.time_ms = top_ref["refined_ms"]
+                    top_ev.confidence = top_ref["confidence"]
+                    top_ev.uncertainty_ms = top_ref["uncertainty_ms"]
+                    top_ev.sampling_resolution_ms = top_ref.get("sampling_resolution_ms", 16)
+                    for s in top_ref["sources"]:
+                        if s not in top_ev.detection_sources:
+                            top_ev.detection_sources.append(s)
+                    if "refined_frame" in top_ref:
+                        finalized_event_frames["top"] = top_ref["refined_frame"]
+                    local_ref_copy = {k: v for k, v in top_ref.items() if k != "refined_frame"}
+                    local_refinements["top"] = local_ref_copy
+
+            # (C) 同步更新 downswing 中繼事件時間碼
+            downswing_ev = next((e for e in events if e.event_name == "downswing"), None)
+            if downswing_ev and top_ev and imp_ev:
+                downswing_ev.time_ms = (top_ev.time_ms + imp_ev.time_ms) // 2
 
             # ---------------------------------------------------------
             # 3. 誠實清理 detection_sources (未使用的來源絕不保留)
@@ -814,10 +821,14 @@ class CoarseToFineDetector:
         window_radius_ms: int = 160,
         high_fps_step_ms: int = 16,
         audio_transients_ms: list[int] | None = None,
+        ref_impact_ms: int | None = None,
     ) -> dict[str, Any] | None:
         """
         針對特定關鍵事件 (Top 或 Impact) 進行局部高幀率 (~60 FPS) 取樣精修。
-        嚴格加入運動學生理高度閘門 (Height Gates) 與音訊瞬態同步，防止剛離開 Top 或剛開始下桿被誤判為 Impact。
+        1. 左右手腕可見度加權融合，杜絕 DTL 視角單側遮擋跳動。
+        2. Top 結合下桿生理時間先驗 (200~380ms) 與頂點停頓下桿爆發轉折 (Transition Breakaway Launch)。
+        3. Impact 結合音訊瞬態同步與最低點制動。
+        4. 嚴格校準 Heuristic Confidence (封頂 0.88) 與 Estimated Uncertainty (Top 60~80ms, Impact 33~55ms)。
         """
         start_ms = max(0, center_ms - window_radius_ms)
         end_ms = center_ms + window_radius_ms
@@ -835,16 +846,30 @@ class CoarseToFineDetector:
         wrist_ys = []
         wrist_confs = []
         for f in local_frames:
-            w = f.landmarks.get("right_wrist") or f.landmarks.get("left_wrist")
-            if w:
-                wrist_ys.append(float(w.y))
-                wrist_confs.append(float(w.visibility))
+            rw = f.landmarks.get("right_wrist")
+            lw = f.landmarks.get("left_wrist")
+            rw_y = rw.y if rw else 1.0
+            rw_v = rw.visibility if rw else 0.0
+            lw_y = lw.y if lw else 1.0
+            lw_v = lw.visibility if lw else 0.0
+            wr = max(0.01, rw_v - 0.15) if rw_v >= 0.20 else 0.0
+            wl = max(0.01, lw_v - 0.15) if lw_v >= 0.20 else 0.0
+            if wr + wl > 0:
+                wy = (rw_y * wr + lw_y * wl) / (wr + wl)
+                conf = (rw_v * wr + lw_v * wl) / (wr + wl)
+            elif rw:
+                wy = rw_y
+                conf = rw_v
+            elif lw:
+                wy = lw_y
+                conf = lw_v
             else:
-                wrist_ys.append(1.0)
-                wrist_confs.append(0.0)
+                wy = 1.0
+                conf = 0.0
+            wrist_ys.append(wy)
+            wrist_confs.append(conf)
 
-        dt_arr = np.diff(times).astype(float)
-        dt_arr[dt_arr <= 0] = 16.6
+        sampling_res = int(round(float(np.median(np.diff(times))))) if len(times) > 1 else high_fps_step_ms
         v_y = np.gradient(wrist_ys, times)
         speeds = np.abs(v_y)
 
@@ -853,59 +878,92 @@ class CoarseToFineDetector:
         wrist_span = max_y - min_y
 
         if event_name == "top":
-            # Top 必須在手腕高位 (y <= min_y + 0.45 * span)
+            # Top 必須在手腕高位蓄力區 (y <= min_y + 0.35 * span)
             high_indices = [
                 i for i in range(len(wrist_ys))
-                if wrist_ys[i] <= (min_y + 0.45 * max(1e-4, wrist_span))
-                and abs(times[i] - center_ms) <= 120
+                if wrist_ys[i] <= (min_y + 0.35 * max(1e-4, wrist_span))
             ]
             if not high_indices:
                 high_indices = list(range(len(wrist_ys)))
 
-            zero_crossings = [
-                i for i in range(len(v_y) - 1)
-                if v_y[i] <= 0 and v_y[i + 1] > 0 and i in high_indices
-            ]
-            y_min_idx = min(high_indices, key=lambda i: wrist_ys[i])
-            refined_idx = y_min_idx
-            sources = ["wrist_y_local_minimum", "local_high_fps_refinement"]
-            if zero_crossings:
-                best_zc = min(zero_crossings, key=lambda i: abs(times[i] - center_ms))
-                refined_idx = best_zc
-                sources = ["wrist_velocity_zero_crossing", "local_high_fps_refinement"]
+            scored_top_cands = []
+            for i in high_indices:
+                h_score = (max_y - wrist_ys[i]) / max(1e-4, wrist_span)
+                cand_zc = bool(i < len(v_y) - 1 and v_y[i] <= 0 and v_y[i + 1] > 0)
+                post_s = speeds[i : min(len(speeds), i + 4)]
+                acc = float(np.max(post_s)) - speeds[i] if len(post_s) > 0 else 0.0
 
+                tempo_score = 0.0
+                if ref_impact_ms is not None:
+                    cand_ds = ref_impact_ms - times[i]
+                    if 220 <= cand_ds <= 360:
+                        tempo_score = 5.0
+                    elif (180 <= cand_ds < 220) or (360 < cand_ds <= 420):
+                        tempo_score = 2.5
+                    elif 420 < cand_ds <= 520:
+                        tempo_score = -2.5
+                    elif cand_ds > 520:
+                        tempo_score = -6.0
+                else:
+                    dist_to_center = abs(times[i] - center_ms)
+                    tempo_score = -(dist_to_center / 50.0)
+
+                # 頂點停頓結束、下桿爆發啟動加分
+                is_crest = bool(wrist_ys[i] <= min_y + 0.25 * wrist_span)
+                breakaway = 4.0 if (is_crest and acc >= 0.003 and i < len(v_y) - 1 and v_y[i + 1] > 0) else 0.0
+
+                c_score = h_score * 2.5 + (2.0 if cand_zc else 0.0) + acc * 35.0 + tempo_score + breakaway
+                scored_top_cands.append({
+                    "idx": i,
+                    "score": c_score,
+                    "cand_zc": cand_zc,
+                    "breakaway": breakaway > 0,
+                    "tie_key": (round(c_score, 5), times[i], -wrist_ys[i]),
+                })
+
+            scored_top_cands.sort(key=lambda x: x["tie_key"], reverse=True)
+            best_top_item = scored_top_cands[0]
+            refined_idx = best_top_item["idx"]
             refined_time_ms = times[refined_idx]
+
+            sources = ["wrist_y_local_crest", "local_high_fps_refinement"]
+            if best_top_item["breakaway"]:
+                sources.append("transition_breakaway_launch")
+            if best_top_item["cand_zc"]:
+                sources.append("wrist_velocity_zero_crossing")
+            if ref_impact_ms is not None:
+                sources.append("downswing_tempo_constrained")
+
+            # P0-4 校準不確定度與信心度
+            uncertainty_ms = max(60, int(round(sampling_res * 2.2)))
+            lm_vis = float(wrist_confs[refined_idx])
+            has_breakaway = best_top_item["breakaway"]
+            conf = round(min(0.88, max(0.65, 0.65 + 0.15 * lm_vis + (0.05 if has_breakaway else 0.0))), 3)
+
             return {
                 "refined_ms": refined_time_ms,
-                "confidence": min(0.96, max(0.75, wrist_confs[refined_idx])),
-                "uncertainty_ms": 16,
-                "sampling_resolution_ms": 16,
+                "confidence": conf,
+                "uncertainty_ms": uncertainty_ms,
+                "sampling_resolution_ms": sampling_res,
                 "sources": sources,
                 "delta_ms": refined_time_ms - center_ms,
                 "refined_frame": local_frames[refined_idx],
             }
 
         elif event_name == "impact":
-            # 1. 手腕高度閘門：Impact 瞬間雙手必須位於擊球區低位 (至少在垂直幅度 40% 以下)
-            # 徹底杜絕剛離開 Top (手還在頭頂) 產生的加速度雜訊干擾
+            # 1. 手腕高度閘門：Impact 瞬間雙手必須位於擊球區低位 (至少在垂直幅度 35% 以下)
             low_indices = [
                 i for i in range(len(wrist_ys))
-                if (wrist_span < 0.04 or wrist_ys[i] >= (min_y + 0.40 * wrist_span))
-                and abs(times[i] - center_ms) <= 100
+                if (wrist_span < 0.04 or wrist_ys[i] >= (min_y + 0.35 * wrist_span))
+                and abs(times[i] - center_ms) <= 120
             ]
-            if not low_indices:
-                # 若限制過嚴，至少保證不選在手腕最高處 (y < min_y + 0.25 * span)
-                low_indices = [
-                    i for i in range(len(wrist_ys))
-                    if (wrist_span < 0.04 or wrist_ys[i] >= (min_y + 0.25 * wrist_span))
-                    and abs(times[i] - center_ms) <= 120
-                ]
             if not low_indices:
                 low_indices = list(range(len(wrist_ys)))
 
             # 2. 音訊瞬態優先同步 (若在 center_ms ±75ms 內存在擊球聲，優先鎖定該影格)
             best_idx = None
             sources = []
+            has_audio = False
             if audio_transients_ms:
                 near_audios = [
                     a for a in audio_transients_ms
@@ -915,18 +973,16 @@ class CoarseToFineDetector:
                     target_aud = min(near_audios, key=lambda a: abs(a - center_ms))
                     best_idx = min(low_indices, key=lambda i: abs(times[i] - target_aud))
                     sources = ["audio_transient_synchronized", "local_high_fps_refinement"]
+                    has_audio = True
 
             # 3. 若無近音訊，在低位候選影格中尋找擊球瞬間運動學特徵 (最低點 + 制動減速)
             if best_idx is None:
                 max_spd = float(np.max(speeds)) if len(speeds) > 0 else 1e-4
                 scored_cands: list[tuple[float, int]] = []
                 for i in low_indices:
-                    # 深度分數 (擊球瞬間手腕在最低點，y 最大)
                     depth_s = ((wrist_ys[i] - min_y) / max(1e-4, wrist_span)) * 4.0
-                    # 減速制動分數
                     decel = (speeds[i - 1] - speeds[i]) if (i > 0 and i < len(speeds)) else 0.0
                     decel_s = max(0.0, decel / max_spd) * 3.0
-                    # 時間偏離中心懲罰 (每偏離 50ms 扣 1 分)
                     dist_p = (abs(times[i] - center_ms) / 50.0) * 1.0
 
                     cand_total = depth_s + decel_s - dist_p
@@ -937,11 +993,20 @@ class CoarseToFineDetector:
                 sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
 
             refined_time_ms = times[best_idx]
+            lm_vis = float(wrist_confs[best_idx])
+            # P0-4: 嚴格區分 sampling resolution, timing uncertainty, heuristic confidence
+            if has_audio:
+                uncertainty_ms = max(33, int(round(sampling_res * 1.2)))
+                conf = round(min(0.88, 0.75 + 0.10 * lm_vis + 0.05), 3)
+            else:
+                uncertainty_ms = max(55, int(round(sampling_res * 2.0)))
+                conf = round(min(0.78, 0.60 + 0.15 * lm_vis), 3)
+
             return {
                 "refined_ms": refined_time_ms,
-                "confidence": min(0.96, max(0.75, wrist_confs[best_idx])),
-                "uncertainty_ms": 16,
-                "sampling_resolution_ms": 16,
+                "confidence": conf,
+                "uncertainty_ms": uncertainty_ms,
+                "sampling_resolution_ms": sampling_res,
                 "sources": sources,
                 "delta_ms": refined_time_ms - center_ms,
                 "refined_frame": local_frames[best_idx],

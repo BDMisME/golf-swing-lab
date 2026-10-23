@@ -113,19 +113,42 @@ def _get_lm_xyv(lm: Any) -> tuple[float, float, float] | None:
 def _midpoint(
     frame: FramePoseResult, left_key: str, right_key: str
 ) -> tuple[float, float, float] | None:
+    """
+    計算左右關鍵點之中點，採用平滑可見度加權融合 (Visibility-Weighted Blending)。
+    在 DTL (Down-The-Line) 視角中，單側肢體常被身體遮擋；
+    若單側可見度極低而另一側清晰，嚴禁等權重平均（防止垃圾座標拉偏真實肢體），
+    並以平滑權重無縫過渡，徹底消除單幀遮擋跳動。
+    """
     l_xyv = _get_lm_xyv(frame.landmarks.get(left_key))
     r_xyv = _get_lm_xyv(frame.landmarks.get(right_key))
-    if l_xyv and r_xyv and (l_xyv[2] >= 0.35 or r_xyv[2] >= 0.35):
-        return (
-            (l_xyv[0] + r_xyv[0]) / 2.0,
-            (l_xyv[1] + r_xyv[1]) / 2.0,
-            min(l_xyv[2], r_xyv[2]),
-        )
-    if r_xyv and r_xyv[2] >= 0.35:
+    if not l_xyv and not r_xyv:
+        return None
+    if l_xyv and not r_xyv:
+        return l_xyv if l_xyv[2] >= 0.25 else None
+    if r_xyv and not l_xyv:
+        return r_xyv if r_xyv[2] >= 0.25 else None
+
+    # l_xyv 與 r_xyv 均存在
+    assert l_xyv is not None and r_xyv is not None
+    l_vis = l_xyv[2]
+    r_vis = r_xyv[2]
+    if l_vis < 0.20 and r_vis < 0.20:
+        return None
+
+    # 若一側可見度極高且另一側極低，完全以清晰側為準
+    if r_vis >= 0.45 and l_vis < 0.25:
         return r_xyv
-    if l_xyv and l_xyv[2] >= 0.35:
+    if l_vis >= 0.45 and r_vis < 0.25:
         return l_xyv
-    return None
+
+    # 否則使用可見度平滑加權融合
+    w_l = max(0.01, l_vis - 0.15)
+    w_r = max(0.01, r_vis - 0.15)
+    total_w = w_l + w_r
+    merged_x = (l_xyv[0] * w_l + r_xyv[0] * w_r) / total_w
+    merged_y = (l_xyv[1] * w_l + r_xyv[1] * w_r) / total_w
+    merged_vis = (l_vis * w_l + r_vis * w_r) / total_w
+    return (merged_x, merged_y, merged_vis)
 
 
 def _spine_angle_deg(frame: FramePoseResult) -> tuple[float | None, float]:
@@ -172,6 +195,8 @@ class SwingPhaseStateMachine:
         """
         在候選集合中評估並選出最佳 Top 重對齊候選。
         實作確定性排序與平手打破規則 (Tie-Breaking)，保證輸入順序或排列不影響裁決結果 (Permutation Invariance)。
+        結合生物力學先驗：全揮桿生理下桿時間通常為 200~380ms；
+        在頂點蓄力停頓平台期 (Top Pause Plateau)，優先鎖定換向結束、下桿爆發啟動的真實轉折點 (Transition Breakaway Launch)。
         回傳: (best_cand, best_cand_score, best_cand_has_zc, best_cand_has_accel)
         """
         if not win_cands:
@@ -186,22 +211,38 @@ class SwingPhaseStateMachine:
         for c in win_cands:
             h_s = (max_sub_y - wrist_ys[c]) / y_span
             cand_zc = bool(c < n - 1 and v_y[c] <= 0 and v_y[c + 1] > 0)
-            zc_bonus = 2.0 if cand_zc else 0.0
-            p_s = 1.0 if (0 < c < n - 1 and speed[c] <= speed[c - 1] and speed[c] <= speed[c + 1]) else 0.0
+            zc_bonus = 2.5 if cand_zc else 0.0
+            p_s = 1.5 if (0 < c < n - 1 and speed[c] <= speed[c - 1] and speed[c] <= speed[c + 1]) else 0.0
             post_s = speed[c : min(impact_idx + 1, c + 5)]
             acc = float(np.max(post_s)) - speed[c] if len(post_s) > 0 else 0.0
 
-            score = h_s * 3.0 + zc_bonus * 2.5 + p_s * 1.5 + acc * 40.0
+            # 頂點幾何高度閘門：手腕必須位於相對高位區 (頂點 35% 幅度內) 方可被視為 Top 候選
+            is_crest = bool(wrist_ys[c] <= min_sub_y + 0.35 * y_span)
+
+            # 生理下桿時長相容性 (Downswing Tempo Plausibility)
+            ds_ms = times[impact_idx] - times[c]
+            tempo_score = 0.0
+            if is_crest:
+                if 200 <= ds_ms <= 380:
+                    tempo_score = 3.5
+                elif (160 <= ds_ms < 200) or (380 < ds_ms <= 450):
+                    tempo_score = 1.5
+                elif ds_ms > 650:
+                    tempo_score = -2.5
+
+            # 停頓期下桿爆發轉折 (Transition Breakaway Launch)
+            breakaway_bonus = 3.0 if (is_crest and acc >= 0.003 and c < n - 1 and v_y[c + 1] > 0) else 0.0
+
+            score = h_s * 3.5 + zc_bonus + p_s + acc * 35.0 + tempo_score + breakaway_bonus
             has_accel = bool(acc >= 0.003)
 
-            # 確定性評分元組：(score, -wrist_ys[c], times[c])
-            # 當 score 相等時，優先選擇手腕最高者 (-wrist_y 越大)，再選擇靠近 Impact 者 (times 越大)
+            # 確定性評分元組：當分數相當且同處高位停頓期時，優先選擇更接近下桿發動點 (times 較大)
             candidates_evaluated.append({
                 "cand": c,
                 "score": score,
                 "cand_zc": cand_zc,
                 "has_accel": has_accel,
-                "tie_key": (round(score, 6), -wrist_ys[c], times[c]),
+                "tie_key": (round(score, 5), -wrist_ys[c], times[c]),
             })
 
         # 排序選出最佳候選 (排序鍵不依賴原始列表順序)
@@ -464,6 +505,11 @@ class SwingPhaseStateMachine:
                 continue
 
             top_cands = []
+            sub_ys = [wrist_ys[j] for j in top_window]
+            min_w_y = min(sub_ys)
+            max_w_y = max(sub_ys)
+            w_span = max(1e-3, max_w_y - min_w_y)
+
             for k in top_window:
                 stroke_h = imp_y - wrist_ys[k]
                 if stroke_h < 0.05 and stroke_h < 0.25 * full_amplitude:
@@ -471,20 +517,41 @@ class SwingPhaseStateMachine:
 
                 has_zc = bool(k < n - 1 and v_y[k] <= 0 and v_y[k + 1] > 0)
                 has_pause = bool(0 < k < n - 1 and speed[k] <= speed[k - 1] and speed[k] <= speed[k + 1])
-                sub_ys = [wrist_ys[j] for j in top_window]
-                min_w_y = min(sub_ys)
-                max_w_y = max(sub_ys)
-                h_score = (max_w_y - wrist_ys[k]) / max(1e-3, max_w_y - min_w_y)
+                h_score = (max_w_y - wrist_ys[k]) / w_span
                 post_s = speed[k : min(imp_idx + 1, k + 5)]
                 acc = float(np.max(post_s)) - speed[k] if len(post_s) > 0 else 0.0
 
-                cand_score = h_score * 3.5 + (2.0 if has_zc else 0.0) + (1.5 if has_pause else 0.0) + acc * 35.0
+                # 生理下桿時長相容性 (Downswing Tempo Plausibility)
+                ds_cand = imp_t - times[k]
+                tempo_score = 0.0
+                if 220 <= ds_cand <= 360:
+                    tempo_score = 5.0
+                elif (180 <= ds_cand < 220) or (360 < ds_cand <= 420):
+                    tempo_score = 2.5
+                elif 420 < ds_cand <= 520:
+                    tempo_score = -2.5
+                elif ds_cand > 520:
+                    tempo_score = -6.0
+
+                # 停頓期下桿爆發轉折 (Transition Breakaway Launch)
+                is_crest = bool(wrist_ys[k] <= min_w_y + 0.25 * w_span)
+                breakaway_bonus = 4.0 if (is_crest and acc >= 0.003 and k < n - 1 and v_y[k + 1] > 0) else 0.0
+
+                cand_score = (
+                    h_score * 2.5
+                    + (2.0 if has_zc else 0.0)
+                    + (1.0 if has_pause else 0.0)
+                    + acc * 35.0
+                    + tempo_score
+                    + breakaway_bonus
+                )
                 top_cands.append((cand_score, k))
 
             if not top_cands:
                 continue
 
-            top_cands.sort(key=lambda x: (round(x[0], 5), -wrist_ys[x[1]], times[x[1]]), reverse=True)
+            # 確定性排序：同分且同處高位蓄力期時，優先選擇真正下桿發動點 (times 較大)
+            top_cands.sort(key=lambda x: (round(x[0], 5), times[x[1]], -wrist_ys[x[1]]), reverse=True)
             best_top_idx = top_cands[0][1]
             top_t = times[best_top_idx]
             top_y = wrist_ys[best_top_idx]
@@ -873,18 +940,28 @@ class SwingPhaseStateMachine:
 
         frame_interval_ms = int(round(mean_dt))
         sampling_res = frame_interval_ms
-        top_uncertainty = max(24, frame_interval_ms)
-        impact_uncertainty = max(24, frame_interval_ms)
-        if "audio_transient_consensus" in impact_sources:
-            impact_uncertainty = max(16, int(round(frame_interval_ms * 0.6)))
-        if "ball_flight_observed_launch" in impact_sources:
-            impact_uncertainty = max(16, int(round(frame_interval_ms * 0.5)))
+        # P0-4: 嚴格校準不確定度與啟發式信心度 (Heuristic Confidence)
+        # Top 具備停頓轉折蓄力期，不確定度保守反映轉折過渡區間 (~60-90ms)
+        top_uncertainty = max(60, int(round(frame_interval_ms * 2.2)))
 
-        top_conf = min(0.96, max(0.60, confs[top_idx] * (0.85 + 0.05 * len(top_sources))))
-        impact_conf = min(0.96, max(0.60, confs[impact_idx] * (0.80 + 0.08 * len(impact_sources))))
+        # Impact 衝擊瞬間：若有音訊或球體直接驗證，不確定度約 30-50ms；若僅有姿態推估，約 50-80ms
+        if "audio_transient_consensus" in impact_sources or "ball_flight_observed_launch" in impact_sources:
+            impact_uncertainty = max(33, int(round(frame_interval_ms * 1.2)))
+        else:
+            impact_uncertainty = max(55, int(round(frame_interval_ms * 2.0)))
+
+        # 啟發式信心度 (Heuristic Confidence)：最高上限保守封頂 0.88，絕不因單純可見度高而宣稱 0.96 假高分
+        top_vis = float(confs[top_idx])
+        top_conf = min(0.88, max(0.55, 0.60 + 0.15 * top_vis + 0.04 * len(top_sources)))
+
+        imp_vis = float(confs[impact_idx])
+        has_strong_impact_proof = ("audio_transient_consensus" in impact_sources or "ball_flight_observed_launch" in impact_sources)
+        base_imp_conf = 0.72 if has_strong_impact_proof else 0.58
+        impact_conf = min(0.88, max(0.50, base_imp_conf + 0.10 * imp_vis + 0.03 * len(impact_sources)))
+
         if is_ambiguous:
-            top_conf = min(top_conf, 0.55)
-            impact_conf = min(impact_conf, 0.55)
+            top_conf = min(top_conf, 0.50)
+            impact_conf = min(impact_conf, 0.50)
 
         state_trace = [
             "IDLE",

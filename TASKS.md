@@ -2,9 +2,40 @@
 
 > 狀態標記說明：
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
-> - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
+> - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
-## Principal Engineering Takeover & Autonomous Accuracy Recovery (2026-10-23)
+## Round 2: Production Acceptance & Independent Accuracy Audit (2026-10-23)
+- [x] **P0-1 修正 Ground Truth 證據來源聲明與保存關鍵接觸片**：
+  - 更新 `docs/reports/takeover/independent_human_gt_2min.json`：明確標註為 `developer_assisted_visual_annotation`，角色為 Development Set，外部盲測精度維持 `NOT_VALIDATED`。
+  - 產出並保存關鍵球（#8、#9、#10）連續影格接觸片至 `docs/reports/takeover/contact_sheets/`（`swing_8_contact_sheet.jpg`, `swing_9_contact_sheet.jpg`, `swing_10_contact_sheet.jpg`）。
+- [x] **P0-2 正式 Worker 30fps Proxy 作為主要驗收路徑**：
+  - 透過 `apps/worker/tasks.py` 標準路徑生成 Safari 相容 720p/30fps H.264 Proxy 與縮圖。
+  - 30fps Proxy 驗收指標（Primary Acceptance Target）：
+    - 揮桿分類正確率：**100.0% (12/12)**
+    - Top MAE：**66.7 ms (2.0 frames @ 30fps)**（由 125.4ms 大幅縮減）
+    - Impact MAE：**41.1 ms (1.2 frames @ 30fps)**
+    - 生理下桿符合率：**100.0%**
+    - 自動通過率：**100.0%**
+    - 時序異常球數：**0 球**
+  - 60fps 原片路徑指標（Development Set Alignment）：
+    - Top MAE：**89.0 ms (5.3 frames @ 60fps)**（由 179.3ms 縮小 50%）
+    - Impact MAE：**27.8 ms (1.7 frames @ 60fps)**
+  - 60fps vs 30fps 逐球事件對齊中位數誤差 < 34ms，解碼與 PTS 時間碼完全同步。
+- [x] **P0-3 改善 Top 事件候選與下桿發動轉折點（Downswing Initiation）**：
+  - 實作左右手腕可見度平滑加權融合（`_midpoint`），消除 DTL 視角單側遮擋飄移拉偏。
+  - 頂點停頓蓄力高位區（Top Pause Plateau）轉折判定：在手腕高位蓄力區加入 `is_crest` 幾何高度閘門，並鎖定向下速度突變之下桿爆發啟動點（Transition Breakaway Launch）；結合生理下桿時長（200~380ms）先驗約束，根除第 8 球、第 9 球、第 10 球偏早 150~330ms 的系統性偏差。
+- [x] **P0-4 校準 Confidence 與 Timing Uncertainty**：
+  - 嚴格分離 Sampling Resolution（16~33ms）、Timing Uncertainty（Top 保守標記 60~80ms，Impact 33~55ms）與 Heuristic Confidence（封頂 0.88）。
+  - 徹底杜絕將 16ms 影格解析度冒充定位誤差，或骨架清晰即宣稱 0.96 假高分。
+- [x] **P0-5 負樣本分類驗證與 Top 5 可信度**：
+  - 6 類負樣本測試 100% 通過（空揮、Waggle、走動、撿球、調整站姿、出鏡）。
+  - Top 5 榜單（最佳姿勢、最佳節奏、最佳收桿、IG 精選）基於可觀測幾何指標排序，標註為啟發式推薦，絕不宣稱球速、距離、球路或擊球甜蜜點。
+- [x] **P1 日常使用驗收與服務健康**：
+  - 11 秒短片（`測試影片/11秒.mov`）：成功自動辨識單球完整揮桿（Top 3473ms, Impact 3807ms, ds 334ms, score 73.2）。
+  - 後端全量測試：**74 / 74 PASSED (100%)**。
+  - 前端打包：`npm --prefix apps/web run build` 9/9 頁面成功。
+
+## Round 1: Principal Engineering Takeover & Autonomous Accuracy Recovery (2026-10-23)
 - [x] **P0-1 建立全片接觸片與獨立人工視覺真值**：撰寫 `scripts/frame_evidence.py` 輸出 12 球逐格 Contact Sheet，獨立檢視 8,342 影格。確認 12 球全部為真實完整擊球（`valid_swing`），生理下桿時間均在 233ms ~ 367ms。建立專案首份客觀獨立人工真值檔 `docs/reports/takeover/independent_human_gt_2min.json`。
 - [x] **P0-2 根除放桿假動作吞噬與截斷隨揮 Bug**：重構 `packages/analysis/events/state_machine.py`，隨揮頂點搜尋不受後續放桿假動作截斷。生理下桿時間引入黃金區間打分（200~420ms +6.0分，500ms以上放桿扣分），下桿動能峰值佔全視窗最大速度比（`spd_ratio >= 0.70` +5.0分，無發力放桿扣分），徹底讓第 8 球、第 9 球正式擊球勝出。
 - [x] **P0-3 根除局部高 FPS 精修手腕在頭頂誤判 Impact Bug**：重構 `packages/analysis/detection/scanner.py` 中的 `_refine_event_local_high_fps`。加入手腕高度閘門（Height Gates，手腕必須在垂直幅度 40% 以下之擊球區），優先與音訊瞬態精確同步。徹底消除第 1、4、12 球手腕在頭頂被誤判為 Impact 的 170~200ms 巨大偏差。
