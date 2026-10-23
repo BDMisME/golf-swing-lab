@@ -283,6 +283,7 @@ def run_video_analysis_job(job_id: str) -> dict[str, Any]:
                         quality_metadata=cand.quality_metadata,
                         weights=custom_weights,
                         score_version=settings.scoring_version,
+                        label=cand.label,
                     )
                     db.add(
                         SwingScore(

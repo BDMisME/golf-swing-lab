@@ -12,71 +12,71 @@
       "label": "valid_swing",
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
-      "review_status": "needs_review",
+      "review_status": "auto_accepted",
       "review_flags": [
-        "audio_kinematic_conflict"
+        "ambient_audio_rejected"
       ],
-      "overall_score": 68.9,
+      "overall_score": 54.0,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 88.1,
+          "score": 79.9,
           "weight": 25.0,
           "raw_value": 4.36,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=4.36°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=4.36°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 61.6,
+          "score": 45.4,
           "weight": 15.0,
           "raw_value": 0.1656,
           "unit": "torso_ratio",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.166；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.166；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 69.8,
           "weight": 20.0,
-          "raw_value": 0.0083,
+          "raw_value": 0.0507,
           "unit": "ratio",
           "confidence": 0.993,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.008（佔 60%）與同場多球重複性偏差 r=0.427（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.051（佔 60%）與同場多球重複性偏差 r=0.427（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0083,
+            "single_swing_plane_gap": 0.0507,
             "session_repeatability": 0.4271
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 51.0,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.8,
+          "raw_value": 1.33,
           "unit": "ratio",
-          "confidence": 0.65,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.80:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.8,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.33:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 65.0,
+          "score": 51.2,
           "weight": 20.0,
           "raw_value": 0.1643,
           "hold_ms": 5534.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 5534ms、下半身 2D 晃動比 0.164；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 5534ms、下半身 2D 晃動比 0.164；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 65.0,
-          "tempo_20": 51.0,
+          "finish_25": 51.2,
+          "tempo_20": 15.0,
           "clarity_15": 91.5,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -88,7 +88,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 77.9,
+      "ig_visual_score": 66.1,
       "events": {
         "address": {
           "event_name": "address",
@@ -121,8 +121,8 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 10267,
-          "confidence": 0.996,
+          "time_ms": 10200,
+          "confidence": 0.998,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "上桿中段手部持續上升軌跡",
@@ -135,7 +135,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 10600,
+          "time_ms": 10533,
           "confidence": 0.8,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -146,6 +146,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -153,7 +154,7 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 10766,
+          "time_ms": 10733,
           "confidence": 0.994,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -168,16 +169,16 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 10933,
-          "confidence": 0.65,
+          "confidence": 0.8,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration, audio_transient_consensus)",
-          "uncertainty_ms": 82,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "audio_transient_consensus",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -1258,30 +1259,31 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 10933,
-            "confidence": 0.65,
-            "uncertainty_ms": 82,
+            "confidence": 0.8,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
             "flags": [
-              "audio_kinematic_conflict"
+              "ambient_audio_rejected"
             ],
             "delta_ms": 0
           },
           "top": {
-            "refined_ms": 10600,
+            "refined_ms": 10533,
             "confidence": 0.8,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": 0
+            "delta_ms": 66
           }
         },
         "audio_status": "ok",
@@ -1289,12 +1291,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 10600,
+            "top_ms": 10467,
             "impact_ms": 10933,
             "addr_ms": 9600,
-            "downswing_ms": 333,
-            "backswing_ms": 1000,
-            "stroke_amplitude": 0.1702,
+            "downswing_ms": 466,
+            "backswing_ms": 867,
+            "stroke_amplitude": 0.1709,
             "downswing_speed_peak": 0.001077,
             "decel_at_impact": 0.000445,
             "follow_amplitude": 0.1972,
@@ -1302,9 +1304,9 @@
             "readdress_calm_ratio": 10.7664,
             "audio_transient_ms": 10900,
             "audio_diff_ms": 33,
-            "total_score": 28.5,
+            "total_score": 25.5,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "acceptable_downswing (466ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.91)",
               "impact_deceleration_brake (0.0004)",
@@ -1345,59 +1347,58 @@
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 13400,
+            "top_ms": 13133,
             "impact_ms": 13733,
-            "addr_ms": 11200,
-            "downswing_ms": 333,
-            "backswing_ms": 2200,
-            "stroke_amplitude": 0.0824,
+            "addr_ms": 11000,
+            "downswing_ms": 600,
+            "backswing_ms": 2133,
+            "stroke_amplitude": 0.1222,
             "downswing_speed_peak": 0.00058,
             "decel_at_impact": 0.000229,
             "follow_amplitude": 0.016,
             "finish_hold_ms": 67,
-            "readdress_calm_ratio": 0.8551,
+            "readdress_calm_ratio": 0.6606,
             "audio_transient_ms": 13680,
             "audio_diff_ms": 53,
-            "total_score": 3.5,
+            "total_score": 0.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "adequate_stroke_amplitude",
               "moderate_impact_speed (ratio=0.49)"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
+              "slow_downswing_duration (600ms)",
               "weak_follow_through_waggle_like (amp=0.016)"
             ],
             "is_ambiguous": false
           },
           {
             "hypothesis_id": "cand-4",
-            "top_ms": 13267,
+            "top_ms": 13600,
             "impact_ms": 14200,
-            "addr_ms": 11067,
-            "downswing_ms": 933,
-            "backswing_ms": 2200,
-            "stroke_amplitude": 0.1382,
-            "downswing_speed_peak": 0.00058,
+            "addr_ms": 13333,
+            "downswing_ms": 600,
+            "backswing_ms": 267,
+            "stroke_amplitude": 0.0555,
+            "downswing_speed_peak": 0.000423,
             "decel_at_impact": 0.000208,
             "follow_amplitude": 0.0059,
             "finish_hold_ms": 0,
-            "readdress_calm_ratio": 0.7267,
+            "readdress_calm_ratio": 1.4133,
             "audio_transient_ms": 14100,
             "audio_diff_ms": 100,
-            "total_score": -4.0,
-            "supporting_evidence": [
-              "adequate_stroke_amplitude",
-              "moderate_impact_speed (ratio=0.49)"
-            ],
+            "total_score": -10.5,
+            "supporting_evidence": [],
             "opposing_evidence": [
-              "extreme_downswing_duration (933ms)",
+              "slow_downswing_duration (600ms)",
+              "shallow_stroke_amplitude",
+              "weak_downswing_speed (ratio=0.36)",
               "weak_follow_through_waggle_like (amp=0.006)",
               "abrupt_cutoff_no_finish_hold"
             ],
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=10600ms, Imp=10933ms, 得分=28.5) 顯著優於次佳候選 (得分=5.5)。關鍵優勢: golden_downswing_tempo (333ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=-0.016)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=10467ms, Imp=10933ms, 得分=25.5) 顯著優於次佳候選 (得分=5.5)。關鍵優勢: acceptable_downswing (466ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=-0.016)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -1409,71 +1410,71 @@
       "label": "valid_swing",
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
-      "review_status": "needs_review",
+      "review_status": "auto_accepted",
       "review_flags": [
-        "audio_kinematic_conflict"
+        "ambient_audio_rejected"
       ],
-      "overall_score": 71.7,
+      "overall_score": 62.1,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 99.7,
+          "score": 95.4,
           "weight": 25.0,
           "raw_value": 2.54,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=2.54°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=2.54°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 65.4,
+          "score": 50.4,
           "weight": 15.0,
           "raw_value": 0.1551,
           "unit": "torso_ratio",
           "confidence": 0.998,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.155；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.155；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.0258,
+          "raw_value": 0.0071,
           "unit": "ratio",
           "confidence": 0.996,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.026（佔 60%）與同場多球重複性偏差 r=0.413（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.007（佔 60%）與同場多球重複性偏差 r=0.413（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0258,
+            "single_swing_plane_gap": 0.0071,
             "session_repeatability": 0.4127
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 35.5,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.5,
+          "raw_value": 1.28,
           "unit": "ratio",
-          "confidence": 0.65,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.50:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.799,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.28:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 77.3,
+          "score": 68.3,
           "weight": 20.0,
           "raw_value": 0.1207,
           "hold_ms": 5533.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 5533ms、下半身 2D 晃動比 0.121；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 5533ms、下半身 2D 晃動比 0.121；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 77.3,
-          "tempo_20": 35.5,
+          "finish_25": 68.3,
+          "tempo_20": 15.0,
           "clarity_15": 93.0,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -1485,7 +1486,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 78.2,
+      "ig_visual_score": 71.1,
       "events": {
         "address": {
           "event_name": "address",
@@ -1518,8 +1519,8 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 25067,
-          "confidence": 0.996,
+          "time_ms": 25000,
+          "confidence": 0.997,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "上桿中段手部持續上升軌跡",
@@ -1532,8 +1533,8 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 25300,
-          "confidence": 0.8,
+          "time_ms": 25267,
+          "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
           "rationale": "上桿頂點：速度零交越與手部最高轉折點 (依據: multi_signal_hypothesis_consensus, wrist_vertical_amplitude)",
@@ -1543,6 +1544,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -1550,7 +1552,7 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 25466,
+          "time_ms": 25450,
           "confidence": 0.996,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -1565,15 +1567,15 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 25633,
-          "confidence": 0.65,
+          "confidence": 0.8,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration)",
-          "uncertainty_ms": 82,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -2618,30 +2620,31 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 25633,
-            "confidence": 0.65,
-            "uncertainty_ms": 82,
+            "confidence": 0.8,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
             "flags": [
-              "audio_kinematic_conflict"
+              "ambient_audio_rejected"
             ],
             "delta_ms": -34
           },
           "top": {
-            "refined_ms": 25300,
-            "confidence": 0.8,
+            "refined_ms": 25267,
+            "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": -33
+            "delta_ms": 0
           }
         },
         "audio_status": "ok",
@@ -2649,12 +2652,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 25333,
+            "top_ms": 25267,
             "impact_ms": 25667,
             "addr_ms": 24467,
-            "downswing_ms": 334,
-            "backswing_ms": 866,
-            "stroke_amplitude": 0.1689,
+            "downswing_ms": 400,
+            "backswing_ms": 800,
+            "stroke_amplitude": 0.1695,
             "downswing_speed_peak": 0.001095,
             "decel_at_impact": 0.000687,
             "follow_amplitude": 0.1856,
@@ -2664,7 +2667,7 @@
             "audio_diff_ms": 67,
             "total_score": 24.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "golden_downswing_tempo (400ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=1.00)",
               "impact_deceleration_brake (0.0007)",
@@ -2707,12 +2710,12 @@
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 26667,
+            "top_ms": 26600,
             "impact_ms": 27133,
             "addr_ms": 24467,
-            "downswing_ms": 466,
-            "backswing_ms": 2200,
-            "stroke_amplitude": 0.0738,
+            "downswing_ms": 533,
+            "backswing_ms": 2133,
+            "stroke_amplitude": 0.0912,
             "downswing_speed_peak": 0.000864,
             "decel_at_impact": 0.000276,
             "follow_amplitude": 0.0039,
@@ -2720,14 +2723,14 @@
             "readdress_calm_ratio": 8.6368,
             "audio_transient_ms": 28220,
             "audio_diff_ms": 1087,
-            "total_score": 5.5,
+            "total_score": 5.0,
             "supporting_evidence": [
-              "acceptable_downswing (466ms)",
+              "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.79)",
               "settled_readdress_before_takeaway"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
+              "slow_downswing_duration (533ms)",
               "weak_follow_through_waggle_like (amp=0.004)",
               "isolated_background_audio (diff=1087ms)"
             ],
@@ -2817,7 +2820,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=25333ms, Imp=25667ms, 得分=24.0) 顯著優於次佳候選 (得分=18.5)。關鍵優勢: golden_downswing_tempo (334ms), adequate_stroke_amplitude。次佳候選反對理由: abrupt_cutoff_no_finish_hold, isolated_background_audio (diff=1200ms)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=25267ms, Imp=25667ms, 得分=24.0) 顯著優於次佳候選 (得分=18.5)。關鍵優勢: golden_downswing_tempo (400ms), adequate_stroke_amplitude。次佳候選反對理由: abrupt_cutoff_no_finish_hold, isolated_background_audio (diff=1200ms)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -2831,36 +2834,36 @@
       "confidence": 0.999,
       "review_status": "auto_accepted",
       "review_flags": [],
-      "overall_score": 67.5,
+      "overall_score": 59.0,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 96.5,
+          "score": 91.1,
           "weight": 25.0,
           "raw_value": 3.05,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=3.05°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=3.05°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 70.7,
+          "score": 57.2,
           "weight": 15.0,
           "raw_value": 0.1406,
           "unit": "torso_ratio",
           "confidence": 0.998,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.141；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.141；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
           "raw_value": 0.0241,
           "unit": "ratio",
           "confidence": 0.997,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
           "how_calculated": "融合單球上下桿手部平面差距 d=0.024（佔 60%）與同場多球重複性偏差 r=0.362（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
             "single_swing_plane_gap": 0.0241,
@@ -2869,29 +2872,29 @@
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 25.2,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.3,
+          "raw_value": 1.09,
           "unit": "ratio",
           "confidence": 0.799,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.30:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.09:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 66.4,
+          "score": 53.0,
           "weight": 20.0,
           "raw_value": 0.1596,
           "hold_ms": 5800.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 5800ms、下半身 2D 晃動比 0.160；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 5800ms、下半身 2D 晃動比 0.160；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 66.4,
-          "tempo_20": 25.2,
+          "finish_25": 53.0,
+          "tempo_20": 15.0,
           "clarity_15": 94.2,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -2903,7 +2906,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 73.0,
+      "ig_visual_score": 67.1,
       "events": {
         "address": {
           "event_name": "address",
@@ -2950,7 +2953,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 38100,
+          "time_ms": 38067,
           "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -2961,6 +2964,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -2968,7 +2972,7 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 38266,
+          "time_ms": 38250,
           "confidence": 0.996,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -4211,17 +4215,18 @@
             "delta_ms": -34
           },
           "top": {
-            "refined_ms": 38100,
+            "refined_ms": 38067,
             "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": -33
+            "delta_ms": 0
           }
         },
         "audio_status": "ok",
@@ -4229,12 +4234,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 38133,
+            "top_ms": 38067,
             "impact_ms": 38467,
             "addr_ms": 37333,
-            "downswing_ms": 334,
-            "backswing_ms": 800,
-            "stroke_amplitude": 0.1657,
+            "downswing_ms": 400,
+            "backswing_ms": 734,
+            "stroke_amplitude": 0.1665,
             "downswing_speed_peak": 0.001162,
             "decel_at_impact": 0.000951,
             "follow_amplitude": 0.1892,
@@ -4244,7 +4249,7 @@
             "audio_diff_ms": 47,
             "total_score": 24.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "golden_downswing_tempo (400ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=1.00)",
               "impact_deceleration_brake (0.0010)",
@@ -4257,12 +4262,12 @@
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 40200,
+            "top_ms": 40067,
             "impact_ms": 40533,
             "addr_ms": 38467,
-            "downswing_ms": 333,
-            "backswing_ms": 1733,
-            "stroke_amplitude": 0.0564,
+            "downswing_ms": 466,
+            "backswing_ms": 1600,
+            "stroke_amplitude": 0.0599,
             "downswing_speed_peak": 0.000678,
             "decel_at_impact": 0.0,
             "follow_amplitude": -0.0266,
@@ -4270,9 +4275,9 @@
             "readdress_calm_ratio": 0.8634,
             "audio_transient_ms": 40480,
             "audio_diff_ms": 53,
-            "total_score": 8.0,
+            "total_score": 5.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "acceptable_downswing (466ms)",
               "moderate_impact_speed (ratio=0.58)",
               "audio_aligned_with_strike (diff=53ms)"
             ],
@@ -4284,12 +4289,12 @@
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 40533,
+            "top_ms": 40333,
             "impact_ms": 40867,
             "addr_ms": 38467,
-            "downswing_ms": 334,
-            "backswing_ms": 2066,
-            "stroke_amplitude": 0.0505,
+            "downswing_ms": 534,
+            "backswing_ms": 1866,
+            "stroke_amplitude": 0.0951,
             "downswing_speed_peak": 0.000678,
             "decel_at_impact": 1.6e-05,
             "follow_amplitude": 0.004,
@@ -4297,13 +4302,13 @@
             "readdress_calm_ratio": 0.8634,
             "audio_transient_ms": 40980,
             "audio_diff_ms": 113,
-            "total_score": 3.5,
+            "total_score": 0.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "adequate_stroke_amplitude",
               "moderate_impact_speed (ratio=0.58)"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
+              "slow_downswing_duration (534ms)",
               "weak_follow_through_waggle_like (amp=0.004)"
             ],
             "is_ambiguous": false
@@ -4336,7 +4341,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=38133ms, Imp=38467ms, 得分=24.0) 顯著優於次佳候選 (得分=8.0)。關鍵優勢: golden_downswing_tempo (334ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=-0.027)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=38067ms, Imp=38467ms, 得分=24.0) 顯著優於次佳候選 (得分=5.0)。關鍵優勢: golden_downswing_tempo (400ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=-0.027)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -4352,36 +4357,36 @@
       "review_flags": [
         "audio_kinematic_conflict"
       ],
-      "overall_score": 67.4,
+      "overall_score": 57.5,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 92.2,
+          "score": 85.4,
           "weight": 25.0,
           "raw_value": 3.72,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=3.72°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=3.72°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 74.5,
+          "score": 62.1,
           "weight": 15.0,
           "raw_value": 0.1302,
           "unit": "torso_ratio",
           "confidence": 0.998,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.130；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.130；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
           "raw_value": 0.0281,
           "unit": "ratio",
           "confidence": 0.994,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
           "how_calculated": "融合單球上下桿手部平面差距 d=0.028（佔 60%）與同場多球重複性偏差 r=0.381（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
             "single_swing_plane_gap": 0.0281,
@@ -4390,29 +4395,29 @@
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 30.3,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.4,
+          "raw_value": 1.0,
           "unit": "ratio",
           "confidence": 0.65,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.40:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.00:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 63.7,
+          "score": 49.2,
           "weight": 20.0,
           "raw_value": 0.1692,
           "hold_ms": 5667.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 5667ms、下半身 2D 晃動比 0.169；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 5667ms、下半身 2D 晃動比 0.169；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 63.7,
-          "tempo_20": 30.3,
+          "finish_25": 49.2,
+          "tempo_20": 15.0,
           "clarity_15": 93.6,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -4424,7 +4429,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 73.3,
+      "ig_visual_score": 65.9,
       "events": {
         "address": {
           "event_name": "address",
@@ -4471,7 +4476,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 51600,
+          "time_ms": 51533,
           "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -4482,6 +4487,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -4489,7 +4495,7 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 51766,
+          "time_ms": 51733,
           "confidence": 0.994,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -5598,17 +5604,18 @@
             "delta_ms": 0
           },
           "top": {
-            "refined_ms": 51600,
+            "refined_ms": 51533,
             "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": 67
+            "delta_ms": 0
           }
         },
         "audio_status": "ok",
@@ -5645,28 +5652,28 @@
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 53133,
+            "top_ms": 53000,
             "impact_ms": 53467,
-            "addr_ms": 50933,
-            "downswing_ms": 334,
+            "addr_ms": 50800,
+            "downswing_ms": 467,
             "backswing_ms": 2200,
-            "stroke_amplitude": 0.0799,
+            "stroke_amplitude": 0.0948,
             "downswing_speed_peak": 0.000637,
             "decel_at_impact": 0.000147,
             "follow_amplitude": 0.0299,
             "finish_hold_ms": 67,
-            "readdress_calm_ratio": 3.7296,
+            "readdress_calm_ratio": 6.3736,
             "audio_transient_ms": 53460,
             "audio_diff_ms": 7,
-            "total_score": 7.5,
+            "total_score": 9.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "acceptable_downswing (467ms)",
+              "adequate_stroke_amplitude",
               "moderate_impact_speed (ratio=0.54)",
               "settled_readdress_before_takeaway",
               "audio_near_strike (diff=7ms)"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
               "weak_follow_through_waggle_like (amp=0.030)"
             ],
             "is_ambiguous": false
@@ -5778,7 +5785,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=51533ms, Imp=51933ms, 得分=28.5) 顯著優於次佳候選 (得分=7.5)。關鍵優勢: golden_downswing_tempo (400ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=0.030)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=51533ms, Imp=51933ms, 得分=28.5) 顯著優於次佳候選 (得分=9.0)。關鍵優勢: golden_downswing_tempo (400ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=0.030)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -5790,11 +5797,11 @@
       "label": "valid_swing",
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
-      "review_status": "needs_review",
+      "review_status": "auto_accepted",
       "review_flags": [
-        "audio_kinematic_conflict"
+        "ambient_audio_rejected"
       ],
-      "overall_score": 66.8,
+      "overall_score": 55.1,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
@@ -5803,58 +5810,58 @@
           "raw_value": 0.66,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=0.66°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=0.66°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 40.9,
+          "score": 18.6,
           "weight": 15.0,
           "raw_value": 0.2224,
           "unit": "torso_ratio",
           "confidence": 0.998,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.222；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.222；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.0205,
+          "raw_value": 0.0477,
           "unit": "ratio",
-          "confidence": 0.996,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.021（佔 60%）與同場多球重複性偏差 r=0.513（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "confidence": 0.995,
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.048（佔 60%）與同場多球重複性偏差 r=0.513（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0205,
+            "single_swing_plane_gap": 0.0477,
             "session_repeatability": 0.5135
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 40.6,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.6,
+          "raw_value": 0.86,
           "unit": "ratio",
-          "confidence": 0.65,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.60:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.799,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=0.86:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 65.5,
+          "score": 51.8,
           "weight": 20.0,
           "raw_value": 0.1627,
           "hold_ms": 4867.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 4867ms、下半身 2D 晃動比 0.163；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 4867ms、下半身 2D 晃動比 0.163；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 65.5,
-          "tempo_20": 40.6,
+          "finish_25": 51.8,
+          "tempo_20": 15.0,
           "clarity_15": 92.0,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -5866,7 +5873,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 75.9,
+      "ig_visual_score": 66.4,
       "events": {
         "address": {
           "event_name": "address",
@@ -5899,8 +5906,8 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 66133,
-          "confidence": 0.997,
+          "time_ms": 66067,
+          "confidence": 0.996,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "上桿中段手部持續上升軌跡",
@@ -5913,8 +5920,8 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 66400,
-          "confidence": 0.8,
+          "time_ms": 66267,
+          "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
           "rationale": "上桿頂點：速度零交越與手部最高轉折點 (依據: multi_signal_hypothesis_consensus, wrist_vertical_amplitude)",
@@ -5924,6 +5931,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -5931,8 +5939,8 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 66566,
-          "confidence": 0.994,
+          "time_ms": 66500,
+          "confidence": 0.995,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "下桿加速階段：手腕由頂點向擊球區快速下降",
@@ -5946,16 +5954,16 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 66733,
-          "confidence": 0.65,
+          "confidence": 0.8,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration, audio_transient_consensus)",
-          "uncertainty_ms": 82,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "audio_transient_consensus",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -6919,26 +6927,27 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 66733,
-            "confidence": 0.65,
-            "uncertainty_ms": 82,
+            "confidence": 0.8,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
             "flags": [
-              "audio_kinematic_conflict"
+              "ambient_audio_rejected"
             ],
             "delta_ms": 0
           },
           "top": {
-            "refined_ms": 66400,
-            "confidence": 0.8,
+            "refined_ms": 66267,
+            "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
@@ -6950,12 +6959,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 66400,
+            "top_ms": 66267,
             "impact_ms": 66733,
             "addr_ms": 65267,
-            "downswing_ms": 333,
-            "backswing_ms": 1133,
-            "stroke_amplitude": 0.1792,
+            "downswing_ms": 466,
+            "backswing_ms": 1000,
+            "stroke_amplitude": 0.1812,
             "downswing_speed_peak": 0.001207,
             "decel_at_impact": 0.000767,
             "follow_amplitude": 0.1849,
@@ -6963,9 +6972,9 @@
             "readdress_calm_ratio": 12.0652,
             "audio_transient_ms": 66680,
             "audio_diff_ms": 53,
-            "total_score": 28.5,
+            "total_score": 25.5,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "acceptable_downswing (466ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=1.00)",
               "impact_deceleration_brake (0.0008)",
@@ -6979,12 +6988,12 @@
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 68333,
+            "top_ms": 68133,
             "impact_ms": 68667,
             "addr_ms": 66733,
-            "downswing_ms": 334,
-            "backswing_ms": 1600,
-            "stroke_amplitude": 0.0804,
+            "downswing_ms": 534,
+            "backswing_ms": 1400,
+            "stroke_amplitude": 0.0996,
             "downswing_speed_peak": 0.000513,
             "decel_at_impact": 0.00018,
             "follow_amplitude": 0.0279,
@@ -6992,12 +7001,12 @@
             "readdress_calm_ratio": 0.6544,
             "audio_transient_ms": 68760,
             "audio_diff_ms": 93,
-            "total_score": -2.5,
+            "total_score": -6.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)"
+              "adequate_stroke_amplitude"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
+              "slow_downswing_duration (534ms)",
               "weak_downswing_speed (ratio=0.42)",
               "weak_follow_through_waggle_like (amp=0.028)",
               "abrupt_cutoff_no_finish_hold"
@@ -7006,12 +7015,12 @@
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 68533,
+            "top_ms": 68467,
             "impact_ms": 69000,
             "addr_ms": 66733,
-            "downswing_ms": 467,
-            "backswing_ms": 1800,
-            "stroke_amplitude": 0.0665,
+            "downswing_ms": 533,
+            "backswing_ms": 1734,
+            "stroke_amplitude": 0.0776,
             "downswing_speed_peak": 0.000513,
             "decel_at_impact": 1e-05,
             "follow_amplitude": 0.0111,
@@ -7019,11 +7028,10 @@
             "readdress_calm_ratio": 0.6544,
             "audio_transient_ms": 68760,
             "audio_diff_ms": 240,
-            "total_score": -4.5,
-            "supporting_evidence": [
-              "acceptable_downswing (467ms)"
-            ],
+            "total_score": -9.5,
+            "supporting_evidence": [],
             "opposing_evidence": [
+              "slow_downswing_duration (533ms)",
               "shallow_stroke_amplitude",
               "weak_downswing_speed (ratio=0.42)",
               "weak_follow_through_waggle_like (amp=0.011)",
@@ -7086,7 +7094,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=66400ms, Imp=66733ms, 得分=28.5) 顯著優於次佳候選 (得分=-2.5)。關鍵優勢: golden_downswing_tempo (333ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_downswing_speed (ratio=0.42)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=66267ms, Imp=66733ms, 得分=25.5) 顯著優於次佳候選 (得分=-6.0)。關鍵優勢: acceptable_downswing (466ms), adequate_stroke_amplitude。次佳候選反對理由: slow_downswing_duration (534ms), weak_downswing_speed (ratio=0.42)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -7098,71 +7106,71 @@
       "label": "valid_swing",
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
-      "review_status": "needs_review",
+      "review_status": "auto_accepted",
       "review_flags": [
-        "audio_kinematic_conflict"
+        "ambient_audio_rejected"
       ],
-      "overall_score": 64.1,
+      "overall_score": 49.4,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 78.7,
+          "score": 67.4,
           "weight": 25.0,
           "raw_value": 5.83,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=5.83°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=5.83°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 54.8,
+          "score": 36.6,
           "weight": 15.0,
           "raw_value": 0.1843,
           "unit": "torso_ratio",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.184；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.184；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.0183,
+          "raw_value": 0.0317,
           "unit": "ratio",
           "confidence": 0.997,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.018（佔 60%）與同場多球重複性偏差 r=0.449（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.032（佔 60%）與同場多球重複性偏差 r=0.449（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0183,
+            "single_swing_plane_gap": 0.0317,
             "session_repeatability": 0.4493
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 44.3,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.67,
+          "raw_value": 1.19,
           "unit": "ratio",
-          "confidence": 0.65,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.67:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.799,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.19:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 64.5,
+          "score": 50.4,
           "weight": 20.0,
           "raw_value": 0.1662,
           "hold_ms": 5267.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 5267ms、下半身 2D 晃動比 0.166；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 5267ms、下半身 2D 晃動比 0.166；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 64.5,
-          "tempo_20": 44.3,
+          "finish_25": 50.4,
+          "tempo_20": 15.0,
           "clarity_15": 92.7,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -7174,7 +7182,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 76.5,
+      "ig_visual_score": 66.1,
       "events": {
         "address": {
           "event_name": "address",
@@ -7207,8 +7215,8 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 84133,
-          "confidence": 0.997,
+          "time_ms": 84067,
+          "confidence": 0.998,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "上桿中段手部持續上升軌跡",
@@ -7221,8 +7229,8 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 84433,
-          "confidence": 0.8,
+          "time_ms": 84367,
+          "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
           "rationale": "上桿頂點：速度零交越與手部最高轉折點 (依據: multi_signal_hypothesis_consensus, wrist_vertical_amplitude)",
@@ -7232,6 +7240,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -7239,8 +7248,8 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 84583,
-          "confidence": 0.997,
+          "time_ms": 84550,
+          "confidence": 0.996,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "下桿加速階段：手腕由頂點向擊球區快速下降",
@@ -7254,16 +7263,16 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 84733,
-          "confidence": 0.65,
+          "confidence": 0.799,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration, audio_transient_consensus)",
-          "uncertainty_ms": 82,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "audio_transient_consensus",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -8281,30 +8290,31 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 84733,
-            "confidence": 0.65,
-            "uncertainty_ms": 82,
+            "confidence": 0.799,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
             "flags": [
-              "audio_kinematic_conflict"
+              "ambient_audio_rejected"
             ],
             "delta_ms": 0
           },
           "top": {
-            "refined_ms": 84433,
-            "confidence": 0.8,
+            "refined_ms": 84367,
+            "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": 33
+            "delta_ms": 100
           }
         },
         "audio_status": "ok",
@@ -8312,12 +8322,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 84400,
+            "top_ms": 84267,
             "impact_ms": 84733,
             "addr_ms": 83267,
-            "downswing_ms": 333,
-            "backswing_ms": 1133,
-            "stroke_amplitude": 0.1641,
+            "downswing_ms": 466,
+            "backswing_ms": 1000,
+            "stroke_amplitude": 0.1644,
             "downswing_speed_peak": 0.001081,
             "decel_at_impact": 0.000963,
             "follow_amplitude": 0.2015,
@@ -8325,9 +8335,9 @@
             "readdress_calm_ratio": 10.8086,
             "audio_transient_ms": 84680,
             "audio_diff_ms": 53,
-            "total_score": 24.0,
+            "total_score": 21.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "acceptable_downswing (466ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=1.00)",
               "impact_deceleration_brake (0.0010)",
@@ -8336,34 +8346,6 @@
               "settled_readdress_before_takeaway"
             ],
             "opposing_evidence": [],
-            "is_ambiguous": false
-          },
-          {
-            "hypothesis_id": "cand-2",
-            "top_ms": 86533,
-            "impact_ms": 86867,
-            "addr_ms": 84733,
-            "downswing_ms": 334,
-            "backswing_ms": 1800,
-            "stroke_amplitude": 0.098,
-            "downswing_speed_peak": 0.000631,
-            "decel_at_impact": 0.000254,
-            "follow_amplitude": 0.0242,
-            "finish_hold_ms": 0,
-            "readdress_calm_ratio": 0.898,
-            "audio_transient_ms": 86740,
-            "audio_diff_ms": 127,
-            "total_score": 7.0,
-            "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
-              "adequate_stroke_amplitude",
-              "moderate_impact_speed (ratio=0.58)"
-            ],
-            "opposing_evidence": [
-              "weak_follow_through_waggle_like (amp=0.024)",
-              "abrupt_cutoff_no_finish_hold",
-              "isolated_background_audio (diff=127ms)"
-            ],
             "is_ambiguous": false
           },
           {
@@ -8394,13 +8376,41 @@
             "is_ambiguous": false
           },
           {
+            "hypothesis_id": "cand-2",
+            "top_ms": 86333,
+            "impact_ms": 86867,
+            "addr_ms": 84733,
+            "downswing_ms": 534,
+            "backswing_ms": 1600,
+            "stroke_amplitude": 0.1243,
+            "downswing_speed_peak": 0.000631,
+            "decel_at_impact": 0.000254,
+            "follow_amplitude": 0.0242,
+            "finish_hold_ms": 0,
+            "readdress_calm_ratio": 0.898,
+            "audio_transient_ms": 86740,
+            "audio_diff_ms": 127,
+            "total_score": -1.0,
+            "supporting_evidence": [
+              "adequate_stroke_amplitude",
+              "moderate_impact_speed (ratio=0.58)"
+            ],
+            "opposing_evidence": [
+              "slow_downswing_duration (534ms)",
+              "weak_follow_through_waggle_like (amp=0.024)",
+              "abrupt_cutoff_no_finish_hold",
+              "isolated_background_audio (diff=127ms)"
+            ],
+            "is_ambiguous": false
+          },
+          {
             "hypothesis_id": "cand-3",
-            "top_ms": 86200,
+            "top_ms": 86600,
             "impact_ms": 87133,
             "addr_ms": 84733,
-            "downswing_ms": 933,
-            "backswing_ms": 1467,
-            "stroke_amplitude": 0.1066,
+            "downswing_ms": 533,
+            "backswing_ms": 1867,
+            "stroke_amplitude": 0.0616,
             "downswing_speed_peak": 0.000631,
             "decel_at_impact": 6.4e-05,
             "follow_amplitude": 0.0002,
@@ -8408,13 +8418,13 @@
             "readdress_calm_ratio": 0.898,
             "audio_transient_ms": 87420,
             "audio_diff_ms": 287,
-            "total_score": -3.0,
+            "total_score": -4.5,
             "supporting_evidence": [
-              "adequate_stroke_amplitude",
               "moderate_impact_speed (ratio=0.58)"
             ],
             "opposing_evidence": [
-              "extreme_downswing_duration (933ms)",
+              "slow_downswing_duration (533ms)",
+              "shallow_stroke_amplitude",
               "weak_follow_through_waggle_like (amp=0.000)",
               "isolated_background_audio (diff=287ms)"
             ],
@@ -8449,7 +8459,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=84400ms, Imp=84733ms, 得分=24.0) 顯著優於次佳候選 (得分=7.0)。關鍵優勢: golden_downswing_tempo (333ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=0.024), abrupt_cutoff_no_finish_hold。",
+        "selection_rationale": "優勢裁決：候選1 (Top=84267ms, Imp=84733ms, 得分=21.0) 顯著優於次佳候選 (得分=0.5)。關鍵優勢: acceptable_downswing (466ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_downswing_speed (ratio=0.44)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -8462,68 +8472,70 @@
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
       "review_status": "auto_accepted",
-      "review_flags": [],
-      "overall_score": 67.1,
+      "review_flags": [
+        "ambient_audio_rejected"
+      ],
+      "overall_score": 54.3,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 73.1,
+          "score": 60.0,
           "weight": 25.0,
           "raw_value": 6.7,
           "unit": "deg_2d",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=6.70°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=6.70°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 48.2,
+          "score": 28.0,
           "weight": 15.0,
           "raw_value": 0.2025,
           "unit": "torso_ratio",
           "confidence": 0.998,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.203；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.203；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.0059,
+          "raw_value": 0.0177,
           "unit": "ratio",
-          "confidence": 0.995,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.006（佔 60%）與同場多球重複性偏差 r=0.329（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "confidence": 0.998,
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.018（佔 60%）與同場多球重複性偏差 r=0.329（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0059,
+            "single_swing_plane_gap": 0.0177,
             "session_repeatability": 0.3287
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 45.8,
+          "score": 18.8,
           "weight": 20.0,
-          "raw_value": 1.7,
+          "raw_value": 1.46,
           "unit": "ratio",
-          "confidence": 0.75,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.70:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.799,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.46:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 90.4,
+          "score": 86.6,
           "weight": 20.0,
           "raw_value": 0.0741,
           "hold_ms": 2333.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 2333ms、下半身 2D 晃動比 0.074；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 2333ms、下半身 2D 晃動比 0.074；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 90.4,
-          "tempo_20": 45.8,
+          "finish_25": 86.6,
+          "tempo_20": 18.8,
           "clarity_15": 94.9,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -8535,7 +8547,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 84.4,
+      "ig_visual_score": 77.4,
       "events": {
         "address": {
           "event_name": "address",
@@ -8568,8 +8580,8 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 104800,
-          "confidence": 0.995,
+          "time_ms": 104733,
+          "confidence": 0.998,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "上桿中段手部持續上升軌跡",
@@ -8582,7 +8594,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 105100,
+          "time_ms": 105067,
           "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -8593,6 +8605,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -8600,8 +8613,8 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 105266,
-          "confidence": 0.998,
+          "time_ms": 105250,
+          "confidence": 0.995,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "下桿加速階段：手腕由頂點向擊球區快速下降",
@@ -8615,15 +8628,15 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 105433,
-          "confidence": 0.75,
+          "confidence": 0.8,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration)",
-          "uncertainty_ms": 66,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -9263,28 +9276,31 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 105433,
-            "confidence": 0.75,
-            "uncertainty_ms": 66,
+            "confidence": 0.8,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
-            "flags": [],
+            "flags": [
+              "ambient_audio_rejected"
+            ],
             "delta_ms": -34
           },
           "top": {
-            "refined_ms": 105100,
+            "refined_ms": 105067,
             "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": -33
+            "delta_ms": 67
           }
         },
         "audio_status": "ok",
@@ -9292,12 +9308,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 105133,
+            "top_ms": 105000,
             "impact_ms": 105467,
             "addr_ms": 104133,
-            "downswing_ms": 334,
-            "backswing_ms": 1000,
-            "stroke_amplitude": 0.1744,
+            "downswing_ms": 467,
+            "backswing_ms": 867,
+            "stroke_amplitude": 0.1756,
             "downswing_speed_peak": 0.0011,
             "decel_at_impact": 0.00033,
             "follow_amplitude": 0.2012,
@@ -9305,9 +9321,9 @@
             "readdress_calm_ratio": 10.9995,
             "audio_transient_ms": 105380,
             "audio_diff_ms": 87,
-            "total_score": 26.0,
+            "total_score": 23.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "acceptable_downswing (467ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.95)",
               "impact_deceleration_brake (0.0003)",
@@ -9321,12 +9337,12 @@
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 106400,
+            "top_ms": 106200,
             "impact_ms": 106733,
-            "addr_ms": 104200,
-            "downswing_ms": 333,
-            "backswing_ms": 2200,
-            "stroke_amplitude": 0.1279,
+            "addr_ms": 104133,
+            "downswing_ms": 533,
+            "backswing_ms": 2067,
+            "stroke_amplitude": 0.1513,
             "downswing_speed_peak": 0.000897,
             "decel_at_impact": 8.7e-05,
             "follow_amplitude": 0.0236,
@@ -9334,14 +9350,14 @@
             "readdress_calm_ratio": 8.9707,
             "audio_transient_ms": 107160,
             "audio_diff_ms": 427,
-            "total_score": 13.0,
+            "total_score": 5.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.78)",
               "settled_readdress_before_takeaway"
             ],
             "opposing_evidence": [
+              "slow_downswing_duration (533ms)",
               "weak_follow_through_waggle_like (amp=0.024)",
               "isolated_background_audio (diff=427ms)"
             ],
@@ -9402,7 +9418,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=105133ms, Imp=105467ms, 得分=26.0) 顯著優於次佳候選 (得分=13.0)。關鍵優勢: golden_downswing_tempo (334ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=0.024), isolated_background_audio (diff=427ms)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=105000ms, Imp=105467ms, 得分=23.0) 顯著優於次佳候選 (得分=5.0)。關鍵優勢: acceptable_downswing (467ms), adequate_stroke_amplitude。次佳候選反對理由: slow_downswing_duration (533ms), weak_follow_through_waggle_like (amp=0.024)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -9415,68 +9431,70 @@
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
       "review_status": "auto_accepted",
-      "review_flags": [],
-      "overall_score": 73.0,
+      "review_flags": [
+        "ambient_audio_rejected"
+      ],
+      "overall_score": 64.8,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 95.3,
+          "score": 89.5,
           "weight": 25.0,
           "raw_value": 3.23,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=3.23°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=3.23°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 75.1,
+          "score": 63.0,
           "weight": 15.0,
           "raw_value": 0.1284,
           "unit": "torso_ratio",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.128；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.128；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 63.2,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.0889,
+          "raw_value": 0.0227,
           "unit": "ratio",
           "confidence": 0.995,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.089（佔 60%）與同場多球重複性偏差 r=0.380（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.023（佔 60%）與同場多球重複性偏差 r=0.380（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0889,
+            "single_swing_plane_gap": 0.0227,
             "session_repeatability": 0.3795
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 40.6,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.6,
+          "raw_value": 0.86,
           "unit": "ratio",
-          "confidence": 0.75,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.60:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.799,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=0.86:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 85.6,
+          "score": 79.9,
           "weight": 20.0,
           "raw_value": 0.0911,
           "hold_ms": 2200.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 2200ms、下半身 2D 晃動比 0.091；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 2200ms、下半身 2D 晃動比 0.091；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 85.6,
-          "tempo_20": 40.6,
+          "finish_25": 79.9,
+          "tempo_20": 15.0,
           "clarity_15": 93.2,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -9488,7 +9506,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 81.6,
+      "ig_visual_score": 74.4,
       "events": {
         "address": {
           "event_name": "address",
@@ -9521,7 +9539,7 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 110600,
+          "time_ms": 110533,
           "confidence": 0.995,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -9535,7 +9553,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 110867,
+          "time_ms": 110733,
           "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -9546,6 +9564,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -9553,8 +9572,8 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 111033,
-          "confidence": 0.998,
+          "time_ms": 110966,
+          "confidence": 0.995,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "下桿加速階段：手腕由頂點向擊球區快速下降",
@@ -9568,15 +9587,15 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 111200,
-          "confidence": 0.75,
+          "confidence": 0.8,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration)",
-          "uncertainty_ms": 66,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -10189,24 +10208,27 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 111200,
-            "confidence": 0.75,
-            "uncertainty_ms": 66,
+            "confidence": 0.8,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
-            "flags": [],
+            "flags": [
+              "ambient_audio_rejected"
+            ],
             "delta_ms": 0
           },
           "top": {
-            "refined_ms": 110867,
+            "refined_ms": 110733,
             "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
@@ -10218,12 +10240,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 110867,
+            "top_ms": 110733,
             "impact_ms": 111200,
             "addr_ms": 110000,
-            "downswing_ms": 333,
-            "backswing_ms": 867,
-            "stroke_amplitude": 0.1629,
+            "downswing_ms": 467,
+            "backswing_ms": 733,
+            "stroke_amplitude": 0.1722,
             "downswing_speed_peak": 0.000804,
             "decel_at_impact": 0.000711,
             "follow_amplitude": 0.1953,
@@ -10231,9 +10253,9 @@
             "readdress_calm_ratio": 8.0424,
             "audio_transient_ms": 111440,
             "audio_diff_ms": 240,
-            "total_score": 24.0,
+            "total_score": 21.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "acceptable_downswing (467ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.86)",
               "impact_deceleration_brake (0.0007)",
@@ -10248,12 +10270,12 @@
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 111933,
+            "top_ms": 111800,
             "impact_ms": 112267,
             "addr_ms": 111200,
-            "downswing_ms": 334,
-            "backswing_ms": 733,
-            "stroke_amplitude": 0.0867,
+            "downswing_ms": 467,
+            "backswing_ms": 600,
+            "stroke_amplitude": 0.0971,
             "downswing_speed_peak": 0.000753,
             "decel_at_impact": 0.000145,
             "follow_amplitude": -0.0188,
@@ -10261,14 +10283,14 @@
             "readdress_calm_ratio": 1.1993,
             "audio_transient_ms": 112240,
             "audio_diff_ms": 27,
-            "total_score": 10.0,
+            "total_score": 11.5,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "acceptable_downswing (467ms)",
+              "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.81)",
               "audio_aligned_with_strike (diff=27ms)"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
               "weak_follow_through_waggle_like (amp=-0.019)",
               "abrupt_cutoff_no_finish_hold"
             ],
@@ -10276,28 +10298,28 @@
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 112267,
+            "top_ms": 112067,
             "impact_ms": 112600,
             "addr_ms": 111200,
-            "downswing_ms": 333,
-            "backswing_ms": 1067,
-            "stroke_amplitude": 0.0699,
-            "downswing_speed_peak": 0.000609,
+            "downswing_ms": 533,
+            "backswing_ms": 867,
+            "stroke_amplitude": 0.136,
+            "downswing_speed_peak": 0.000753,
             "decel_at_impact": 0.000368,
             "follow_amplitude": 0.0016,
             "finish_hold_ms": 266,
-            "readdress_calm_ratio": 0.9692,
+            "readdress_calm_ratio": 1.1993,
             "audio_transient_ms": 112240,
             "audio_diff_ms": 360,
-            "total_score": 7.5,
+            "total_score": 7.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
-              "moderate_impact_speed (ratio=0.65)",
+              "adequate_stroke_amplitude",
+              "explosive_impact_speed (ratio=0.81)",
               "impact_deceleration_brake (0.0004)",
               "finish_balance_hold (266ms)"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
+              "slow_downswing_duration (533ms)",
               "weak_follow_through_waggle_like (amp=0.002)",
               "isolated_background_audio (diff=360ms)"
             ],
@@ -10330,7 +10352,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=110867ms, Imp=111200ms, 得分=24.0) 顯著優於次佳候選 (得分=10.0)。關鍵優勢: golden_downswing_tempo (333ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=-0.019)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=110733ms, Imp=111200ms, 得分=21.0) 顯著優於次佳候選 (得分=11.5)。關鍵優勢: acceptable_downswing (467ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=-0.019), abrupt_cutoff_no_finish_hold。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -10344,67 +10366,67 @@
       "confidence": 0.999,
       "review_status": "auto_accepted",
       "review_flags": [],
-      "overall_score": 77.5,
+      "overall_score": 68.6,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 98.1,
+          "score": 93.3,
           "weight": 25.0,
           "raw_value": 2.79,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=2.79°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=2.79°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 78.9,
+          "score": 67.8,
           "weight": 15.0,
           "raw_value": 0.1181,
           "unit": "torso_ratio",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.118；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.118；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.0386,
+          "raw_value": 0.0304,
           "unit": "ratio",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.039（佔 60%）與同場多球重複性偏差 r=0.369（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.030（佔 60%）與同場多球重複性偏差 r=0.369（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0386,
+            "single_swing_plane_gap": 0.0304,
             "session_repeatability": 0.3693
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 40.6,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.6,
+          "raw_value": 0.86,
           "unit": "ratio",
           "confidence": 0.75,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.60:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=0.86:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 93.1,
+          "score": 90.4,
           "weight": 20.0,
           "raw_value": 0.0645,
           "hold_ms": 2133.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 2133ms、下半身 2D 晃動比 0.065；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 2133ms、下半身 2D 晃動比 0.065；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 93.1,
-          "tempo_20": 40.6,
+          "finish_25": 90.4,
+          "tempo_20": 15.0,
           "clarity_15": 92.9,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -10416,7 +10438,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 83.7,
+      "ig_visual_score": 77.2,
       "events": {
         "address": {
           "event_name": "address",
@@ -10449,7 +10471,7 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 114467,
+          "time_ms": 114400,
           "confidence": 0.999,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -10463,7 +10485,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 114733,
+          "time_ms": 114600,
           "confidence": 0.8,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -10474,6 +10496,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -10481,7 +10504,7 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 114900,
+          "time_ms": 114833,
           "confidence": 0.999,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -11101,13 +11124,14 @@
             "delta_ms": 0
           },
           "top": {
-            "refined_ms": 114733,
+            "refined_ms": 114600,
             "confidence": 0.8,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
@@ -11119,12 +11143,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 114733,
+            "top_ms": 114600,
             "impact_ms": 115067,
             "addr_ms": 113800,
-            "downswing_ms": 334,
-            "backswing_ms": 933,
-            "stroke_amplitude": 0.1334,
+            "downswing_ms": 467,
+            "backswing_ms": 800,
+            "stroke_amplitude": 0.1505,
             "downswing_speed_peak": 0.000864,
             "decel_at_impact": 0.000419,
             "follow_amplitude": 0.1959,
@@ -11132,9 +11156,9 @@
             "readdress_calm_ratio": 8.6356,
             "audio_transient_ms": 114460,
             "audio_diff_ms": 607,
-            "total_score": 24.0,
+            "total_score": 21.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "acceptable_downswing (467ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.88)",
               "impact_deceleration_brake (0.0004)",
@@ -11149,12 +11173,12 @@
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 115800,
+            "top_ms": 115733,
             "impact_ms": 116133,
             "addr_ms": 113800,
-            "downswing_ms": 333,
-            "backswing_ms": 2000,
-            "stroke_amplitude": 0.1054,
+            "downswing_ms": 400,
+            "backswing_ms": 1933,
+            "stroke_amplitude": 0.1025,
             "downswing_speed_peak": 0.000793,
             "decel_at_impact": 0.000377,
             "follow_amplitude": 0.0008,
@@ -11164,7 +11188,7 @@
             "audio_diff_ms": 13,
             "total_score": 15.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "golden_downswing_tempo (400ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.81)",
               "impact_deceleration_brake (0.0004)",
@@ -11177,12 +11201,12 @@
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 116000,
+            "top_ms": 115467,
             "impact_ms": 116400,
             "addr_ms": 113800,
-            "downswing_ms": 400,
-            "backswing_ms": 2200,
-            "stroke_amplitude": 0.072,
+            "downswing_ms": 933,
+            "backswing_ms": 1667,
+            "stroke_amplitude": 0.1768,
             "downswing_speed_peak": 0.000793,
             "decel_at_impact": 7.7e-05,
             "follow_amplitude": -0.0025,
@@ -11190,33 +11214,6 @@
             "readdress_calm_ratio": 7.9274,
             "audio_transient_ms": 116400,
             "audio_diff_ms": 0,
-            "total_score": 8.5,
-            "supporting_evidence": [
-              "golden_downswing_tempo (400ms)",
-              "explosive_impact_speed (ratio=0.81)",
-              "settled_readdress_before_takeaway"
-            ],
-            "opposing_evidence": [
-              "shallow_stroke_amplitude",
-              "weak_follow_through_waggle_like (amp=-0.003)"
-            ],
-            "is_ambiguous": false
-          },
-          {
-            "hypothesis_id": "cand-4",
-            "top_ms": 115800,
-            "impact_ms": 116733,
-            "addr_ms": 113800,
-            "downswing_ms": 933,
-            "backswing_ms": 2000,
-            "stroke_amplitude": 0.166,
-            "downswing_speed_peak": 0.000793,
-            "decel_at_impact": 5.7e-05,
-            "follow_amplitude": 0.0032,
-            "finish_hold_ms": 67,
-            "readdress_calm_ratio": 7.9274,
-            "audio_transient_ms": 116400,
-            "audio_diff_ms": 333,
             "total_score": 2.0,
             "supporting_evidence": [
               "adequate_stroke_amplitude",
@@ -11225,13 +11222,38 @@
             ],
             "opposing_evidence": [
               "extreme_downswing_duration (933ms)",
+              "weak_follow_through_waggle_like (amp=-0.003)"
+            ],
+            "is_ambiguous": false
+          },
+          {
+            "hypothesis_id": "cand-4",
+            "top_ms": 116200,
+            "impact_ms": 116733,
+            "addr_ms": 114000,
+            "downswing_ms": 533,
+            "backswing_ms": 2200,
+            "stroke_amplitude": 0.0615,
+            "downswing_speed_peak": 0.000313,
+            "decel_at_impact": 5.7e-05,
+            "follow_amplitude": 0.0032,
+            "finish_hold_ms": 67,
+            "readdress_calm_ratio": 1.863,
+            "audio_transient_ms": 116400,
+            "audio_diff_ms": 333,
+            "total_score": -9.5,
+            "supporting_evidence": [],
+            "opposing_evidence": [
+              "slow_downswing_duration (533ms)",
+              "shallow_stroke_amplitude",
+              "weak_downswing_speed (ratio=0.32)",
               "weak_follow_through_waggle_like (amp=0.003)",
               "isolated_background_audio (diff=333ms)"
             ],
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=114733ms, Imp=115067ms, 得分=24.0) 顯著優於次佳候選 (得分=15.0)。關鍵優勢: golden_downswing_tempo (334ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=0.001)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=114600ms, Imp=115067ms, 得分=21.0) 顯著優於次佳候選 (得分=15.0)。關鍵優勢: acceptable_downswing (467ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=0.001)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -11243,71 +11265,71 @@
       "label": "valid_swing",
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
-      "review_status": "needs_review",
+      "review_status": "auto_accepted",
       "review_flags": [
-        "audio_kinematic_conflict"
+        "ambient_audio_rejected"
       ],
-      "overall_score": 69.3,
+      "overall_score": 52.0,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
-          "score": 55.8,
+          "score": 37.1,
           "weight": 25.0,
           "raw_value": 9.4,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=9.40°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=9.40°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 71.4,
+          "score": 58.1,
           "weight": 15.0,
           "raw_value": 0.1387,
           "unit": "torso_ratio",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.139；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.139；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 57.4,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.115,
+          "raw_value": 0.0144,
           "unit": "ratio",
-          "confidence": 0.997,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.115（佔 60%）與同場多球重複性偏差 r=0.348（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "confidence": 0.996,
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.014（佔 60%）與同場多球重複性偏差 r=0.348（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.115,
+            "single_swing_plane_gap": 0.0144,
             "session_repeatability": 0.348
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 76.3,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 2.29,
+          "raw_value": 1.06,
           "unit": "ratio",
-          "confidence": 0.65,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=2.29:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.799,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.06:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 89.4,
+          "score": 85.2,
           "weight": 20.0,
           "raw_value": 0.0776,
           "hold_ms": 2200.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 2200ms、下半身 2D 晃動比 0.078；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 2200ms、下半身 2D 晃動比 0.078；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 89.4,
-          "tempo_20": 76.3,
+          "finish_25": 85.2,
+          "tempo_20": 15.0,
           "clarity_15": 94.0,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -11319,7 +11341,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 90.8,
+      "ig_visual_score": 76.0,
       "events": {
         "address": {
           "event_name": "address",
@@ -11352,7 +11374,7 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 120267,
+          "time_ms": 120133,
           "confidence": 0.997,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
@@ -11366,7 +11388,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 120633,
+          "time_ms": 120433,
           "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -11377,6 +11399,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -11384,8 +11407,8 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 120800,
-          "confidence": 0.999,
+          "time_ms": 120700,
+          "confidence": 0.996,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "下桿加速階段：手腕由頂點向擊球區快速下降",
@@ -11399,15 +11422,15 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 120967,
-          "confidence": 0.65,
+          "confidence": 0.8,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration, audio_transient_consensus)",
-          "uncertainty_ms": 82,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -12047,26 +12070,27 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 120967,
-            "confidence": 0.65,
-            "uncertainty_ms": 82,
+            "confidence": 0.8,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
             "flags": [
-              "audio_kinematic_conflict"
+              "ambient_audio_rejected"
             ],
             "delta_ms": -33
           },
           "top": {
-            "refined_ms": 120633,
+            "refined_ms": 120433,
             "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
@@ -12078,12 +12102,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 120667,
+            "top_ms": 120467,
             "impact_ms": 121000,
             "addr_ms": 119400,
-            "downswing_ms": 333,
-            "backswing_ms": 1267,
-            "stroke_amplitude": 0.1433,
+            "downswing_ms": 533,
+            "backswing_ms": 1067,
+            "stroke_amplitude": 0.1659,
             "downswing_speed_peak": 0.00087,
             "decel_at_impact": 0.0,
             "follow_amplitude": 0.1972,
@@ -12091,9 +12115,8 @@
             "readdress_calm_ratio": 8.7021,
             "audio_transient_ms": 121060,
             "audio_diff_ms": 60,
-            "total_score": 26.5,
+            "total_score": 18.5,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.96)",
               "full_follow_through_extension (amp=0.197)",
@@ -12101,17 +12124,19 @@
               "settled_readdress_before_takeaway",
               "audio_aligned_with_strike (diff=60ms)"
             ],
-            "opposing_evidence": [],
+            "opposing_evidence": [
+              "slow_downswing_duration (533ms)"
+            ],
             "is_ambiguous": false
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 121600,
+            "top_ms": 121333,
             "impact_ms": 121933,
             "addr_ms": 119400,
-            "downswing_ms": 333,
-            "backswing_ms": 2200,
-            "stroke_amplitude": 0.1064,
+            "downswing_ms": 600,
+            "backswing_ms": 1933,
+            "stroke_amplitude": 0.1319,
             "downswing_speed_peak": 0.000877,
             "decel_at_impact": 1.2e-05,
             "follow_amplitude": -0.0209,
@@ -12119,41 +12144,42 @@
             "readdress_calm_ratio": 8.7704,
             "audio_transient_ms": 121900,
             "audio_diff_ms": 33,
-            "total_score": 17.5,
+            "total_score": 9.5,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.97)",
               "settled_readdress_before_takeaway",
               "audio_aligned_with_strike (diff=33ms)"
             ],
             "opposing_evidence": [
+              "slow_downswing_duration (600ms)",
               "weak_follow_through_waggle_like (amp=-0.021)"
             ],
             "is_ambiguous": false
           },
           {
             "hypothesis_id": "cand-3",
-            "top_ms": 121933,
+            "top_ms": 121800,
             "impact_ms": 122333,
-            "addr_ms": 121000,
-            "downswing_ms": 400,
-            "backswing_ms": 933,
-            "stroke_amplitude": 0.0614,
-            "downswing_speed_peak": 0.000865,
+            "addr_ms": 119600,
+            "downswing_ms": 533,
+            "backswing_ms": 2200,
+            "stroke_amplitude": 0.139,
+            "downswing_speed_peak": 0.000877,
             "decel_at_impact": 8.3e-05,
             "follow_amplitude": -0.0001,
             "finish_hold_ms": 133,
-            "readdress_calm_ratio": 1.3401,
+            "readdress_calm_ratio": 7.1129,
             "audio_transient_ms": 122380,
             "audio_diff_ms": 47,
-            "total_score": 6.5,
+            "total_score": 5.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (400ms)",
-              "explosive_impact_speed (ratio=0.96)"
+              "adequate_stroke_amplitude",
+              "explosive_impact_speed (ratio=0.97)",
+              "settled_readdress_before_takeaway"
             ],
             "opposing_evidence": [
-              "shallow_stroke_amplitude",
+              "slow_downswing_duration (533ms)",
               "weak_follow_through_waggle_like (amp=-0.000)"
             ],
             "is_ambiguous": false
@@ -12214,7 +12240,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=120667ms, Imp=121000ms, 得分=26.5) 顯著優於次佳候選 (得分=17.5)。關鍵優勢: golden_downswing_tempo (333ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=-0.021)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=120467ms, Imp=121000ms, 得分=18.5) 顯著優於次佳候選 (得分=9.5)。關鍵優勢: adequate_stroke_amplitude, explosive_impact_speed (ratio=0.96)。次佳候選反對理由: slow_downswing_duration (600ms), weak_follow_through_waggle_like (amp=-0.021)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -12226,11 +12252,11 @@
       "label": "valid_swing",
       "ball_strike_status": "estimated_strike",
       "confidence": 0.999,
-      "review_status": "needs_review",
+      "review_status": "auto_accepted",
       "review_flags": [
-        "audio_kinematic_conflict"
+        "ambient_audio_rejected"
       ],
-      "overall_score": 77.5,
+      "overall_score": 66.8,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
@@ -12239,58 +12265,58 @@
           "raw_value": 1.8,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=1.80°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=1.80°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 74.4,
+          "score": 62.0,
           "weight": 15.0,
           "raw_value": 0.1305,
           "unit": "torso_ratio",
           "confidence": 0.999,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.131；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.131；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 70.0,
           "weight": 20.0,
-          "raw_value": 0.0151,
+          "raw_value": 0.0302,
           "unit": "ratio",
           "confidence": 0.997,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.015（佔 60%）與同場多球重複性偏差 r=0.467（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.030（佔 60%）與同場多球重複性偏差 r=0.467（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.0151,
+            "single_swing_plane_gap": 0.0302,
             "session_repeatability": 0.4667
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 51.0,
+          "score": 15.0,
           "weight": 20.0,
-          "raw_value": 1.8,
+          "raw_value": 0.87,
           "unit": "ratio",
-          "confidence": 0.65,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.80:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.8,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=0.87:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 83.8,
+          "score": 77.3,
           "weight": 20.0,
           "raw_value": 0.0977,
           "hold_ms": 4133.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 4133ms、下半身 2D 晃動比 0.098；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 4133ms、下半身 2D 晃動比 0.098；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.9,
-          "finish_25": 83.8,
-          "tempo_20": 51.0,
+          "finish_25": 77.3,
+          "tempo_20": 15.0,
           "clarity_15": 94.4,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -12302,7 +12328,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 83.6,
+      "ig_visual_score": 73.8,
       "events": {
         "address": {
           "event_name": "address",
@@ -12335,8 +12361,8 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 124800,
-          "confidence": 0.998,
+          "time_ms": 124733,
+          "confidence": 0.999,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "上桿中段手部持續上升軌跡",
@@ -12349,8 +12375,8 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 125133,
-          "confidence": 0.799,
+          "time_ms": 124967,
+          "confidence": 0.8,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
           "rationale": "上桿頂點：速度零交越與手部最高轉折點 (依據: multi_signal_hypothesis_consensus, wrist_vertical_amplitude)",
@@ -12360,6 +12386,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -12367,8 +12394,8 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 125300,
-          "confidence": 0.998,
+          "time_ms": 125217,
+          "confidence": 0.997,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "下桿加速階段：手腕由頂點向擊球區快速下降",
@@ -12382,16 +12409,16 @@
         "impact_estimated": {
           "event_name": "impact_estimated",
           "time_ms": 125467,
-          "confidence": 0.65,
+          "confidence": 0.8,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration, audio_transient_consensus)",
-          "uncertainty_ms": 82,
+          "uncertainty_ms": 59,
           "detection_sources": [
             "wrist_kinematic_deceleration",
             "audio_transient_consensus",
             "wrist_kinematic_lowest_point",
-            "local_high_fps_refinement"
+            "ambient_noise_rejected"
           ],
           "sampling_resolution_ms": 33,
           "event_timing_error_ms": null
@@ -13274,30 +13301,31 @@
         "local_refinements": {
           "impact": {
             "refined_ms": 125467,
-            "confidence": 0.65,
-            "uncertainty_ms": 82,
+            "confidence": 0.8,
+            "uncertainty_ms": 59,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_kinematic_lowest_point",
-              "local_high_fps_refinement"
+              "ambient_noise_rejected"
             ],
             "flags": [
-              "audio_kinematic_conflict"
+              "ambient_audio_rejected"
             ],
             "delta_ms": 0
           },
           "top": {
-            "refined_ms": 125133,
-            "confidence": 0.799,
+            "refined_ms": 124967,
+            "confidence": 0.8,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": 0
+            "delta_ms": -33
           }
         },
         "audio_status": "ok",
@@ -13305,12 +13333,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 125133,
+            "top_ms": 125000,
             "impact_ms": 125467,
             "addr_ms": 124133,
-            "downswing_ms": 334,
-            "backswing_ms": 1000,
-            "stroke_amplitude": 0.1469,
+            "downswing_ms": 467,
+            "backswing_ms": 867,
+            "stroke_amplitude": 0.1543,
             "downswing_speed_peak": 0.000896,
             "decel_at_impact": 0.000285,
             "follow_amplitude": 0.2058,
@@ -13318,9 +13346,9 @@
             "readdress_calm_ratio": 8.9554,
             "audio_transient_ms": 125420,
             "audio_diff_ms": 47,
-            "total_score": 26.5,
+            "total_score": 23.5,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "acceptable_downswing (467ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=1.00)",
               "full_follow_through_extension (amp=0.206)",
@@ -13333,12 +13361,12 @@
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 126400,
+            "top_ms": 126267,
             "impact_ms": 126733,
-            "addr_ms": 124200,
-            "downswing_ms": 333,
-            "backswing_ms": 2200,
-            "stroke_amplitude": 0.1318,
+            "addr_ms": 124133,
+            "downswing_ms": 466,
+            "backswing_ms": 2134,
+            "stroke_amplitude": 0.1443,
             "downswing_speed_peak": 0.000842,
             "decel_at_impact": 0.000323,
             "follow_amplitude": 0.0337,
@@ -13346,9 +13374,9 @@
             "readdress_calm_ratio": 8.4235,
             "audio_transient_ms": 126160,
             "audio_diff_ms": 573,
-            "total_score": 19.5,
+            "total_score": 16.5,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "acceptable_downswing (466ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.94)",
               "impact_deceleration_brake (0.0003)",
@@ -13417,7 +13445,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=125133ms, Imp=125467ms, 得分=26.5) 顯著優於次佳候選 (得分=19.5)。關鍵優勢: golden_downswing_tempo (334ms), adequate_stroke_amplitude。次佳候選反對理由: isolated_background_audio (diff=573ms)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=125000ms, Imp=125467ms, 得分=23.5) 顯著優於次佳候選 (得分=16.5)。關鍵優勢: acceptable_downswing (467ms), adequate_stroke_amplitude。次佳候選反對理由: isolated_background_audio (diff=573ms)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -13431,67 +13459,67 @@
       "confidence": 0.998,
       "review_status": "auto_accepted",
       "review_flags": [],
-      "overall_score": 74.8,
+      "overall_score": 65.8,
       "score_breakdown": {
         "spine_tilt_stability": {
           "label": "軀幹前傾穩定",
           "score": 100.0,
           "weight": 25.0,
-          "raw_value": 1.73,
+          "raw_value": 0.26,
           "unit": "deg_2d",
           "confidence": 1.0,
-          "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
-          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=1.73°；Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+          "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
+          "how_calculated": "比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ=0.26°；Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
         },
         "head_stability": {
           "label": "頭部相對位移",
-          "score": 61.0,
+          "score": 44.7,
           "weight": 15.0,
           "raw_value": 0.1672,
           "unit": "torso_ratio",
           "confidence": 0.996,
-          "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
-          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.167；r ≤ 0.06 得 100 分，位移越大扣分越多。"
+          "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
+          "how_calculated": "計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r=0.167；r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
         },
         "path_repeatability": {
           "label": "手部路徑間隙與重複性",
-          "score": 72.0,
+          "score": 65.4,
           "weight": 20.0,
-          "raw_value": 0.023,
+          "raw_value": 0.0672,
           "unit": "ratio",
-          "confidence": 0.995,
-          "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
-          "how_calculated": "融合單球上下桿手部平面差距 d=0.023（佔 60%）與同場多球重複性偏差 r=0.460（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
+          "confidence": 0.994,
+          "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
+          "how_calculated": "融合單球上下桿手部平面差距 d=0.067（佔 60%）與同場多球重複性偏差 r=0.460（佔 40%）；僅衡量手部 2D 投影軌跡，不代表真實桿頭路徑。",
           "details": {
-            "single_swing_plane_gap": 0.023,
+            "single_swing_plane_gap": 0.0672,
             "session_repeatability": 0.4598
           }
         },
         "tempo_consistency": {
           "label": "上下桿節奏一致性",
-          "score": 45.3,
+          "score": 27.6,
           "weight": 20.0,
-          "raw_value": 1.69,
+          "raw_value": 1.6,
           "unit": "ratio",
-          "confidence": 0.75,
-          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
-          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.69:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+          "confidence": 0.799,
+          "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
+          "how_calculated": "依上桿時間與下桿時間比值 ratio=1.60:1 與基準 3.0:1 之差距計算；差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
         },
         "finish_balance": {
           "label": "收桿姿勢穩定",
-          "score": 85.7,
+          "score": 77.4,
           "weight": 20.0,
-          "raw_value": 0.0908,
-          "hold_ms": 2267.0,
+          "raw_value": 0.0976,
+          "hold_ms": 2334.0,
           "unit": "sway_ratio",
           "confidence": 1.0,
-          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
-          "how_calculated": "收桿停留時間 2267ms、下半身 2D 晃動比 0.091；停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+          "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
+          "how_calculated": "收桿停留時間 2334ms、下半身 2D 晃動比 0.098；停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
         },
         "ig_visual_breakdown": {
           "framing_30": 99.8,
-          "finish_25": 85.7,
-          "tempo_20": 45.3,
+          "finish_25": 77.4,
+          "tempo_20": 27.6,
           "clarity_15": 91.3,
           "clip_margin_10": null,
           "valid_weight_coverage": 0.9,
@@ -13503,7 +13531,7 @@
           "note": "IG 精選分數僅評估畫面完整度、收桿平穩、真實剪輯緩衝與視覺流暢度，不代表實際擊球距離或球速。"
         }
       },
-      "ig_visual_score": 82.4,
+      "ig_visual_score": 76.1,
       "events": {
         "address": {
           "event_name": "address",
@@ -13536,8 +13564,8 @@
         },
         "backswing": {
           "event_name": "backswing",
-          "time_ms": 136133,
-          "confidence": 0.994,
+          "time_ms": 136067,
+          "confidence": 0.996,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "上桿中段手部持續上升軌跡",
@@ -13550,7 +13578,7 @@
         },
         "top": {
           "event_name": "top",
-          "time_ms": 136433,
+          "time_ms": 136400,
           "confidence": 0.799,
           "detection_source": "multi_signal_top_consensus",
           "model_version": "pose-v1",
@@ -13561,6 +13589,7 @@
             "wrist_vertical_amplitude",
             "wrist_y_local_crest",
             "local_high_fps_refinement",
+            "wrist_velocity_zero_crossing",
             "downswing_tempo_constrained"
           ],
           "sampling_resolution_ms": 33,
@@ -13568,8 +13597,8 @@
         },
         "downswing": {
           "event_name": "downswing",
-          "time_ms": 136600,
-          "confidence": 0.995,
+          "time_ms": 136566,
+          "confidence": 0.994,
           "detection_source": "multi_signal_kinematics",
           "model_version": "pose-v1",
           "rationale": "下桿加速階段：手腕由頂點向擊球區快速下降",
@@ -13582,15 +13611,15 @@
         },
         "impact_estimated": {
           "event_name": "impact_estimated",
-          "time_ms": 136767,
-          "confidence": 0.75,
+          "time_ms": 136733,
+          "confidence": 0.88,
           "detection_source": "multi_signal_impact_consensus",
           "model_version": "pose-v1",
           "rationale": "疑似擊球瞬間（estimated）：下桿速度制動與手部最低點交會 (依據: wrist_kinematic_deceleration)",
-          "uncertainty_ms": 66,
+          "uncertainty_ms": 40,
           "detection_sources": [
             "wrist_kinematic_deceleration",
-            "wrist_kinematic_lowest_point",
+            "audio_transient_synchronized",
             "local_high_fps_refinement"
           ],
           "sampling_resolution_ms": 33,
@@ -14212,29 +14241,30 @@
         },
         "local_refinements": {
           "impact": {
-            "refined_ms": 136767,
-            "confidence": 0.75,
-            "uncertainty_ms": 66,
+            "refined_ms": 136733,
+            "confidence": 0.88,
+            "uncertainty_ms": 40,
             "sampling_resolution_ms": 33,
             "sources": [
-              "wrist_kinematic_lowest_point",
+              "audio_transient_synchronized",
               "local_high_fps_refinement"
             ],
             "flags": [],
-            "delta_ms": -33
+            "delta_ms": -67
           },
           "top": {
-            "refined_ms": 136433,
+            "refined_ms": 136400,
             "confidence": 0.799,
             "uncertainty_ms": 73,
             "sampling_resolution_ms": 33,
             "sources": [
               "wrist_y_local_crest",
               "local_high_fps_refinement",
+              "wrist_velocity_zero_crossing",
               "downswing_tempo_constrained"
             ],
             "flags": [],
-            "delta_ms": -34
+            "delta_ms": 67
           }
         },
         "audio_status": "ok",
@@ -14242,12 +14272,12 @@
         "hypotheses": [
           {
             "hypothesis_id": "cand-1",
-            "top_ms": 136467,
+            "top_ms": 136333,
             "impact_ms": 136800,
             "addr_ms": 135333,
-            "downswing_ms": 333,
-            "backswing_ms": 1134,
-            "stroke_amplitude": 0.1356,
+            "downswing_ms": 467,
+            "backswing_ms": 1000,
+            "stroke_amplitude": 0.1378,
             "downswing_speed_peak": 0.000961,
             "decel_at_impact": 0.000423,
             "follow_amplitude": 0.1878,
@@ -14255,9 +14285,9 @@
             "readdress_calm_ratio": 9.6134,
             "audio_transient_ms": 136720,
             "audio_diff_ms": 80,
-            "total_score": 26.0,
+            "total_score": 23.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (333ms)",
+              "acceptable_downswing (467ms)",
               "adequate_stroke_amplitude",
               "explosive_impact_speed (ratio=0.80)",
               "impact_deceleration_brake (0.0004)",
@@ -14271,22 +14301,22 @@
           },
           {
             "hypothesis_id": "cand-2",
-            "top_ms": 137933,
+            "top_ms": 137800,
             "impact_ms": 138267,
-            "addr_ms": 135733,
-            "downswing_ms": 334,
+            "addr_ms": 135600,
+            "downswing_ms": 467,
             "backswing_ms": 2200,
-            "stroke_amplitude": 0.1081,
+            "stroke_amplitude": 0.1242,
             "downswing_speed_peak": 0.000746,
             "decel_at_impact": 0.000178,
             "follow_amplitude": 0.0218,
             "finish_hold_ms": 133,
-            "readdress_calm_ratio": 2.2545,
+            "readdress_calm_ratio": 4.3893,
             "audio_transient_ms": 138360,
             "audio_diff_ms": 93,
-            "total_score": 10.0,
+            "total_score": 7.0,
             "supporting_evidence": [
-              "golden_downswing_tempo (334ms)",
+              "acceptable_downswing (467ms)",
               "adequate_stroke_amplitude",
               "moderate_impact_speed (ratio=0.62)",
               "settled_readdress_before_takeaway"
@@ -14323,7 +14353,7 @@
             "is_ambiguous": false
           }
         ],
-        "selection_rationale": "優勢裁決：候選1 (Top=136467ms, Imp=136800ms, 得分=26.0) 顯著優於次佳候選 (得分=10.0)。關鍵優勢: golden_downswing_tempo (333ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=0.022)。",
+        "selection_rationale": "優勢裁決：候選1 (Top=136333ms, Imp=136800ms, 得分=23.0) 顯著優於次佳候選 (得分=7.0)。關鍵優勢: acceptable_downswing (467ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=0.022)。",
         "is_ambiguous": false,
         "unreliable_for_ranking": false
       }
@@ -14337,108 +14367,108 @@
         "sequence_no": 9,
         "start_ms": 113400,
         "end_ms": 117000,
-        "category_score": 77.5,
-        "overall_score": 77.5,
+        "category_score": 68.6,
+        "overall_score": 68.6,
         "confidence": 0.999,
-        "reason": "軀幹前傾穩定 Δ=2.8°，動作總分 77.5 分",
+        "reason": "軀幹前傾穩定 Δ=2.8°，動作總分 68.6 分",
         "manual_pinned": false
       },
       {
         "rank": 2,
-        "segment_id": "swing-12",
-        "sequence_no": 12,
-        "start_ms": 135000,
-        "end_ms": 138900,
-        "category_score": 74.8,
-        "overall_score": 74.8,
-        "confidence": 0.998,
-        "reason": "軀幹前傾穩定 Δ=1.7°，動作總分 74.8 分",
+        "segment_id": "swing-11",
+        "sequence_no": 11,
+        "start_ms": 123733,
+        "end_ms": 129400,
+        "category_score": 66.8,
+        "overall_score": 66.8,
+        "confidence": 0.999,
+        "reason": "軀幹前傾穩定 Δ=1.8°，動作總分 66.8 分",
         "manual_pinned": false
       },
       {
         "rank": 3,
-        "segment_id": "swing-8",
-        "sequence_no": 8,
-        "start_ms": 109600,
-        "end_ms": 113200,
-        "category_score": 73.0,
-        "overall_score": 73.0,
-        "confidence": 0.999,
-        "reason": "軀幹前傾穩定 Δ=3.2°，動作總分 73.0 分",
+        "segment_id": "swing-12",
+        "sequence_no": 12,
+        "start_ms": 135000,
+        "end_ms": 138900,
+        "category_score": 65.8,
+        "overall_score": 65.8,
+        "confidence": 0.998,
+        "reason": "軀幹前傾穩定 Δ=0.3°，動作總分 65.8 分",
         "manual_pinned": false
       },
       {
         "rank": 4,
-        "segment_id": "swing-3",
-        "sequence_no": 3,
-        "start_ms": 36933,
-        "end_ms": 44100,
-        "category_score": 67.5,
-        "overall_score": 67.5,
+        "segment_id": "swing-8",
+        "sequence_no": 8,
+        "start_ms": 109600,
+        "end_ms": 113200,
+        "category_score": 64.8,
+        "overall_score": 64.8,
         "confidence": 0.999,
-        "reason": "軀幹前傾穩定 Δ=3.0°，動作總分 67.5 分",
+        "reason": "軀幹前傾穩定 Δ=3.2°，動作總分 64.8 分",
         "manual_pinned": false
       },
       {
         "rank": 5,
-        "segment_id": "swing-7",
-        "sequence_no": 7,
-        "start_ms": 103733,
-        "end_ms": 107600,
-        "category_score": 67.1,
-        "overall_score": 67.1,
+        "segment_id": "swing-2",
+        "sequence_no": 2,
+        "start_ms": 24067,
+        "end_ms": 31000,
+        "category_score": 62.1,
+        "overall_score": 62.1,
         "confidence": 0.999,
-        "reason": "軀幹前傾穩定 Δ=6.7°，動作總分 67.1 分",
+        "reason": "軀幹前傾穩定 Δ=2.5°，動作總分 62.1 分",
         "manual_pinned": false
       }
     ],
     "tempo": [
       {
         "rank": 1,
-        "segment_id": "swing-7",
-        "sequence_no": 7,
-        "start_ms": 103733,
-        "end_ms": 107600,
-        "category_score": 45.8,
-        "overall_score": 67.1,
-        "confidence": 0.999,
-        "reason": "上下桿時間比 1.70:1（標準 3.0:1），節奏得分 45.8 分",
-        "manual_pinned": false
-      },
-      {
-        "rank": 2,
         "segment_id": "swing-12",
         "sequence_no": 12,
         "start_ms": 135000,
         "end_ms": 138900,
-        "category_score": 45.3,
-        "overall_score": 74.8,
+        "category_score": 27.6,
+        "overall_score": 65.8,
         "confidence": 0.998,
-        "reason": "上下桿時間比 1.69:1（標準 3.0:1），節奏得分 45.3 分",
+        "reason": "上下桿時間比 1.60:1（標準 3.0:1），節奏得分 27.6 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 2,
+        "segment_id": "swing-7",
+        "sequence_no": 7,
+        "start_ms": 103733,
+        "end_ms": 107600,
+        "category_score": 18.8,
+        "overall_score": 54.3,
+        "confidence": 0.999,
+        "reason": "上下桿時間比 1.46:1（標準 3.0:1），節奏得分 18.8 分",
         "manual_pinned": false
       },
       {
         "rank": 3,
-        "segment_id": "swing-8",
-        "sequence_no": 8,
-        "start_ms": 109600,
-        "end_ms": 113200,
-        "category_score": 40.6,
-        "overall_score": 73.0,
+        "segment_id": "swing-1",
+        "sequence_no": 1,
+        "start_ms": 9200,
+        "end_ms": 16300,
+        "category_score": 15.0,
+        "overall_score": 54.0,
         "confidence": 0.999,
-        "reason": "上下桿時間比 1.60:1（標準 3.0:1），節奏得分 40.6 分",
+        "reason": "上下桿時間比 1.33:1（標準 3.0:1），節奏得分 15.0 分",
         "manual_pinned": false
       },
       {
         "rank": 4,
-        "segment_id": "swing-9",
-        "sequence_no": 9,
-        "start_ms": 113400,
-        "end_ms": 117000,
-        "category_score": 40.6,
-        "overall_score": 77.5,
+        "segment_id": "swing-2",
+        "sequence_no": 2,
+        "start_ms": 24067,
+        "end_ms": 31000,
+        "category_score": 15.0,
+        "overall_score": 62.1,
         "confidence": 0.999,
-        "reason": "上下桿時間比 1.60:1（標準 3.0:1），節奏得分 40.6 分",
+        "reason": "上下桿時間比 1.28:1（標準 3.0:1），節奏得分 15.0 分",
         "manual_pinned": false
       },
       {
@@ -14447,10 +14477,10 @@
         "sequence_no": 3,
         "start_ms": 36933,
         "end_ms": 44100,
-        "category_score": 25.2,
-        "overall_score": 67.5,
+        "category_score": 15.0,
+        "overall_score": 59.0,
         "confidence": 0.999,
-        "reason": "上下桿時間比 1.30:1（標準 3.0:1），節奏得分 25.2 分",
+        "reason": "上下桿時間比 1.09:1（標準 3.0:1），節奏得分 15.0 分",
         "manual_pinned": false
       }
     ],
@@ -14461,10 +14491,10 @@
         "sequence_no": 9,
         "start_ms": 113400,
         "end_ms": 117000,
-        "category_score": 93.1,
-        "overall_score": 77.5,
+        "category_score": 90.4,
+        "overall_score": 68.6,
         "confidence": 0.999,
-        "reason": "收桿停頓 2133ms、晃動比 0.065，收桿得分 93.1 分",
+        "reason": "收桿停頓 2133ms、晃動比 0.065，收桿得分 90.4 分",
         "manual_pinned": false
       },
       {
@@ -14473,10 +14503,10 @@
         "sequence_no": 7,
         "start_ms": 103733,
         "end_ms": 107600,
-        "category_score": 90.4,
-        "overall_score": 67.1,
+        "category_score": 86.6,
+        "overall_score": 54.3,
         "confidence": 0.999,
-        "reason": "收桿停頓 2333ms、晃動比 0.074，收桿得分 90.4 分",
+        "reason": "收桿停頓 2333ms、晃動比 0.074，收桿得分 86.6 分",
         "manual_pinned": false
       },
       {
@@ -14485,22 +14515,84 @@
         "sequence_no": 10,
         "start_ms": 119000,
         "end_ms": 123000,
-        "category_score": 89.4,
-        "overall_score": 69.3,
+        "category_score": 85.2,
+        "overall_score": 52.0,
         "confidence": 0.999,
-        "reason": "收桿停頓 2200ms、晃動比 0.078，收桿得分 89.4 分",
+        "reason": "收桿停頓 2200ms、晃動比 0.078，收桿得分 85.2 分",
         "manual_pinned": false
       },
       {
         "rank": 4,
+        "segment_id": "swing-8",
+        "sequence_no": 8,
+        "start_ms": 109600,
+        "end_ms": 113200,
+        "category_score": 79.9,
+        "overall_score": 64.8,
+        "confidence": 0.999,
+        "reason": "收桿停頓 2200ms、晃動比 0.091，收桿得分 79.9 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 5,
         "segment_id": "swing-12",
         "sequence_no": 12,
         "start_ms": 135000,
         "end_ms": 138900,
-        "category_score": 85.7,
-        "overall_score": 74.8,
+        "category_score": 77.4,
+        "overall_score": 65.8,
         "confidence": 0.998,
-        "reason": "收桿停頓 2267ms、晃動比 0.091，收桿得分 85.7 分",
+        "reason": "收桿停頓 2334ms、晃動比 0.098，收桿得分 77.4 分",
+        "manual_pinned": false
+      }
+    ],
+    "ig": [
+      {
+        "rank": 1,
+        "segment_id": "swing-7",
+        "sequence_no": 7,
+        "start_ms": 103733,
+        "end_ms": 107600,
+        "category_score": 77.4,
+        "overall_score": 54.3,
+        "confidence": 0.999,
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 77.4 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 2,
+        "segment_id": "swing-9",
+        "sequence_no": 9,
+        "start_ms": 113400,
+        "end_ms": 117000,
+        "category_score": 77.2,
+        "overall_score": 68.6,
+        "confidence": 0.999,
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 77.2 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 3,
+        "segment_id": "swing-12",
+        "sequence_no": 12,
+        "start_ms": 135000,
+        "end_ms": 138900,
+        "category_score": 76.1,
+        "overall_score": 65.8,
+        "confidence": 0.998,
+        "reason": "畫面完整度 99.8 分、收桿平穩，IG 吸睛分 76.1 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 4,
+        "segment_id": "swing-10",
+        "sequence_no": 10,
+        "start_ms": 119000,
+        "end_ms": 123000,
+        "category_score": 76.0,
+        "overall_score": 52.0,
+        "confidence": 0.999,
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 76.0 分",
         "manual_pinned": false
       },
       {
@@ -14509,72 +14601,10 @@
         "sequence_no": 8,
         "start_ms": 109600,
         "end_ms": 113200,
-        "category_score": 85.6,
-        "overall_score": 73.0,
+        "category_score": 74.4,
+        "overall_score": 64.8,
         "confidence": 0.999,
-        "reason": "收桿停頓 2200ms、晃動比 0.091，收桿得分 85.6 分",
-        "manual_pinned": false
-      }
-    ],
-    "ig": [
-      {
-        "rank": 1,
-        "segment_id": "swing-10",
-        "sequence_no": 10,
-        "start_ms": 119000,
-        "end_ms": 123000,
-        "category_score": 90.8,
-        "overall_score": 69.3,
-        "confidence": 0.999,
-        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 90.8 分",
-        "manual_pinned": false
-      },
-      {
-        "rank": 2,
-        "segment_id": "swing-7",
-        "sequence_no": 7,
-        "start_ms": 103733,
-        "end_ms": 107600,
-        "category_score": 84.4,
-        "overall_score": 67.1,
-        "confidence": 0.999,
-        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 84.4 分",
-        "manual_pinned": false
-      },
-      {
-        "rank": 3,
-        "segment_id": "swing-9",
-        "sequence_no": 9,
-        "start_ms": 113400,
-        "end_ms": 117000,
-        "category_score": 83.7,
-        "overall_score": 77.5,
-        "confidence": 0.999,
-        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 83.7 分",
-        "manual_pinned": false
-      },
-      {
-        "rank": 4,
-        "segment_id": "swing-11",
-        "sequence_no": 11,
-        "start_ms": 123733,
-        "end_ms": 129400,
-        "category_score": 83.6,
-        "overall_score": 77.5,
-        "confidence": 0.999,
-        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 83.6 分",
-        "manual_pinned": false
-      },
-      {
-        "rank": 5,
-        "segment_id": "swing-12",
-        "sequence_no": 12,
-        "start_ms": 135000,
-        "end_ms": 138900,
-        "category_score": 82.4,
-        "overall_score": 74.8,
-        "confidence": 0.998,
-        "reason": "畫面完整度 99.8 分、收桿平穩，IG 吸睛分 82.4 分",
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 74.4 分",
         "manual_pinned": false
       }
     ]

@@ -219,21 +219,26 @@ class SwingPhaseStateMachine:
             # 頂點幾何高度閘門：手腕必須位於相對高位區 (頂點 35% 幅度內) 方可被視為 Top 候選
             is_crest = bool(wrist_ys[c] <= min_sub_y + 0.35 * y_span)
 
-            # 生理下桿時長相容性 (Downswing Tempo Plausibility)
+            # 生理下桿時長相容性 (Downswing Tempo Plausibility)：
+            # 180~600ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
             ds_ms = times[impact_idx] - times[c]
             tempo_score = 0.0
             if is_crest:
-                if 200 <= ds_ms <= 380:
-                    tempo_score = 3.5
-                elif (160 <= ds_ms < 200) or (380 < ds_ms <= 450):
-                    tempo_score = 1.5
-                elif ds_ms > 650:
-                    tempo_score = -2.5
+                if 180 <= ds_ms <= 600:
+                    tempo_score = 0.0
+                elif 140 <= ds_ms < 180 or 600 < ds_ms <= 650:
+                    tempo_score = -2.0
+                else:
+                    tempo_score = -6.0
+            else:
+                # 非手腕頂點高位區，絕不能作為 Top 候選
+                tempo_score = -8.0
 
             # 停頓期下桿爆發轉折 (Transition Breakaway Launch)
             breakaway_bonus = 3.0 if (is_crest and acc >= 0.003 and c < n - 1 and v_y[c + 1] > 0) else 0.0
 
-            score = h_s * 3.5 + zc_bonus + p_s + acc * 35.0 + tempo_score + breakaway_bonus
+            # 幾何高度 (h_s) 與零交越 (zc_bonus) 居於主導地位
+            score = h_s * 5.0 + zc_bonus + p_s + acc * 35.0 + tempo_score + breakaway_bonus
             has_accel = bool(acc >= 0.003)
 
             # 確定性評分元組：當分數相當且同處高位停頓期時，優先選擇更接近下桿發動點 (times 較大)
@@ -521,25 +526,25 @@ class SwingPhaseStateMachine:
                 post_s = speed[k : min(imp_idx + 1, k + 5)]
                 acc = float(np.max(post_s)) - speed[k] if len(post_s) > 0 else 0.0
 
-                # 生理下桿時長相容性 (Downswing Tempo Plausibility)
+                # 生理下桿時長相容性 (Downswing Tempo Plausibility)：
+                # 180~550ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
                 ds_cand = imp_t - times[k]
                 tempo_score = 0.0
-                if 220 <= ds_cand <= 360:
-                    tempo_score = 5.0
-                elif (180 <= ds_cand < 220) or (360 < ds_cand <= 420):
-                    tempo_score = 2.5
-                elif 420 < ds_cand <= 520:
-                    tempo_score = -2.5
-                elif ds_cand > 520:
+                if 180 <= ds_cand <= 550:
+                    tempo_score = 0.0
+                elif 140 <= ds_cand < 180 or 550 < ds_cand <= 650:
+                    tempo_score = -2.0
+                else:
                     tempo_score = -6.0
 
                 # 停頓期下桿爆發轉折 (Transition Breakaway Launch)
                 is_crest = bool(wrist_ys[k] <= min_w_y + 0.25 * w_span)
                 breakaway_bonus = 4.0 if (is_crest and acc >= 0.003 and k < n - 1 and v_y[k + 1] > 0) else 0.0
 
+                # 幾何高度 (h_score) 與換向零交越居於主導
                 cand_score = (
-                    h_score * 2.5
-                    + (2.0 if has_zc else 0.0)
+                    h_score * 5.0
+                    + (3.0 if has_zc else 0.0)
                     + (1.0 if has_pause else 0.0)
                     + acc * 35.0
                     + tempo_score
@@ -1078,13 +1083,20 @@ class SwingPhaseStateMachine:
             or (ball_strike_ms is not None and abs(ball_strike_ms - times[impact_idx]) <= 150)
         )
 
+        is_walking_or_other = (
+            best_h.stroke_amplitude < 0.025
+            and downswing_peak_energy < 0.008
+            and not has_impact_evidence
+        )
         is_practice = (
             best_h.stroke_amplitude < 0.035
             or (downswing_peak_energy < 0.012 and max_ds_speed < 0.0007)
             or (not has_impact_evidence and max_ds_speed < 0.00085 and best_h.finish_hold_ms < 300)
             or (not has_impact_evidence and best_h.stroke_amplitude < 0.055 and best_h.follow_amplitude < 0.035)
         )
-        if is_practice:
+        if is_walking_or_other:
+            label = "walking"
+        elif is_practice:
             label = "practice_swing"
         else:
             label = "valid_swing"

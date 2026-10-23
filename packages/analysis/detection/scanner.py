@@ -922,26 +922,27 @@ class CoarseToFineDetector:
                 post_s = speeds[i : min(len(speeds), i + 4)]
                 acc = float(np.max(post_s)) - speeds[i] if len(post_s) > 0 else 0.0
 
+                # 生理下桿時長相容性 (Downswing Tempo Plausibility)：
+                # 180~550ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
                 tempo_score = 0.0
                 if ref_impact_ms is not None:
                     cand_ds = ref_impact_ms - times[i]
-                    if 220 <= cand_ds <= 360:
-                        tempo_score = 5.0
-                    elif (180 <= cand_ds < 220) or (360 < cand_ds <= 420):
-                        tempo_score = 2.5
-                    elif 420 < cand_ds <= 520:
-                        tempo_score = -2.5
-                    elif cand_ds > 520:
+                    if 180 <= cand_ds <= 550:
+                        tempo_score = 0.0
+                    elif (140 <= cand_ds < 180) or (550 < cand_ds <= 650):
+                        tempo_score = -2.0
+                    else:
                         tempo_score = -6.0
                 else:
                     dist_to_center = abs(times[i] - center_ms)
-                    tempo_score = -(dist_to_center / 50.0)
+                    tempo_score = -(dist_to_center / 80.0)
 
                 # 頂點停頓結束、下桿爆發啟動加分
                 is_crest = bool(wrist_ys[i] <= min_y + 0.25 * wrist_span)
                 breakaway = 4.0 if (is_crest and acc >= 0.003 and i < len(v_y) - 1 and v_y[i + 1] > 0) else 0.0
 
-                c_score = h_score * 2.5 + (2.0 if cand_zc else 0.0) + acc * 35.0 + tempo_score + breakaway
+                # 幾何高度 (h_score) 與換向零交越 (cand_zc) 居於主導地位
+                c_score = h_score * 5.0 + (3.0 if cand_zc else 0.0) + acc * 35.0 + tempo_score + breakaway
                 scored_top_cands.append({
                     "idx": i,
                     "score": c_score,
@@ -1010,39 +1011,70 @@ class CoarseToFineDetector:
             kine_best_idx = scored_cands[0][1]
             kine_best_time = times[kine_best_idx]
 
-            # 2. 音訊瞬態運動學合理性檢驗 (Kinematic Plausibility Gate on Audio)
+            # 2. 音訊瞬態與運動學跨模態檢驗 (Tri-State Audio-Kinematic Plausibility Evaluation)
             best_idx = None
             sources = []
             flags = []
             has_audio_sync = False
             has_conflict = False
+            ambient_rejected = False
 
+            # (1) 遍歷候選視窗內所有音訊瞬態，尋找是否有具備運動學支持之真實擊球音訊
+            valid_sync_candidates = []
             if audio_transients_ms:
-                near_audios = [
+                candidate_audios = [
                     a for a in audio_transients_ms
-                    if abs(a - center_ms) <= 75
+                    if abs(a - center_ms) <= 120 or abs(a - kine_best_time) <= 90
                 ]
-                if near_audios:
-                    target_aud = min(near_audios, key=lambda a: abs(a - center_ms))
-                    aud_nearest_idx = min(range(len(times)), key=lambda i: abs(times[i] - target_aud))
-
-                    # 檢驗該音訊瞬態影格的運動學合理性：
-                    # a. 手腕垂直深度是否處於擊球區底部 (>= max_y - 0.22 * wrist_span)
-                    # b. 垂直速度是否不是劇烈向上隨揮 (v_y >= -0.22)
-                    # c. 與運動學最佳最低點偏差是否 <= 55ms
-                    is_depth_ok = bool(wrist_span < 0.04 or wrist_ys[aud_nearest_idx] >= (max_y - 0.22 * wrist_span))
-                    is_vy_ok = bool(v_y[aud_nearest_idx] >= -0.22)
-                    time_diff_kine = abs(times[aud_nearest_idx] - kine_best_time)
+                for aud in candidate_audios:
+                    aud_idx = min(range(len(times)), key=lambda i: abs(times[i] - aud))
+                    # 檢驗運動學條件：
+                    # a. 垂直深度處於深部擊球區 (>= max_y - 0.25 * wrist_span)
+                    # b. 垂直速度不是劇烈隨揮上升 (v_y >= -0.22)
+                    # c. 時間與運動學最低點偏差合理 (<= 55ms)
+                    is_depth_ok = bool(wrist_span < 0.04 or wrist_ys[aud_idx] >= (max_y - 0.25 * wrist_span))
+                    is_vy_ok = bool(v_y[aud_idx] >= -0.22)
+                    time_diff_kine = abs(times[aud_idx] - kine_best_time)
                     is_timing_consistent = bool(time_diff_kine <= 55)
 
                     if is_depth_ok and is_vy_ok and is_timing_consistent:
-                        best_idx = aud_nearest_idx
-                        sources = ["audio_transient_synchronized", "local_high_fps_refinement"]
-                        has_audio_sync = True
-                    else:
-                        # 音訊與運動學發生衝突 (如第 10 球 121060ms 發生在隨揮上升期)
+                        valid_sync_candidates.append({
+                            "idx": aud_idx,
+                            "time_ms": times[aud_idx],
+                            "diff_kine": time_diff_kine,
+                            "audio_ms": aud,
+                        })
+
+                if valid_sync_candidates:
+                    # 找到與運動學最一致的真實擊球音訊
+                    valid_sync_candidates.sort(key=lambda x: x["diff_kine"])
+                    best_sync = valid_sync_candidates[0]
+                    best_idx = best_sync["idx"]
+                    sources = ["audio_transient_synchronized", "local_high_fps_refinement"]
+                    has_audio_sync = True
+                else:
+                    # 視窗內有音訊瞬態，但無一符合運動學擊球條件（如隨揮期雜音、旁道擊球聲）
+                    # 評估運動學擊球之獨立強度 (Kinematic Impact Strength)
+                    kine_depth_ratio = (wrist_ys[kine_best_idx] - min_y) / max(1e-4, wrist_span)
+                    kine_vis = float(wrist_confs[kine_best_idx])
+                    # 檢查是否有次要運動學競爭峰值 (Competing hypothesis margin)
+                    second_best_diff = (scored_cands[0][0] - scored_cands[1][0]) if len(scored_cands) > 1 else 999.0
+
+                    if kine_depth_ratio >= 0.70 and kine_vis >= 0.40 and second_best_diff >= 0.5:
+                        # 情境 A: 運動學具備可靠獨立證據，音訊為環境雜音或隨揮雜音（如第 10 球之晚期雜音）
+                        # 安全拒絕不相關雜音，以運動學自主定案，維持可自動接受
+                        ambient_rejected = True
+                        best_idx = kine_best_idx
+                        sources = ["wrist_kinematic_lowest_point", "ambient_noise_rejected"]
+                        flags.append("ambient_audio_rejected")
+                    elif len(candidate_audios) > 0 and (kine_depth_ratio < 0.65 or second_best_diff < 0.4):
+                        # 情境 B: 音訊與運動學相互矛盾，且運動學自身亦存在多假說競爭或深度不足
                         has_conflict = True
                         flags.append("audio_kinematic_conflict")
+                        best_idx = kine_best_idx
+                        sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
+                    else:
+                        # 默認採用運動學最低點
                         best_idx = kine_best_idx
                         sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
 
@@ -1057,11 +1089,14 @@ class CoarseToFineDetector:
             if has_audio_sync:
                 uncertainty_ms = max(33, int(round(sampling_res * 1.2)))
                 conf = round(min(0.88, 0.75 + 0.10 * lm_vis + 0.05), 3)
+            elif ambient_rejected:
+                uncertainty_ms = max(45, int(round(sampling_res * 1.8)))
+                conf = round(min(0.82, max(0.68, 0.65 + 0.15 * lm_vis)), 3)
             elif has_conflict:
-                uncertainty_ms = max(70, int(round(sampling_res * 2.5)))
+                uncertainty_ms = max(75, int(round(sampling_res * 2.5)))
                 conf = round(min(0.65, max(0.50, 0.55 + 0.10 * lm_vis)), 3)
             else:
-                uncertainty_ms = max(55, int(round(sampling_res * 2.0)))
+                uncertainty_ms = max(50, int(round(sampling_res * 2.0)))
                 conf = round(min(0.78, 0.60 + 0.15 * lm_vis), 3)
 
             return {

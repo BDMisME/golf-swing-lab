@@ -36,13 +36,14 @@ def compute_swing_score(
     score_version: str = "score-v2.1",
     min_confidence: float = 0.50,
     min_coverage_gate: float = 0.70,
+    label: str = "valid_swing",
 ) -> ScoreComputeResult:
     """
     計算可解釋、確定性 (deterministic) 之內部 2D DTL 動作指標分數 (score-v2.1)。
-    升級項目 (score-v2.1)：
-    1. 將單球上下桿路徑間隙與多球重複性分開，多球重複性經站姿骨盆與軀幹尺度歸一化。
-    2. IG 視覺呈現分數改採真實關鍵點出界檢核與真實片段前後邊界緩衝。
-    3. 嚴格遵守最高誠信原則，不虛構球速、飛行距離或 3D 角度。
+    嚴格遵循最高誠信原則：
+    1. 動作分類硬門檻 (Classification Gate)：非 valid_swing (如走路、空揮、放球) 嚴禁給分 (overall_nullable=None)。
+    2. 真實扣分曲線：嚴重抬頭起身、節奏失調 (如 ratio 1.5 或 4.0)、收桿失衡予以嚴厲扣分 (30~55分)，杜絕爛球虛高 70+ 分。
+    3. 不虛構球速、飛行距離或 3D 角度。
     """
     active_weights = dict(DEFAULT_WEIGHTS)
     if weights:
@@ -51,9 +52,35 @@ def compute_swing_score(
                 active_weights[k] = float(v)
 
     total_weight = sum(active_weights.values()) or 100.0
-    m_map: dict[str, dict[str, Any]] = {m["metric_key"]: m for m in metrics}
     q_meta = quality_metadata or {}
 
+    # 1. 動作分類硬門檻：走路、空揮、放球或未分類動作絕對不可給予揮桿動作評分
+    effective_label = label if label != "valid_swing" else q_meta.get("label", "valid_swing")
+    if effective_label != "valid_swing":
+        return ScoreComputeResult(
+            score_version=score_version,
+            overall_nullable=None,
+            ig_visual_score=None,
+            partial_score=False,
+            coverage=0.0,
+            confidence=0.0,
+            subscores={
+                k: {
+                    "label": k,
+                    "score": None,
+                    "weight": active_weights.get(k, 20.0),
+                    "raw_value": None,
+                    "unit": "",
+                    "confidence": 0.0,
+                    "formula": "N/A (非正式擊球)",
+                    "how_calculated": f"動作檢測為非正式揮桿（{effective_label}，例如走路/空揮試擺/放球調整），依誠信原則不予動作評分。",
+                }
+                for k in active_weights
+            },
+            explanation=f"非正式有效揮桿動作（檢測為 {effective_label}，如走路、撿球或空揮試擺），不予進行揮桿動作技術評分。",
+        )
+
+    m_map: dict[str, dict[str, Any]] = {m["metric_key"]: m for m in metrics}
     subscores: dict[str, Any] = {}
 
     # 1. 軀幹前傾穩定 (spine_tilt_stability, 25%)
@@ -65,10 +92,10 @@ def compute_swing_score(
     ):
         delta_deg = float(m_spine["value"])
         c_spine = float(m_spine["confidence"])
-        if delta_deg <= 2.5:
+        if delta_deg <= 2.0:
             s_spine = 100.0
         else:
-            s_spine = _clip(100.0 - ((delta_deg - 2.5) / 12.5) * 80.0, 20.0, 100.0)
+            s_spine = _clip(100.0 - ((delta_deg - 2.0) / 10.0) * 85.0, 15.0, 100.0)
         subscores["spine_tilt_stability"] = {
             "label": "軀幹前傾穩定",
             "score": round(s_spine, 1),
@@ -76,10 +103,10 @@ def compute_swing_score(
             "raw_value": round(delta_deg, 2),
             "unit": "deg_2d",
             "confidence": round(c_spine, 3),
-            "formula": "clip(100 - max(0, delta_deg - 2.5) / 12.5 * 80, 20, 100)",
+            "formula": "clip(100 - max(0, delta_deg - 2.0) / 10.0 * 85, 15, 100)",
             "how_calculated": (
                 f"比較準備姿勢 (Address) 與疑似擊球瞬間之 2D 軀幹前傾角度差 Δ={delta_deg:.2f}°；"
-                "Δ ≤ 2.5° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
+                "Δ ≤ 2.0° 得 100 分，超過則隨起身/下沉幅度線性扣分。"
             ),
         }
     else:
@@ -103,10 +130,10 @@ def compute_swing_score(
     ):
         disp = float(m_head["value"])
         c_head = float(m_head["confidence"])
-        if disp <= 0.06:
+        if disp <= 0.05:
             s_head = 100.0
         else:
-            s_head = _clip(100.0 - ((disp - 0.06) / 0.22) * 80.0, 20.0, 100.0)
+            s_head = _clip(100.0 - ((disp - 0.05) / 0.18) * 85.0, 15.0, 100.0)
         subscores["head_stability"] = {
             "label": "頭部相對位移",
             "score": round(s_head, 1),
@@ -114,10 +141,10 @@ def compute_swing_score(
             "raw_value": round(disp, 4),
             "unit": "torso_ratio",
             "confidence": round(c_head, 3),
-            "formula": "clip(100 - max(0, ratio - 0.06) / 0.22 * 80, 20, 100)",
+            "formula": "clip(100 - max(0, ratio - 0.05) / 0.18 * 85, 15, 100)",
             "how_calculated": (
                 f"計算準備至擊球期間頭部相對於軀幹長度之最大 2D 位移比 r={disp:.3f}；"
-                "r ≤ 0.06 得 100 分，位移越大扣分越多。"
+                "r ≤ 0.05 得 100 分，位移過大（抬頭或晃動）大幅扣分。"
             ),
         }
     else:
@@ -153,8 +180,8 @@ def compute_swing_score(
         conf_plane = float(m_plane["confidence"])  # type: ignore
         dev_repeat = float(m_repeat["value"])  # type: ignore
         conf_repeat = float(m_repeat["confidence"])  # type: ignore
-        s_plane = 100.0 if dev_plane <= 0.05 else _clip(100.0 - ((dev_plane - 0.05) / 0.20) * 75.0, 25.0, 100.0)
-        s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.16) * 70.0, 30.0, 100.0)
+        s_plane = 100.0 if dev_plane <= 0.05 else _clip(100.0 - ((dev_plane - 0.05) / 0.18) * 80.0, 20.0, 100.0)
+        s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.15) * 75.0, 25.0, 100.0)
         final_s_path = round(s_plane * 0.60 + s_repeat * 0.40, 1)
         final_conf = round(conf_plane * 0.60 + conf_repeat * 0.40, 3)
         how_calc = (
@@ -165,7 +192,7 @@ def compute_swing_score(
     elif has_plane:
         dev_plane = float(m_plane["value"])  # type: ignore
         conf_plane = float(m_plane["confidence"])  # type: ignore
-        s_plane = 100.0 if dev_plane <= 0.05 else _clip(100.0 - ((dev_plane - 0.05) / 0.20) * 75.0, 25.0, 100.0)
+        s_plane = 100.0 if dev_plane <= 0.05 else _clip(100.0 - ((dev_plane - 0.05) / 0.18) * 80.0, 20.0, 100.0)
         final_s_path = round(s_plane, 1)
         final_conf = round(conf_plane, 3)
         how_calc = (
@@ -177,7 +204,7 @@ def compute_swing_score(
     elif has_repeat:
         dev_repeat = float(m_repeat["value"])  # type: ignore
         conf_repeat = float(m_repeat["confidence"])  # type: ignore
-        s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.16) * 70.0, 30.0, 100.0)
+        s_repeat = 100.0 if dev_repeat <= 0.04 else _clip(100.0 - ((dev_repeat - 0.04) / 0.15) * 75.0, 25.0, 100.0)
         final_s_path = round(s_repeat, 1)
         final_conf = round(conf_repeat, 3)
         how_calc = f"評估同場多球手部中位數路徑重複性偏差 r={dev_repeat:.3f}（缺乏單球平面數據）。"
@@ -199,7 +226,7 @@ def compute_swing_score(
             "raw_value": raw_repr,
             "unit": "ratio",
             "confidence": final_conf,
-            "formula": "clip(100 - max(0, dev - 0.05) / 0.20 * 75, 25, 100)",
+            "formula": "clip(100 - max(0, dev - 0.05) / 0.18 * 80, 20, 100)",
             "how_calculated": how_calc,
             "details": {
                 "single_swing_plane_gap": dev_plane,
@@ -231,7 +258,7 @@ def compute_swing_score(
         if err <= 0.25:
             s_tempo = 100.0
         else:
-            s_tempo = _clip(100.0 - ((err - 0.25) / 1.55) * 80.0, 20.0, 100.0)
+            s_tempo = _clip(100.0 - ((err - 0.25) / 1.35) * 85.0, 15.0, 100.0)
         subscores["tempo_consistency"] = {
             "label": "上下桿節奏一致性",
             "score": round(s_tempo, 1),
@@ -239,10 +266,10 @@ def compute_swing_score(
             "raw_value": round(ratio, 2),
             "unit": "ratio",
             "confidence": round(c_tempo, 3),
-            "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.55 * 80, 20, 100)",
+            "formula": "clip(100 - max(0, |ratio - 3.0| - 0.25) / 1.35 * 85, 15, 100)",
             "how_calculated": (
                 f"依上桿時間與下桿時間比值 ratio={ratio:.2f}:1 與基準 3.0:1 之差距計算；"
-                "差距 ≤ 0.25 得 100 分（基於 2D 階段時間碼估計）。"
+                "差距 ≤ 0.25 得 100 分，節奏嚴重紊亂大幅扣分。"
             ),
         }
     else:
@@ -270,9 +297,9 @@ def compute_swing_score(
         hold_ms = float(m_hold["value"])
         sway = float(m_sway["value"])
         c_fin = min(float(m_hold["confidence"]), float(m_sway["confidence"]))
-        hold_score = _clip((hold_ms / 1100.0) * 100.0, 35.0, 100.0)
-        sway_penalty = 0.0 if sway <= 0.04 else min(45.0, ((sway - 0.04) / 0.16) * 45.0)
-        s_fin = _clip(hold_score - sway_penalty, 20.0, 100.0)
+        hold_score = _clip((hold_ms / 1100.0) * 100.0, 20.0, 100.0)
+        sway_penalty = 0.0 if sway <= 0.04 else min(55.0, ((sway - 0.04) / 0.14) * 55.0)
+        s_fin = _clip(hold_score - sway_penalty, 15.0, 100.0)
         subscores["finish_balance"] = {
             "label": "收桿姿勢穩定",
             "score": round(s_fin, 1),
@@ -281,10 +308,10 @@ def compute_swing_score(
             "hold_ms": round(hold_ms, 0),
             "unit": "sway_ratio",
             "confidence": round(c_fin, 3),
-            "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.16*45, 20, 100)",
+            "formula": "clip(min(100, hold_ms/1100*100) - max(0, sway-0.04)/0.14*55, 15, 100)",
             "how_calculated": (
                 f"收桿停留時間 {hold_ms:.0f}ms、下半身 2D 晃動比 {sway:.3f}；"
-                "停留超過 1100ms 且晃動 ≤ 0.04 得滿分。"
+                "停留超過 1100ms 且晃動 ≤ 0.04 得滿分，提早收桿或重心不穩予以扣分。"
             ),
         }
     else:
@@ -322,7 +349,14 @@ def compute_swing_score(
         )
     else:
         weighted_sum = sum(float(item["score"]) * float(item["weight"]) for item in valid_items)
-        overall_nullable = round(weighted_sum / valid_weight_sum, 1)
+        raw_overall = weighted_sum / valid_weight_sum
+        
+        # 動態幅度與能量合理性閘門：若無實質揮桿幅度，總分上限封頂
+        stroke_amp = q_meta.get("stroke_amplitude")
+        if stroke_amp is not None and float(stroke_amp) < 0.08:
+            raw_overall = min(raw_overall, 55.0)
+            
+        overall_nullable = round(raw_overall, 1)
         if partial_score:
             explanation = (
                 f"內部動作檢核總分 {overall_nullable} 分（部分評分，有效覆蓋率 {coverage * 100:.0f}%，"
