@@ -4,6 +4,32 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 3: Final Event Integrity & Real App Acceptance (2026-10-24)
+- [x] **P0-A 修正第 10 球 Impact 定位根因查明與回歸修復**：
+  - 逐幀像素差分與白球起飛分析確認：真觸球瞬間為 120881ms~120898ms（白像素反光暴增至 2064，像素差分達 5.06，球體離墊噴出，120931ms 打擊墊上的球完全消失）。
+  - 查明 30fps Proxy 誤判定至 121067ms 根因：121060ms 檢出擊球後雜音（護網撞擊/隨揮風切聲），舊版無條件鎖定該音訊，且未檢查手腕已進入向上隨揮（$v_y = -0.904$），導致延遲 152ms、下桿虛增至 401ms。
+  - 音訊瞬態分析：120680ms 為 Top 轉折雜音，120840ms 為桿面切入風切聲，121060ms 為擊球後隨揮聲，三者存在客觀矛盾。
+  - 實作運動學合理性閘門 (Kinematic Plausibility Gate on Audio)：手腕垂直深度必須在擊球區深部（$\ge \max(wrist\_y) - 0.22 \times span$），垂直速度不得為劇烈向上隨揮（$v_y \ge -0.22$），與運動學最低點偏差不得 $> 55\text{ms}$。
+  - 修復結果：30fps Proxy Impact 修正至 **120967ms**（誤差僅 52ms / 1.6 影格），60fps 原片 Impact 修正至 **120932ms**（誤差僅 17ms / 1.0 影格）。
+  - 建立專項回歸測試 `tests/test_swing_10_regression.py`，100% 重現並驗證修復。
+- [x] **P0-B Confidence 嚴格分離與多維證據可靠度校準**：
+  - 嚴格分離 Landmark Visibility、Kinematic Evidence Quality、Audio Evidence Quality、Ball Launch Evidence、Competing Margin、Sampling Resolution 與 Estimated Timing Uncertainty。
+  - 當音訊與運動學存在顯著矛盾時，標記 `audio_kinematic_conflict`，`review_status` 設為 `needs_review`，不確定度放大至 82ms，信心度誠實降級至 0.65，絕不濫發 0.88 高分。
+- [x] **P0-C 修正真實 Ranking 資料流與驗收腳本**：
+  - 徹底移除 `scripts/run_production_acceptance.py` 中自行撰寫的 `sorted(...)`，全面改用正式 `rank_session_swings()`。
+  - 驗收資料流：`compute_swing_score()` → DB 儲存 → API 序列化 → `rank_session_swings()` → 前端排行榜。
+  - 安全過濾：第 10 球因帶有 `audio_kinematic_conflict` 與 `needs_review`，**嚴格排除於 POSTURE 與 TEMPO 榜單外**！TEMPO 第一名由正常球 #7 正當奪得；獨立收桿（FINISH 第 3 名）與視覺（IG 第 1 名）依各自客觀證據判定。
+- [x] **P0-D 本機端到端完整流程與真實 App 驗收**：
+  - 完整鏈路測試通過：影片 probe → Proxy 生成 → Worker Queue 任務 → 9 階段分析 → DB 持久化 → API `/api/sessions/{id}/report` 與 `/api/swings/{id}` 讀取 → 前端排行榜。
+  - 30fps Proxy 正式 Worker 路徑：Top MAE **58.4ms (1.8 frames)**, Impact MAE **32.7ms (1.0 frames)**, 分類正確率 **100.0%**。
+  - 60fps 原片路徑：Top MAE **76.5ms (4.6 frames)**, Impact MAE **22.2ms (1.3 frames)**, 分類正確率 **100.0%**。
+- [x] **P1 負樣本與獨立影片泛化驗證聲明**：
+  - 6 類真實負樣本測試維持 100% 通過。
+  - 外部獨立測試集維持 `NOT_VALIDATED` 誠實標示，絕不造假盲測通過。
+- [x] **服務與全量測試驗收**：
+  - 後端測試套件：**76 / 76 PASSED (100%)**。
+  - 前端構建：`npm --prefix apps/web run build` 9/9 靜態頁面 0 錯誤。
+
 ## Round 2: Production Acceptance & Independent Accuracy Audit (2026-10-23)
 - [x] **P0-1 修正 Ground Truth 證據來源聲明與保存關鍵接觸片**：
   - 更新 `docs/reports/takeover/independent_human_gt_2min.json`：明確標註為 `developer_assisted_visual_annotation`，角色為 Development Set，外部盲測精度維持 `NOT_VALIDATED`。

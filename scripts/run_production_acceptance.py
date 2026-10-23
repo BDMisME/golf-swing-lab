@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from packages.analysis.detection.scanner import CoarseToFineDetector
 from packages.analysis.probe import generate_proxy_and_thumbnail, probe_video_file
-from packages.analysis.scoring.engine import compute_swing_score
+from packages.analysis.scoring.engine import compute_swing_score, rank_session_swings
 
 
 def run_pipeline_on_video(video_path: Path, is_proxy: bool = False) -> dict[str, Any]:
@@ -62,44 +62,25 @@ def run_pipeline_on_video(video_path: Path, is_proxy: bool = False) -> dict[str,
             "quality_metadata": seg.quality_metadata,
         })
 
-    # Top 5 榜單計算 (依據客觀可解釋幾何子項排序)
-    rankings = {
-        "best_posture": sorted(
-            [s for s in swings_out if s["overall_score"] is not None],
-            key=lambda x: x["score_breakdown"].get("spine_tilt_stability", {}).get("score", 0),
-            reverse=True,
-        )[:5],
-        "best_tempo": sorted(
-            [s for s in swings_out if s["overall_score"] is not None],
-            key=lambda x: x["score_breakdown"].get("tempo_consistency", {}).get("score", 0),
-            reverse=True,
-        )[:5],
-        "best_finish": sorted(
-            [s for s in swings_out if s["overall_score"] is not None],
-            key=lambda x: x["score_breakdown"].get("finish_balance", {}).get("score", 0),
-            reverse=True,
-        )[:5],
-        "ig_worthy": sorted(
-            [s for s in swings_out if s["ig_visual_score"] is not None],
-            key=lambda x: x.get("ig_visual_score") or 0,
-            reverse=True,
-        )[:5],
-    }
-
-    formatted_rankings = {
-        cat: [
-            {
-                "sequence_no": s["sequence_no"],
-                "score": s["overall_score"],
-                "ds_ms": (
-                    s["events"]["impact_estimated"]["time_ms"]
-                    - s["events"]["top"]["time_ms"]
-                ) if "impact_estimated" in s["events"] and "top" in s["events"] else None,
-            }
-            for s in rank_list
-        ]
-        for cat, rank_list in rankings.items()
-    }
+    # Top 5 榜單計算 (P0-C: 全面調用正式 rank_session_swings，杜絕雙軌決策)
+    rank_input = [
+        {
+            "id": f"swing-{s['sequence_no']}",
+            "sequence_no": s["sequence_no"],
+            "start_ms": s["start_ms"],
+            "end_ms": s["end_ms"],
+            "label": s["label"],
+            "review_status": s["review_status"],
+            "review_flags": s["review_flags"],
+            "overall_score": s["overall_score"],
+            "ig_visual_score": s["ig_visual_score"],
+            "confidence": s["confidence"],
+            "subscores": s["score_breakdown"],
+            "quality_metadata": s["quality_metadata"],
+        }
+        for s in swings_out
+    ]
+    official_rankings = rank_session_swings(rank_input, top_k=5)
 
     return {
         "video_filename": video_path.name,
@@ -108,7 +89,7 @@ def run_pipeline_on_video(video_path: Path, is_proxy: bool = False) -> dict[str,
         "fps": meta.fps_num / max(1, meta.fps_den),
         "total_swings_detected": len(swings_out),
         "swings": swings_out,
-        "rankings": formatted_rankings,
+        "rankings": official_rankings,
     }
 
 
@@ -337,6 +318,12 @@ def main():
         raw_err = f"{r_raw['top_diff_ms']:3d}/{r_raw['imp_diff_ms']:3d}ms"
         prx_err = f"{r_prx['top_diff_ms']:3d}/{r_prx['imp_diff_ms']:3d}ms"
         print(f"#{seq:2d} | {gt_s:17s} | {raw_s:19s} | {prx_s:19s} | {raw_err:11s} | {prx_err:10s}")
+
+    print("\n正式 rank_session_swings() 排行榜結果 (30fps Proxy):")
+    for cat in ["posture", "tempo", "finish", "ig"]:
+        print(f"  [{cat.upper()} TOP 5]:")
+        for item in res_proxy["rankings"].get(cat, []):
+            print(f"    Rank #{item['rank']}: Swing #{item['sequence_no']} (Score={item['category_score']}) - {item['reason']}")
 
     # 儲存完整驗收報告 JSON
     eval_json_path = REPO_ROOT / "docs/reports/takeover/production_acceptance_report.json"

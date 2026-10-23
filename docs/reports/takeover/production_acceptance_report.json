@@ -4,12 +4,12 @@
     "fps": 59.991370217662286,
     "total_swings": 12,
     "classification_accuracy": 100.0,
-    "top_mae_ms": 89.0,
-    "impact_mae_ms": 27.8,
-    "top_mae_frames": 5.3,
-    "impact_mae_frames": 1.7,
+    "top_mae_ms": 76.5,
+    "impact_mae_ms": 22.2,
+    "top_mae_frames": 4.6,
+    "impact_mae_frames": 1.3,
     "downswing_compliance_rate": 100.0,
-    "auto_acceptance_rate": 100.0,
+    "auto_acceptance_rate": 91.7,
     "timing_anomaly_count": 0,
     "per_swing": [
       {
@@ -215,22 +215,24 @@
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 120682,
-        "top_pred": 120482,
-        "top_diff_ms": 200,
-        "top_diff_frames": 12.0,
+        "top_pred": 120632,
+        "top_diff_ms": 50,
+        "top_diff_frames": 3.0,
         "top_uncertainty_ms": 60,
         "top_confidence": 0.799,
         "imp_gt": 120915,
-        "imp_pred": 120832,
-        "imp_diff_ms": 83,
-        "imp_diff_frames": 5.0,
-        "imp_uncertainty_ms": 33,
-        "imp_confidence": 0.88,
+        "imp_pred": 120932,
+        "imp_diff_ms": 17,
+        "imp_diff_frames": 1.0,
+        "imp_uncertainty_ms": 70,
+        "imp_confidence": 0.65,
         "ds_gt": 233,
-        "ds_pred": 350,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 81.0
+        "ds_pred": 300,
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 76.9
       },
       {
         "seq": 11,
@@ -283,12 +285,12 @@
     "fps": 30.0,
     "total_swings": 12,
     "classification_accuracy": 100.0,
-    "top_mae_ms": 66.7,
-    "impact_mae_ms": 41.1,
-    "top_mae_frames": 2.0,
-    "impact_mae_frames": 1.2,
+    "top_mae_ms": 58.4,
+    "impact_mae_ms": 32.7,
+    "top_mae_frames": 1.8,
+    "impact_mae_frames": 1.0,
     "downswing_compliance_rate": 100.0,
-    "auto_acceptance_rate": 100.0,
+    "auto_acceptance_rate": 41.7,
     "timing_anomaly_count": 0,
     "per_swing": [
       {
@@ -296,44 +298,48 @@
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 10672,
-        "top_pred": 10567,
-        "top_diff_ms": 105,
-        "top_diff_frames": 3.1,
+        "top_pred": 10600,
+        "top_diff_ms": 72,
+        "top_diff_frames": 2.2,
         "top_uncertainty_ms": 73,
         "top_confidence": 0.8,
         "imp_gt": 10938,
-        "imp_pred": 10900,
-        "imp_diff_ms": 38,
-        "imp_diff_frames": 1.1,
-        "imp_uncertainty_ms": 40,
-        "imp_confidence": 0.88,
+        "imp_pred": 10933,
+        "imp_diff_ms": 5,
+        "imp_diff_frames": 0.1,
+        "imp_uncertainty_ms": 82,
+        "imp_confidence": 0.65,
         "ds_gt": 266,
         "ds_pred": 333,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 64.0
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 68.9
       },
       {
         "seq": 2,
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 25310,
-        "top_pred": 25267,
-        "top_diff_ms": 43,
-        "top_diff_frames": 1.3,
+        "top_pred": 25300,
+        "top_diff_ms": 10,
+        "top_diff_frames": 0.3,
         "top_uncertainty_ms": 73,
-        "top_confidence": 0.799,
+        "top_confidence": 0.8,
         "imp_gt": 25610,
-        "imp_pred": 25600,
-        "imp_diff_ms": 10,
-        "imp_diff_frames": 0.3,
-        "imp_uncertainty_ms": 40,
-        "imp_confidence": 0.88,
+        "imp_pred": 25633,
+        "imp_diff_ms": 23,
+        "imp_diff_frames": 0.7,
+        "imp_uncertainty_ms": 82,
+        "imp_confidence": 0.65,
         "ds_gt": 300,
         "ds_pred": 333,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 64.0
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 71.7
       },
       {
         "seq": 3,
@@ -362,66 +368,72 @@
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 51682,
-        "top_pred": 51567,
-        "top_diff_ms": 115,
-        "top_diff_frames": 3.4,
+        "top_pred": 51600,
+        "top_diff_ms": 82,
+        "top_diff_frames": 2.5,
         "top_uncertainty_ms": 73,
         "top_confidence": 0.799,
         "imp_gt": 51915,
-        "imp_pred": 51900,
-        "imp_diff_ms": 15,
-        "imp_diff_frames": 0.4,
-        "imp_uncertainty_ms": 40,
-        "imp_confidence": 0.88,
+        "imp_pred": 51933,
+        "imp_diff_ms": 18,
+        "imp_diff_frames": 0.5,
+        "imp_uncertainty_ms": 82,
+        "imp_confidence": 0.65,
         "ds_gt": 233,
         "ds_pred": 333,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 65.3
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 67.4
       },
       {
         "seq": 5,
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 66435,
-        "top_pred": 66333,
-        "top_diff_ms": 102,
-        "top_diff_frames": 3.1,
+        "top_pred": 66400,
+        "top_diff_ms": 35,
+        "top_diff_frames": 1.0,
         "top_uncertainty_ms": 73,
         "top_confidence": 0.8,
         "imp_gt": 66702,
-        "imp_pred": 66667,
-        "imp_diff_ms": 35,
-        "imp_diff_frames": 1.0,
-        "imp_uncertainty_ms": 40,
-        "imp_confidence": 0.88,
+        "imp_pred": 66733,
+        "imp_diff_ms": 31,
+        "imp_diff_frames": 0.9,
+        "imp_uncertainty_ms": 82,
+        "imp_confidence": 0.65,
         "ds_gt": 267,
-        "ds_pred": 334,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 62.6
+        "ds_pred": 333,
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 66.8
       },
       {
         "seq": 6,
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 84340,
-        "top_pred": 84367,
-        "top_diff_ms": 27,
-        "top_diff_frames": 0.8,
+        "top_pred": 84433,
+        "top_diff_ms": 93,
+        "top_diff_frames": 2.8,
         "top_uncertainty_ms": 73,
-        "top_confidence": 0.799,
+        "top_confidence": 0.8,
         "imp_gt": 84673,
-        "imp_pred": 84667,
-        "imp_diff_ms": 6,
-        "imp_diff_frames": 0.2,
-        "imp_uncertainty_ms": 40,
-        "imp_confidence": 0.88,
+        "imp_pred": 84733,
+        "imp_diff_ms": 60,
+        "imp_diff_frames": 1.8,
+        "imp_uncertainty_ms": 82,
+        "imp_confidence": 0.65,
         "ds_gt": 333,
         "ds_pred": 300,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 57.5
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 64.1
       },
       {
         "seq": 7,
@@ -494,44 +506,48 @@
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 120682,
-        "top_pred": 120667,
-        "top_diff_ms": 15,
-        "top_diff_frames": 0.4,
+        "top_pred": 120633,
+        "top_diff_ms": 49,
+        "top_diff_frames": 1.5,
         "top_uncertainty_ms": 73,
         "top_confidence": 0.799,
         "imp_gt": 120915,
-        "imp_pred": 121067,
-        "imp_diff_ms": 152,
-        "imp_diff_frames": 4.6,
-        "imp_uncertainty_ms": 40,
-        "imp_confidence": 0.88,
+        "imp_pred": 120967,
+        "imp_diff_ms": 52,
+        "imp_diff_frames": 1.6,
+        "imp_uncertainty_ms": 82,
+        "imp_confidence": 0.65,
         "ds_gt": 233,
-        "ds_pred": 400,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 63.9
+        "ds_pred": 334,
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 69.3
       },
       {
         "seq": 11,
         "label_pred": "valid_swing",
         "label_gt": "valid_swing",
         "top_gt": 125200,
-        "top_pred": 125100,
-        "top_diff_ms": 100,
-        "top_diff_frames": 3.0,
+        "top_pred": 125133,
+        "top_diff_ms": 67,
+        "top_diff_frames": 2.0,
         "top_uncertainty_ms": 73,
         "top_confidence": 0.799,
         "imp_gt": 125467,
-        "imp_pred": 125433,
-        "imp_diff_ms": 34,
-        "imp_diff_frames": 1.0,
-        "imp_uncertainty_ms": 40,
-        "imp_confidence": 0.88,
+        "imp_pred": 125467,
+        "imp_diff_ms": 0,
+        "imp_diff_frames": 0.0,
+        "imp_uncertainty_ms": 82,
+        "imp_confidence": 0.65,
         "ds_gt": 267,
-        "ds_pred": 333,
-        "status": "auto_accepted",
-        "flags": [],
-        "overall_score": 78.0
+        "ds_pred": 334,
+        "status": "needs_review",
+        "flags": [
+          "audio_kinematic_conflict"
+        ],
+        "overall_score": 77.5
       },
       {
         "seq": 12,
@@ -558,112 +574,252 @@
     ]
   },
   "rankings_proxy": {
-    "best_posture": [
+    "posture": [
       {
-        "sequence_no": 5,
-        "score": 62.6,
-        "ds_ms": 334
-      },
-      {
-        "sequence_no": 11,
-        "score": 78.0,
-        "ds_ms": 333
-      },
-      {
-        "sequence_no": 12,
-        "score": 74.8,
-        "ds_ms": 334
-      },
-      {
+        "rank": 1,
+        "segment_id": "swing-9",
         "sequence_no": 9,
-        "score": 77.5,
-        "ds_ms": 334
+        "start_ms": 113400,
+        "end_ms": 117000,
+        "category_score": 77.5,
+        "overall_score": 77.5,
+        "confidence": 0.999,
+        "reason": "軀幹前傾穩定 Δ=2.8°，動作總分 77.5 分",
+        "manual_pinned": false
       },
       {
-        "sequence_no": 3,
-        "score": 67.5,
-        "ds_ms": 333
-      }
-    ],
-    "best_tempo": [
-      {
-        "sequence_no": 10,
-        "score": 63.9,
-        "ds_ms": 400
-      },
-      {
-        "sequence_no": 1,
-        "score": 64.0,
-        "ds_ms": 333
-      },
-      {
-        "sequence_no": 7,
-        "score": 67.1,
-        "ds_ms": 333
-      },
-      {
-        "sequence_no": 11,
-        "score": 78.0,
-        "ds_ms": 333
-      },
-      {
+        "rank": 2,
+        "segment_id": "swing-12",
         "sequence_no": 12,
-        "score": 74.8,
-        "ds_ms": 334
-      }
-    ],
-    "best_finish": [
-      {
-        "sequence_no": 9,
-        "score": 77.5,
-        "ds_ms": 334
+        "start_ms": 135000,
+        "end_ms": 138900,
+        "category_score": 74.8,
+        "overall_score": 74.8,
+        "confidence": 0.998,
+        "reason": "軀幹前傾穩定 Δ=1.7°，動作總分 74.8 分",
+        "manual_pinned": false
       },
       {
-        "sequence_no": 7,
-        "score": 67.1,
-        "ds_ms": 333
-      },
-      {
-        "sequence_no": 10,
-        "score": 63.9,
-        "ds_ms": 400
-      },
-      {
-        "sequence_no": 12,
-        "score": 74.8,
-        "ds_ms": 334
-      },
-      {
+        "rank": 3,
+        "segment_id": "swing-8",
         "sequence_no": 8,
-        "score": 73.0,
-        "ds_ms": 333
+        "start_ms": 109600,
+        "end_ms": 113200,
+        "category_score": 73.0,
+        "overall_score": 73.0,
+        "confidence": 0.999,
+        "reason": "軀幹前傾穩定 Δ=3.2°，動作總分 73.0 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 4,
+        "segment_id": "swing-3",
+        "sequence_no": 3,
+        "start_ms": 36933,
+        "end_ms": 44100,
+        "category_score": 67.5,
+        "overall_score": 67.5,
+        "confidence": 0.999,
+        "reason": "軀幹前傾穩定 Δ=3.0°，動作總分 67.5 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 5,
+        "segment_id": "swing-7",
+        "sequence_no": 7,
+        "start_ms": 103733,
+        "end_ms": 107600,
+        "category_score": 67.1,
+        "overall_score": 67.1,
+        "confidence": 0.999,
+        "reason": "軀幹前傾穩定 Δ=6.7°，動作總分 67.1 分",
+        "manual_pinned": false
       }
     ],
-    "ig_worthy": [
+    "tempo": [
       {
-        "sequence_no": 10,
-        "score": 63.9,
-        "ds_ms": 400
-      },
-      {
+        "rank": 1,
+        "segment_id": "swing-7",
         "sequence_no": 7,
-        "score": 67.1,
-        "ds_ms": 333
+        "start_ms": 103733,
+        "end_ms": 107600,
+        "category_score": 45.8,
+        "overall_score": 67.1,
+        "confidence": 0.999,
+        "reason": "上下桿時間比 1.70:1（標準 3.0:1），節奏得分 45.8 分",
+        "manual_pinned": false
       },
       {
-        "sequence_no": 9,
-        "score": 77.5,
-        "ds_ms": 334
-      },
-      {
-        "sequence_no": 11,
-        "score": 78.0,
-        "ds_ms": 333
-      },
-      {
+        "rank": 2,
+        "segment_id": "swing-12",
         "sequence_no": 12,
-        "score": 74.8,
-        "ds_ms": 334
+        "start_ms": 135000,
+        "end_ms": 138900,
+        "category_score": 45.3,
+        "overall_score": 74.8,
+        "confidence": 0.998,
+        "reason": "上下桿時間比 1.69:1（標準 3.0:1），節奏得分 45.3 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 3,
+        "segment_id": "swing-8",
+        "sequence_no": 8,
+        "start_ms": 109600,
+        "end_ms": 113200,
+        "category_score": 40.6,
+        "overall_score": 73.0,
+        "confidence": 0.999,
+        "reason": "上下桿時間比 1.60:1（標準 3.0:1），節奏得分 40.6 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 4,
+        "segment_id": "swing-9",
+        "sequence_no": 9,
+        "start_ms": 113400,
+        "end_ms": 117000,
+        "category_score": 40.6,
+        "overall_score": 77.5,
+        "confidence": 0.999,
+        "reason": "上下桿時間比 1.60:1（標準 3.0:1），節奏得分 40.6 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 5,
+        "segment_id": "swing-3",
+        "sequence_no": 3,
+        "start_ms": 36933,
+        "end_ms": 44100,
+        "category_score": 25.2,
+        "overall_score": 67.5,
+        "confidence": 0.999,
+        "reason": "上下桿時間比 1.30:1（標準 3.0:1），節奏得分 25.2 分",
+        "manual_pinned": false
+      }
+    ],
+    "finish": [
+      {
+        "rank": 1,
+        "segment_id": "swing-9",
+        "sequence_no": 9,
+        "start_ms": 113400,
+        "end_ms": 117000,
+        "category_score": 93.1,
+        "overall_score": 77.5,
+        "confidence": 0.999,
+        "reason": "收桿停頓 2133ms、晃動比 0.065，收桿得分 93.1 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 2,
+        "segment_id": "swing-7",
+        "sequence_no": 7,
+        "start_ms": 103733,
+        "end_ms": 107600,
+        "category_score": 90.4,
+        "overall_score": 67.1,
+        "confidence": 0.999,
+        "reason": "收桿停頓 2333ms、晃動比 0.074，收桿得分 90.4 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 3,
+        "segment_id": "swing-10",
+        "sequence_no": 10,
+        "start_ms": 119000,
+        "end_ms": 123000,
+        "category_score": 89.4,
+        "overall_score": 69.3,
+        "confidence": 0.999,
+        "reason": "收桿停頓 2200ms、晃動比 0.078，收桿得分 89.4 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 4,
+        "segment_id": "swing-12",
+        "sequence_no": 12,
+        "start_ms": 135000,
+        "end_ms": 138900,
+        "category_score": 85.7,
+        "overall_score": 74.8,
+        "confidence": 0.998,
+        "reason": "收桿停頓 2267ms、晃動比 0.091，收桿得分 85.7 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 5,
+        "segment_id": "swing-8",
+        "sequence_no": 8,
+        "start_ms": 109600,
+        "end_ms": 113200,
+        "category_score": 85.6,
+        "overall_score": 73.0,
+        "confidence": 0.999,
+        "reason": "收桿停頓 2200ms、晃動比 0.091，收桿得分 85.6 分",
+        "manual_pinned": false
+      }
+    ],
+    "ig": [
+      {
+        "rank": 1,
+        "segment_id": "swing-10",
+        "sequence_no": 10,
+        "start_ms": 119000,
+        "end_ms": 123000,
+        "category_score": 90.8,
+        "overall_score": 69.3,
+        "confidence": 0.999,
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 90.8 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 2,
+        "segment_id": "swing-7",
+        "sequence_no": 7,
+        "start_ms": 103733,
+        "end_ms": 107600,
+        "category_score": 84.4,
+        "overall_score": 67.1,
+        "confidence": 0.999,
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 84.4 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 3,
+        "segment_id": "swing-9",
+        "sequence_no": 9,
+        "start_ms": 113400,
+        "end_ms": 117000,
+        "category_score": 83.7,
+        "overall_score": 77.5,
+        "confidence": 0.999,
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 83.7 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 4,
+        "segment_id": "swing-11",
+        "sequence_no": 11,
+        "start_ms": 123733,
+        "end_ms": 129400,
+        "category_score": 83.6,
+        "overall_score": 77.5,
+        "confidence": 0.999,
+        "reason": "畫面完整度 99.9 分、收桿平穩，IG 吸睛分 83.6 分",
+        "manual_pinned": false
+      },
+      {
+        "rank": 5,
+        "segment_id": "swing-12",
+        "sequence_no": 12,
+        "start_ms": 135000,
+        "end_ms": 138900,
+        "category_score": 82.4,
+        "overall_score": 74.8,
+        "confidence": 0.998,
+        "reason": "畫面完整度 99.8 分、收桿平穩，IG 吸睛分 82.4 分",
+        "manual_pinned": false
       }
     ]
   }

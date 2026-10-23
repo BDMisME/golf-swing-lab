@@ -500,6 +500,11 @@ class CoarseToFineDetector:
                     audio_transients_ms=audio_transients_ms,
                 )
                 if imp_ref:
+                    for flg in imp_ref.get("flags", []):
+                        flags_set.add(flg)
+                    if "audio_kinematic_conflict" in imp_ref.get("flags", []):
+                        review_status = "needs_review"
+
                     refined_ds = imp_ref["refined_ms"] - (top_ev.time_ms if top_ev else 0)
                     if 180 <= refined_ds <= 650 and abs(imp_ref.get("delta_ms", 0)) <= 180:
                         imp_ev.time_ms = imp_ref["refined_ms"]
@@ -824,11 +829,7 @@ class CoarseToFineDetector:
         ref_impact_ms: int | None = None,
     ) -> dict[str, Any] | None:
         """
-        針對特定關鍵事件 (Top 或 Impact) 進行局部高幀率 (~60 FPS) 取樣精修。
-        1. 左右手腕可見度加權融合，杜絕 DTL 視角單側遮擋跳動。
-        2. Top 結合下桿生理時間先驗 (200~380ms) 與頂點停頓下桿爆發轉折 (Transition Breakaway Launch)。
-        3. Impact 結合音訊瞬態同步與最低點制動。
-        4. 嚴格校準 Heuristic Confidence (封頂 0.88) 與 Estimated Uncertainty (Top 60~80ms, Impact 33~55ms)。
+        針對特定關鍵事件 (Top 或 Impact) 進行局部高幀率取樣精修。
         """
         start_ms = max(0, center_ms - window_radius_ms)
         end_ms = center_ms + window_radius_ms
@@ -839,6 +840,34 @@ class CoarseToFineDetector:
             end_ms=end_ms,
             step_ms=high_fps_step_ms,
         )
+        return self._refine_event_local_high_fps_from_frames(
+            local_frames=local_frames,
+            event_name=event_name,
+            center_ms=center_ms,
+            high_fps_step_ms=high_fps_step_ms,
+            audio_transients_ms=audio_transients_ms,
+            ref_impact_ms=ref_impact_ms,
+        )
+
+    def _refine_event_local_high_fps_from_frames(
+        self,
+        local_frames: list[FramePoseResult],
+        event_name: str,
+        center_ms: int,
+        high_fps_step_ms: int = 16,
+        audio_transients_ms: list[int] | None = None,
+        ref_impact_ms: int | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        純影格資料精修邏輯：
+        1. 左右手腕可見度加權融合，杜絕 DTL 視角單側遮擋跳動。
+        2. Top 結合下桿生理時間先驗 (200~380ms) 與頂點停頓下桿爆發轉折 (Transition Breakaway Launch)。
+        3. Impact 運動學合理性閘門 (Kinematic Plausibility Gate)：
+           - 手腕必須處於最低點深部 (>= max_y - 0.22 * span)
+           - 垂直速度不可為劇烈隨揮上升 (vy >= -0.22)
+           - 音訊若與運動學最低點偏差 > 55ms 判定為 audio_kinematic_conflict 並誠實降級
+        4. 嚴格校準 Heuristic Confidence (封頂 0.88) 與 Estimated Uncertainty。
+        """
         if len(local_frames) < 3:
             return None
 
@@ -946,24 +975,48 @@ class CoarseToFineDetector:
                 "uncertainty_ms": uncertainty_ms,
                 "sampling_resolution_ms": sampling_res,
                 "sources": sources,
+                "flags": [],
                 "delta_ms": refined_time_ms - center_ms,
                 "refined_frame": local_frames[refined_idx],
             }
 
         elif event_name == "impact":
-            # 1. 手腕高度閘門：Impact 瞬間雙手必須位於擊球區低位 (至少在垂直幅度 35% 以下)
+            # 1. 運動學擊球特徵 (Kinematic Impact Candidate)
+            # 尋找手腕垂直深度最深 35% 區域 (手腕位於擊球打擊墊鄰近)
             low_indices = [
                 i for i in range(len(wrist_ys))
-                if (wrist_span < 0.04 or wrist_ys[i] >= (min_y + 0.35 * wrist_span))
+                if (wrist_span < 0.04 or wrist_ys[i] >= (max_y - 0.35 * wrist_span))
                 and abs(times[i] - center_ms) <= 120
             ]
             if not low_indices:
+                low_indices = [
+                    i for i in range(len(wrist_ys))
+                    if abs(times[i] - center_ms) <= 120
+                ]
+            if not low_indices:
                 low_indices = list(range(len(wrist_ys)))
 
-            # 2. 音訊瞬態優先同步 (若在 center_ms ±75ms 內存在擊球聲，優先鎖定該影格)
+            max_spd = float(np.max(speeds)) if len(speeds) > 0 else 1e-4
+            scored_cands: list[tuple[float, int]] = []
+            for i in low_indices:
+                depth_s = ((wrist_ys[i] - min_y) / max(1e-4, wrist_span)) * 4.5
+                decel = (speeds[i - 1] - speeds[i]) if (i > 0 and i < len(speeds)) else 0.0
+                decel_s = max(0.0, decel / max_spd) * 3.5
+                dist_p = (abs(times[i] - center_ms) / 50.0) * 1.0
+                cand_total = depth_s + decel_s - dist_p
+                scored_cands.append((cand_total, i))
+
+            scored_cands.sort(key=lambda x: x[0], reverse=True)
+            kine_best_idx = scored_cands[0][1]
+            kine_best_time = times[kine_best_idx]
+
+            # 2. 音訊瞬態運動學合理性檢驗 (Kinematic Plausibility Gate on Audio)
             best_idx = None
             sources = []
-            has_audio = False
+            flags = []
+            has_audio_sync = False
+            has_conflict = False
+
             if audio_transients_ms:
                 near_audios = [
                     a for a in audio_transients_ms
@@ -971,33 +1024,42 @@ class CoarseToFineDetector:
                 ]
                 if near_audios:
                     target_aud = min(near_audios, key=lambda a: abs(a - center_ms))
-                    best_idx = min(low_indices, key=lambda i: abs(times[i] - target_aud))
-                    sources = ["audio_transient_synchronized", "local_high_fps_refinement"]
-                    has_audio = True
+                    aud_nearest_idx = min(range(len(times)), key=lambda i: abs(times[i] - target_aud))
 
-            # 3. 若無近音訊，在低位候選影格中尋找擊球瞬間運動學特徵 (最低點 + 制動減速)
+                    # 檢驗該音訊瞬態影格的運動學合理性：
+                    # a. 手腕垂直深度是否處於擊球區底部 (>= max_y - 0.22 * wrist_span)
+                    # b. 垂直速度是否不是劇烈向上隨揮 (v_y >= -0.22)
+                    # c. 與運動學最佳最低點偏差是否 <= 55ms
+                    is_depth_ok = bool(wrist_span < 0.04 or wrist_ys[aud_nearest_idx] >= (max_y - 0.22 * wrist_span))
+                    is_vy_ok = bool(v_y[aud_nearest_idx] >= -0.22)
+                    time_diff_kine = abs(times[aud_nearest_idx] - kine_best_time)
+                    is_timing_consistent = bool(time_diff_kine <= 55)
+
+                    if is_depth_ok and is_vy_ok and is_timing_consistent:
+                        best_idx = aud_nearest_idx
+                        sources = ["audio_transient_synchronized", "local_high_fps_refinement"]
+                        has_audio_sync = True
+                    else:
+                        # 音訊與運動學發生衝突 (如第 10 球 121060ms 發生在隨揮上升期)
+                        has_conflict = True
+                        flags.append("audio_kinematic_conflict")
+                        best_idx = kine_best_idx
+                        sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
+
             if best_idx is None:
-                max_spd = float(np.max(speeds)) if len(speeds) > 0 else 1e-4
-                scored_cands: list[tuple[float, int]] = []
-                for i in low_indices:
-                    depth_s = ((wrist_ys[i] - min_y) / max(1e-4, wrist_span)) * 4.0
-                    decel = (speeds[i - 1] - speeds[i]) if (i > 0 and i < len(speeds)) else 0.0
-                    decel_s = max(0.0, decel / max_spd) * 3.0
-                    dist_p = (abs(times[i] - center_ms) / 50.0) * 1.0
-
-                    cand_total = depth_s + decel_s - dist_p
-                    scored_cands.append((cand_total, i))
-
-                scored_cands.sort(key=lambda x: x[0], reverse=True)
-                best_idx = scored_cands[0][1]
+                best_idx = kine_best_idx
                 sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
 
             refined_time_ms = times[best_idx]
             lm_vis = float(wrist_confs[best_idx])
-            # P0-4: 嚴格區分 sampling resolution, timing uncertainty, heuristic confidence
-            if has_audio:
+
+            # P0-4 & P0-B: 嚴格校準 Heuristic Confidence 與 Estimated Uncertainty
+            if has_audio_sync:
                 uncertainty_ms = max(33, int(round(sampling_res * 1.2)))
                 conf = round(min(0.88, 0.75 + 0.10 * lm_vis + 0.05), 3)
+            elif has_conflict:
+                uncertainty_ms = max(70, int(round(sampling_res * 2.5)))
+                conf = round(min(0.65, max(0.50, 0.55 + 0.10 * lm_vis)), 3)
             else:
                 uncertainty_ms = max(55, int(round(sampling_res * 2.0)))
                 conf = round(min(0.78, 0.60 + 0.15 * lm_vis), 3)
@@ -1008,6 +1070,7 @@ class CoarseToFineDetector:
                 "uncertainty_ms": uncertainty_ms,
                 "sampling_resolution_ms": sampling_res,
                 "sources": sources,
+                "flags": flags,
                 "delta_ms": refined_time_ms - center_ms,
                 "refined_frame": local_frames[best_idx],
             }

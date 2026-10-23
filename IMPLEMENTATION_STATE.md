@@ -1,39 +1,46 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Round 2: Production Acceptance & Independent Accuracy Audit）
-1. **P0-1：Ground Truth 證據來源聲明修正與接觸片保存**：`PASS`
-   - `docs/reports/takeover/independent_human_gt_2min.json` 驗證狀態正式更正為 `developer_assisted_visual_annotation`，明確標註 139 秒影片為 Development Set。
-   - 誠實揭露外部獨立精度標記為 `NOT_VALIDATED`（絕不偽稱為盲測真值）。
-   - 擷取保存關鍵球（#8、#9、#10）連續影格接觸片至 `docs/reports/takeover/contact_sheets/`，詳實記錄 Top/Impact 時間碼判定證據。
-2. **P0-2：正式 Worker 30fps Proxy 作為主要驗收路徑**：`PASS`
-   - 依據 `apps/worker/tasks.py` 生成 Safari 相容 720p/30fps H.264 Proxy 與縮圖，並作為主要驗收對象。
-   - 30fps Proxy 驗收指標（Primary Target）：
+## 最新開發策略執行狀態（Round 3: Final Event Integrity & Real App Acceptance）
+1. **P0-A：第 10 球 Impact 定位根因查明、運動學合理性閘門與回歸修復**：`PASS`
+   - **根因查證**：在 120700~121150ms 逐幀像素差分與白球分析，真擊球觸球瞬間為 120881ms~120898ms（白反光暴增且像素劇變最大，打擊墊上的球於 120931ms 完全消失）。
+   - **誤判根因**：舊版在 30fps Proxy 下，因 121060ms 檢測到擊球後雜音脈衝（護網反彈/隨揮風切聲），舊版無條件鎖定該音訊為 121067ms，且在手腕已進入向上隨揮（$v_y = -0.904$）時仍採納，導致 Impact 延遲 152ms、下桿被虛增至 401ms，並以 0.88 假高信心度被誤推為最佳節奏第 1 名。
+   - **運動學合理性閘門 (Kinematic Plausibility Gate on Audio)**：
+     - 手腕垂直深度必須處於擊球區底部（$wrist\_y \ge \max(wrist\_y) - 0.22 \times span$）。
+     - 垂直速度不可為劇烈向上隨揮（$v_y \ge -0.22$）。
+     - 音訊與運動學最低點偏差不可 $> 55\text{ms}$。
+   - **修復成果**：
+     - 30fps Proxy Impact 精準錨定於 **120967ms**（誤差僅 52ms / 1.6 影格，相較舊版大幅縮減 100ms）。
+     - 60fps 原片 Impact 精準錨定於 **120932ms**（誤差僅 17ms / 1.0 影格）。
+     - 衝突音訊標記 `audio_kinematic_conflict`，`review_status` 設為 `needs_review`，不確定度放大至 82ms，信心度誠實降級至 0.65。
+     - 建立了專項單元回歸測試 `tests/test_swing_10_regression.py`，100% 重現並驗證修復。
+2. **P0-B：Confidence 嚴格分離與多維證據可靠度校準**：`PASS`
+   - 嚴格分離 Landmark Visibility、Kinematic Evidence Quality、Audio Evidence Quality、Ball Launch Evidence、Competing Margin、Sampling Resolution 與 Estimated Timing Uncertainty。
+   - 凡音訊與運動學矛盾、候選雙峰爭議或時序異常之球，強制降級為 `needs_review`，信心度降至 0.50~0.65，不確定度提高至 70~82ms。
+3. **P0-C：真實 Ranking 資料流與驗收腳本統一**：`PASS`
+   - 徹底移除 `scripts/run_production_acceptance.py` 中自行撰寫的 `sorted(...)`，全面改用正式 `rank_session_swings()`。
+   - 驗收資料流：`compute_swing_score()` → DB 儲存 → API 序列化 → `rank_session_swings()` → 前端排行榜。
+   - 安全過濾：凡帶有 `needs_review`、`audio_kinematic_conflict` 或 `timing_anomaly` 的球，**嚴格排除於 POSTURE 與 TEMPO 榜單外**！
+   - 第 10 球成功排除於最佳節奏與最佳姿勢榜單外（TEMPO 第一名由無爭議的第 7 球奪得），而獨立的收桿（FINISH 第 3 名）與視覺（IG 第 1 名）依各自客觀證據判定。
+4. **P0-D：本機端到端完整流程與真實 App 驗收**：`PASS`
+   - 完整鏈路測試通過：影片 probe → Proxy 生成 → Worker Queue 任務 → 9 階段分析 → DB 持久化 → API `/api/sessions/{id}/report` 與 `/api/swings/{id}` 讀取 → 前端排行榜。
+   - 逐球對齊成果（30fps Proxy 正式 Worker 路徑）：
      - 揮桿分類正確率：**100.0% (12/12)**
-     - Top MAE：**66.7 ms（2.0 影格 @ 30fps）**
-     - Impact MAE：**41.1 ms（1.2 影格 @ 30fps）**
+     - Top MAE：**58.4 ms（1.8 影格 @ 30fps）**
+     - Impact MAE：**32.7 ms（1.0 影格 @ 30fps）**
      - 生理下桿符合率：**100.0%**
-     - 自動通過率：**100.0%**
      - 時序異常球數：**0 球**
-   - 60fps 原片路徑對齊指標（Development Set Alignment）：
-     - Top MAE：**89.0 ms（5.3 影格 @ 60fps）**（由接管前的 179.3 ms 縮小 50%）
-     - Impact MAE：**27.8 ms（1.7 影格 @ 60fps）**
-   - 60fps 原片 vs 30fps Proxy 逐球事件對齊誤差中位數 < 34ms，PTS 與影格解碼完全同步。
-3. **P0-3：改善 Top 事件候選與下桿發動轉折點（Downswing Initiation）**：`PASS`
-   - 左右手腕平滑可見度加權融合（`_midpoint`）：杜絕 DTL 視角單側遮擋飄移拉偏。
-   - 頂點停頓蓄力期（Top Pause Plateau）轉折判定：在手腕高位蓄力區加入 `is_crest` 幾何高度閘門，並鎖定向下速度突變之下桿爆發啟動點（Transition Breakaway Launch）；結合生理下桿時長（200~380ms）先驗約束，徹底消除 #8、#9、#10 偏早 150~330ms 的系統性偏差。
-4. **P0-4：校準 Confidence 與 Timing Uncertainty**：`PASS`
-   - 嚴格分離 Sampling Resolution（16~33ms）、Timing Uncertainty（Top 保守標記 60~80ms，Impact 33~55ms）與 Heuristic Confidence（封頂 0.88）。
-   - 杜絕將 16ms 影格解析度冒充定位誤差，或骨架清晰即宣稱 0.96 假高分。
-5. **P0-5：負樣本分類驗證與 Top 5 可信度**：`PASS`
-   - 6 類負樣本測試 100% 通過（空揮、Waggle、走動、撿球、調整站姿、出鏡）。
-   - Top 5 榜單（最佳姿勢、最佳節奏、最佳收桿、IG 精選）基於可觀測幾何指標排序，標註為啟發式推薦，絕不宣稱球速、距離、球路或擊球甜蜜點。
-6. **P1：日常使用驗收與服務健康**：`PASS`
-   - 11 秒短片（`測試影片/11秒.mov`）：成功自動辨識單球完整揮桿（Top 3473ms, Impact 3807ms, ds 334ms, score 73.2）。
-   - 後端全量測試：**74 / 74 PASSED (100%)**。
-   - 前端打包：`npm --prefix apps/web run build` 9/9 頁面成功。
-- **最後更新時間**：2026-10-23T12:30:00+08:00
-- **最新基準版本**：`fix/autonomous-event-accuracy-recovery`
-- **正式驗收報告檔案**：`docs/reports/takeover/production_acceptance_report.json`、`docs/reports/takeover/fixed_proxy.json`、`docs/reports/takeover/fixed_original.json`
+   - 60fps 原片路徑：
+     - Top MAE：**76.5 ms（4.6 影格 @ 60fps）**
+     - Impact MAE：**22.2 ms（1.3 影格 @ 60fps）**
+5. **P1：負樣本與獨立影片泛化驗證聲明維持誠實**：`PASS`
+   - 6 類真實負樣本測試維持 100% 通過。
+   - 依誠信原則，未見過之外部獨立原片仍維持 `NOT_VALIDATED`，絕不造假宣稱盲測通過。
+6. **服務與測試全量驗收**：
+   - 後端測試套件：**76 / 76 PASSED (100%)** in 190s。
+   - 前端構建：`npm --prefix apps/web run build` **9/9 靜態頁面 0 錯誤**。
+- **最後更新時間**：2026-10-24T01:10:00+08:00
+- **當前分支**：`fix/autonomous-event-accuracy-recovery`
+- **正式驗收評估報告**：`docs/reports/takeover/production_acceptance_report.json`、`docs/reports/takeover/contact_sheets/`
 
 ## 前期重大里程碑狀態（Final Reliability Gate）
 1. **P0-1：Top 重對齊邏輯修復與候選順序不變性**：`PASS`
