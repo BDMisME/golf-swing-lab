@@ -488,8 +488,6 @@ def rank_session_swings(
             return round(float(spine), 1)
         elif head is not None:
             return round(float(head), 1)
-        elif s.get("overall_score") is not None:
-            return float(s["overall_score"])
         return None
 
     def _posture_reason(s: dict[str, Any], score: float | None) -> str:

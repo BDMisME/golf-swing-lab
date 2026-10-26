@@ -3,10 +3,13 @@
 > 本報告由 `scripts/run_production_acceptance.py` 自行推論產生之 `production_acceptance_report.json` 100% 動態生成，並通過自動完整性斷言檢核（杜絕人工修改或文字寫死）。
 
 ## 0. 測試環境與版本證據
+- **測試執行時間 (UTC)**: `2026-10-26T18:34:16.061205+00:00`
+- **分析程式版本**: `2.1.0-beta`
 - **測試影片**: `2分鐘.mov`
 - **影片 SHA-256**: `4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9`
 - **Git 分支**: `fix/autonomous-event-accuracy-recovery`
-- **Git Commit**: `d72e004803009af79ad8e6bc4e514a5063bbbbbf`
+- **Git Commit SHA**: `79753f66d3b89686007b2ac8b14b6d44dffadee3`
+- **工作樹狀態**: `dirty` (9 modified files)
 - **Ground Truth 屬性**: `developer_assisted_visual_annotation`（Development Set Alignment，非外部獨立盲測）
 
 ## 1. 核心指標對比（30fps 正式 Worker Proxy vs 60fps 原片）
@@ -40,11 +43,11 @@
 ## 3. 正式 rank_session_swings() 排行榜結果 (30fps Proxy)
 
 ### POSTURE TOP 5 精選球
-- **Rank #1**: Swing #11 (Score=84.8) — 前傾穩定 Δ=1.8°、頭部位移 r=0.131，姿勢得分 84.8 分
-- **Rank #2**: Swing #9 (Score=83.1) — 前傾穩定 Δ=2.8°、頭部位移 r=0.118，姿勢得分 83.1 分
-- **Rank #3**: Swing #8 (Score=78.9) — 前傾穩定 Δ=3.2°、頭部位移 r=0.128，姿勢得分 78.9 分
-- **Rank #4**: Swing #12 (Score=77.9) — 前傾穩定 Δ=0.3°、頭部位移 r=0.167，姿勢得分 77.9 分
-- **Rank #5**: Swing #3 (Score=77.5) — 前傾穩定 Δ=3.0°、頭部位移 r=0.141，姿勢得分 77.5 分
+- **Rank #1**: Swing #11 (Score=84.8) — 軀幹前傾穩定 Δ=1.8°、頭部位移 r=0.131，姿勢得分 84.8 分
+- **Rank #2**: Swing #9 (Score=83.1) — 軀幹前傾穩定 Δ=2.8°、頭部位移 r=0.118，姿勢得分 83.1 分
+- **Rank #3**: Swing #8 (Score=78.9) — 軀幹前傾穩定 Δ=3.2°、頭部位移 r=0.128，姿勢得分 78.9 分
+- **Rank #4**: Swing #12 (Score=77.9) — 軀幹前傾穩定 Δ=0.3°、頭部位移 r=0.167，姿勢得分 77.9 分
+- **Rank #5**: Swing #3 (Score=77.5) — 軀幹前傾穩定 Δ=3.0°、頭部位移 r=0.141，姿勢得分 77.5 分
 
 ### TEMPO TOP 5 精選球
 - **Rank #1**: Swing #10 (Score=52.8) — 上下桿時間比 2.00:1（標準 3.0:1），節奏得分 52.8 分

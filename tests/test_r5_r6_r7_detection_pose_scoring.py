@@ -147,6 +147,8 @@ def test_score_v1_determinism_coverage_gate_and_rankings() -> None:
             "ig_visual_score": 88.0,
             "confidence": 0.9,
             "subscores": {
+                "spine_tilt_stability": {"score": 92.0, "raw_value": 1.5},
+                "head_stability": {"score": 90.0, "raw_value": 0.04},
                 "tempo_consistency": {"score": 85.0},
                 "finish_balance": {"score": 92.0},
             },
@@ -162,14 +164,32 @@ def test_score_v1_determinism_coverage_gate_and_rankings() -> None:
             "ig_visual_score": 94.0,
             "confidence": 0.88,
             "subscores": {
+                "spine_tilt_stability": {"score": 84.0, "raw_value": 2.5},
+                "head_stability": {"score": 80.0, "raw_value": 0.08},
                 "tempo_consistency": {"score": 96.0},
                 "finish_balance": {"score": 84.0},
             },
         },
+        {
+            "id": "seg-no-posture",
+            "sequence_no": 3,
+            "start_ms": 9000,
+            "end_ms": 12000,
+            "label": "valid_swing",
+            "review_status": "auto_accepted",
+            "overall_score": 99.0,  # 總分極高，但無姿勢分項
+            "confidence": 0.90,
+            "subscores": {
+                "tempo_consistency": {"score": 99.0},
+            },
+        },
     ]
     ranks = rank_session_swings(swings)
+    # 姿勢榜：seg-1 (91.2) > seg-2 (82.4)，seg-no-posture 嚴格不被納入 (不可用 overall_score 冒充)
+    assert len(ranks["posture"]) == 2
     assert ranks["posture"][0]["segment_id"] == "seg-1"
-    assert ranks["tempo"][0]["segment_id"] == "seg-2"
+    assert all(it["segment_id"] != "seg-no-posture" for it in ranks["posture"])
+    assert ranks["tempo"][0]["segment_id"] == "seg-no-posture"
     assert ranks["ig"][0]["segment_id"] == "seg-2"
 
     # 手動排除 seg-1 後，seg-2 成為 posture 第一名

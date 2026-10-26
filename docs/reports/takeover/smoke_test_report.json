@@ -1,0 +1,38 @@
+{
+  "tested_at": "2026-10-26T18:27:14.761031+00:00",
+  "video_path": "/Users/mathew/Desktop/Golf_Swing_Lab/測試影片/2分鐘.mov",
+  "steps": {
+    "auth": "PASS",
+    "ingest": "PASS",
+    "worker_analysis": "PASS",
+    "session_report": "PASS",
+    "single_swing_and_clean_motion": "PASS"
+  },
+  "verified_swings": {
+    "swing_8": {
+      "top_time_ms": 110833,
+      "impact_time_ms": 111200,
+      "downswing_ms": 367,
+      "review_status": "auto_accepted",
+      "keyframes_count": 36,
+      "has_landmarks": true
+    },
+    "swing_9": {
+      "top_time_ms": 114700,
+      "impact_time_ms": 115067,
+      "downswing_ms": 367,
+      "review_status": "auto_accepted",
+      "keyframes_count": 32,
+      "has_landmarks": true
+    },
+    "swing_10": {
+      "top_time_ms": 120600,
+      "impact_time_ms": 120967,
+      "downswing_ms": 367,
+      "review_status": "auto_accepted",
+      "keyframes_count": 36,
+      "has_landmarks": true
+    }
+  },
+  "overall_status": "PASS"
+}

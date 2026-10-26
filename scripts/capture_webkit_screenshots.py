@@ -13,13 +13,37 @@ import AppKit
 import objc
 import WebKit
 
+import os
+
 OUT_DIR = Path("docs/screenshots/webkit")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-DEFAULT_TOKEN = (
-    "eyJzdWIiOiI2NTU3NWEyNC1hYTY1LTRjZmItOTMzNC01NjEzZTVhYjgzYjUiLCJlbWFpbCI6ImdvbGZlckBzd2luZ2xhYi5sb2NhbCIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc5MzE3MTYyNn0."
-    "5c32796215e240200cd296c37cede178add16a155ed5e3754e02e6b931b24c8a"
-)
+
+def get_auth_token() -> str:
+    """
+    動態取得安全認證 Token：
+    1. 優先從環境變數 GSL_AUTH_TOKEN 或 GSL_SESSION_TOKEN 讀取
+    2. 若未設定，動態調用本機 auth 模組簽發短效測試 Token，嚴禁在程式碼中硬編碼真實憑證
+    """
+    token = os.environ.get("GSL_AUTH_TOKEN") or os.environ.get("GSL_SESSION_TOKEN")
+    if token:
+        return token
+
+    try:
+        from apps.api.auth import create_session_token
+        from apps.api.models import User
+
+        temp_user = User(
+            id=os.environ.get("TEST_USER_ID", "65575a24-aa65-4cfb-9334-5613e5ab83b5"),
+            email="golfer@swinglab.local",
+            username="練習場主理人",
+            role="admin",
+        )
+        return create_session_token(temp_user, ttl_seconds=1800)
+    except Exception as exc:
+        raise RuntimeError(
+            "無法取得認證憑證。請透過環境變數 GSL_AUTH_TOKEN 提供或確認後端環境可用。"
+        ) from exc
 
 
 class WebKitSnapshotter(AppKit.NSObject):
@@ -102,7 +126,8 @@ class WebKitSnapshotter(AppKit.NSObject):
         self.webview.takeSnapshotWithConfiguration_completionHandler_(config, completion_handler)
 
 
-def capture_swing(swing_id: str, token: str = DEFAULT_TOKEN):
+def capture_swing(swing_id: str, token: str | None = None):
+    actual_token = token or get_auth_token()
     app = AppKit.NSApplication.sharedApplication()
     app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
 
@@ -123,7 +148,7 @@ def capture_swing(swing_id: str, token: str = DEFAULT_TOKEN):
     }
     script_source = f"""
     try {{
-        window.localStorage.setItem('gsl_token', '{token}');
+        window.localStorage.setItem('gsl_token', '{actual_token}');
         window.localStorage.setItem('gsl_user', JSON.stringify({json.dumps(user_data)}));
     }} catch(e) {{
         console.error(e);

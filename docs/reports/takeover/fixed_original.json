@@ -14063,7 +14063,7 @@
         "category_score": 84.5,
         "overall_score": 67.2,
         "confidence": 0.999,
-        "reason": "前傾穩定 Δ=0.4°、頭部位移 r=0.132，姿勢得分 84.5 分",
+        "reason": "軀幹前傾穩定 Δ=0.4°、頭部位移 r=0.132，姿勢得分 84.5 分",
         "manual_pinned": false
       },
       {
@@ -14075,7 +14075,7 @@
         "category_score": 80.3,
         "overall_score": 68.2,
         "confidence": 0.999,
-        "reason": "前傾穩定 Δ=2.8°、頭部位移 r=0.134，姿勢得分 80.3 分",
+        "reason": "軀幹前傾穩定 Δ=2.8°、頭部位移 r=0.134，姿勢得分 80.3 分",
         "manual_pinned": false
       },
       {
@@ -14087,7 +14087,7 @@
         "category_score": 77.3,
         "overall_score": 67.4,
         "confidence": 0.999,
-        "reason": "前傾穩定 Δ=2.9°、頭部位移 r=0.147，姿勢得分 77.3 分",
+        "reason": "軀幹前傾穩定 Δ=2.9°、頭部位移 r=0.147，姿勢得分 77.3 分",
         "manual_pinned": false
       },
       {
@@ -14099,7 +14099,7 @@
         "category_score": 70.9,
         "overall_score": 61.7,
         "confidence": 0.998,
-        "reason": "前傾穩定 Δ=2.0°、頭部位移 r=0.204，姿勢得分 70.9 分",
+        "reason": "軀幹前傾穩定 Δ=2.0°、頭部位移 r=0.204，姿勢得分 70.9 分",
         "manual_pinned": false
       },
       {
@@ -14111,7 +14111,7 @@
         "category_score": 68.6,
         "overall_score": 57.0,
         "confidence": 0.999,
-        "reason": "前傾穩定 Δ=5.0°、頭部位移 r=0.136，姿勢得分 68.6 分",
+        "reason": "軀幹前傾穩定 Δ=5.0°、頭部位移 r=0.136，姿勢得分 68.6 分",
         "manual_pinned": false
       }
     ],

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     s3_force_path_style: bool = True
     presigned_url_ttl_seconds: int = 900
 
-    session_secret: str = "change-me-in-production-at-least-32-bytes-long-secret-key"
+    session_secret: str = "gsl-rotated-session-secret-7578cfc2fc2e5e4964be15b584741a88e550d330"
     admin_email: str = "golfer@swinglab.local"
     admin_password: str = "GolfSwingLab!2026"
     allowed_origins: str = "http://localhost:23000,http://127.0.0.1:23000,http://localhost:3000,https://golf-swing-lab.zeabur.app"

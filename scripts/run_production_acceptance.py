@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -334,25 +335,48 @@ def main():
                 h.update(chunk)
         return h.hexdigest()
 
-    def get_git_info() -> dict[str, str]:
+    def get_git_info() -> dict[str, Any]:
         try:
             c = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
             b = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
-            return {"commit": c, "branch": b}
+            status = subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
+            is_dirty = len(status) > 0
+            dirty_files = [line.strip() for line in status.splitlines() if line.strip()]
+            return {
+                "commit": c,
+                "branch": b,
+                "is_dirty": is_dirty,
+                "working_tree_state": "dirty" if is_dirty else "clean",
+                "dirty_files_count": len(dirty_files),
+                "dirty_files": dirty_files[:10],
+            }
         except Exception:
-            return {"commit": "unknown", "branch": "unknown"}
+            return {
+                "commit": "unknown",
+                "branch": "unknown",
+                "is_dirty": False,
+                "working_tree_state": "unknown",
+                "dirty_files_count": 0,
+                "dirty_files": [],
+            }
 
     raw_sha256 = compute_sha256(raw_video)
     git_info = get_git_info()
+    tested_at_iso = datetime.now(timezone.utc).isoformat()
 
     # 儲存完整驗收報告 JSON
     eval_json_path = REPO_ROOT / "docs/reports/takeover/production_acceptance_report.json"
     report_dict = {
         "metadata": {
+            "analyzer_version": "2.1.0-beta",
             "video_filename": raw_video.name,
             "video_sha256": raw_sha256,
             "git_commit": git_info["commit"],
             "git_branch": git_info["branch"],
+            "working_tree_state": git_info["working_tree_state"],
+            "is_dirty": git_info["is_dirty"],
+            "dirty_files_count": git_info["dirty_files_count"],
+            "tested_at": tested_at_iso,
             "gt_reference_type": gt_data.get("validation_status", "developer_assisted_visual_annotation"),
         },
         "original_60fps": eval_orig,
@@ -390,16 +414,23 @@ def main():
     status_ds = "PASS" if p_data["downswing_compliance_rate"] >= 90 else "REVIEW"
     status_ano = "PASS" if p_data["timing_anomaly_count"] == 0 else "REVIEW"
 
+    dirty_desc = f"`{meta['working_tree_state']}`"
+    if meta.get("is_dirty"):
+        dirty_desc += f" ({meta.get('dirty_files_count', 0)} modified files)"
+
     md_lines = [
         "# Golf Swing Lab — Release Candidate (RC) 產品驗收評估摘要",
         "",
         "> 本報告由 `scripts/run_production_acceptance.py` 自行推論產生之 `production_acceptance_report.json` 100% 動態生成，並通過自動完整性斷言檢核（杜絕人工修改或文字寫死）。",
         "",
         "## 0. 測試環境與版本證據",
+        f"- **測試執行時間 (UTC)**: `{meta.get('tested_at', 'unknown')}`",
+        f"- **分析程式版本**: `{meta.get('analyzer_version', '2.1.0-beta')}`",
         f"- **測試影片**: `{meta['video_filename']}`",
         f"- **影片 SHA-256**: `{meta['video_sha256']}`",
         f"- **Git 分支**: `{meta['git_branch']}`",
-        f"- **Git Commit**: `{meta['git_commit']}`",
+        f"- **Git Commit SHA**: `{meta['git_commit']}`",
+        f"- **工作樹狀態**: {dirty_desc}",
         f"- **Ground Truth 屬性**: `{meta['gt_reference_type']}`（Development Set Alignment，非外部獨立盲測）",
         "",
         "## 1. 核心指標對比（30fps 正式 Worker Proxy vs 60fps 原片）",

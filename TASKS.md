@@ -4,6 +4,26 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 6: Beta Release & Merge Preparation (2026-10-27)
+- [x] **A. P0 安全修復（憑證輪替與硬編碼移除）**：
+  - 移除 `scripts/capture_webkit_screenshots.py` 中的硬編碼 JWT `DEFAULT_TOKEN`，改由本機環境變數 `GSL_AUTH_TOKEN` / `GSL_SESSION_TOKEN` 或 auth 模組動態簽發短效測試 Token。
+  - 輪替 `apps/api/config.py` 中的 `session_secret`，使舊外洩憑證徹底失效（實測 `decode_session_token` 回傳 `AUTH_INVALID_SIGNATURE`）。
+- [x] **B. 排行榜最後修正（Posture Composite Independence）**：
+  - 移除 `get_posture_composite_score()` 中當缺少姿勢分項時退回使用 `overall_score` 的錯誤回退。
+  - 姿勢分項（`spine_tilt_stability` 60% + `head_stability` 40%）不可得時嚴格回傳 `None`，杜絕用總分冒充姿勢評分。
+- [x] **C. 修正測試版本追溯（Verifiable Provenance）**：
+  - 更新 `scripts/run_production_acceptance.py`：動態記錄 Git SHA (`git rev-parse HEAD`)、工作目錄狀態 (`working_tree_state: clean/dirty`)、修改檔案數、原片 SHA-256、測試時間戳記與分析程式版本 (`2.1.0-beta`)。
+  - Markdown 與 JSON 報告 100% 同步動態生成，杜絕使用提交前之舊 HEAD 冒充最終版本驗證。
+- [x] **D. 實際 Mac App Smoke Test（隔離環境端到端實測）**：
+  - 撰寫並執行 `scripts/smoke_test_mac_app.py`：在完全隔離的臨時環境（臨時 SQLite DB 與 Local Storage）中執行真實 139 秒 iPhone 錄影完整 Pipeline。
+  - 驗證場次報告 API (`/api/sessions/{id}/report`)：確認偵測 12 球、有效 12 球、四大排行榜完整、姿勢榜獨立計分、爭議球嚴格排除。
+  - 驗證單球播放 API (`/api/swings/{id}`) 與 Clean Motion：特別檢驗第 8、9、10 球之 Top/Impact 時間碼（Downswing 均為生理合規 367ms）、關鍵影格 Keyframes、人體骨架 Landmarks 幾何座標與審查狀態。
+  - 測試結束後 100% 安全清理臨時資源，使用者既有練習紀錄完全不受影響。
+- [x] **E. 全量測試與構建**：
+  - 後端測試套件：**80 / 80 PASSED (100%)** in 194s。
+  - 前端構建：Next.js 15.5.28 **9/9 靜態頁面 0 錯誤**。
+  - 隔離 Mac App Smoke Test：**100% PASS**（結果報告已儲存於 `docs/reports/takeover/smoke_test_report.json`）。
+
 ## Round 5: Final RC Gate — Top Accuracy & Ranking Integrity (2026-10-26)
 - [x] **P0-1：解決 Top 精度重大回退（Top Plateau Saturated Height & Downswing Initiation）**：
   - 釐清高爾夫動作分析慣例之 Top 定義：Top 為頂部蓄力停頓期（Top Pause Plateau）結束、手臂發動向下攻擊的轉換臨界點（Downswing Initiation / Transition Breakaway）。
