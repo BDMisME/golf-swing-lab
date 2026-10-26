@@ -209,37 +209,48 @@ class SwingPhaseStateMachine:
 
         candidates_evaluated = []
         for c in win_cands:
-            h_s = (max_sub_y - wrist_ys[c]) / y_span
+            h_raw = (max_sub_y - wrist_ys[c]) / y_span
+            # 幾何高度平滑飽和：頂部 15% 區間內高度平坦飽和 (滿分 2.5)，防止微米級高度差異壓制下桿發動轉折
+            h_s = min(1.0, h_raw / 0.85)
             cand_zc = bool(c < n - 1 and v_y[c] <= 0 and v_y[c + 1] > 0)
-            zc_bonus = 2.5 if cand_zc else 0.0
-            p_s = 1.5 if (0 < c < n - 1 and speed[c] <= speed[c - 1] and speed[c] <= speed[c + 1]) else 0.0
+            zc_bonus = 1.5 if cand_zc else 0.0
+            p_s = 1.0 if (0 < c < n - 1 and speed[c] <= speed[c - 1] and speed[c] <= speed[c + 1]) else 0.0
             post_s = speed[c : min(impact_idx + 1, c + 5)]
             acc = float(np.max(post_s)) - speed[c] if len(post_s) > 0 else 0.0
 
-            # 頂點幾何高度閘門：手腕必須位於相對高位區 (頂點 35% 幅度內) 方可被視為 Top 候選
-            is_crest = bool(wrist_ys[c] <= min_sub_y + 0.35 * y_span)
+            # 頂點幾何高度閘門：手腕必須位於相對高位區 (頂點 30% 幅度內) 方可被視為 Top 候選
+            is_crest = bool(wrist_ys[c] <= min_sub_y + 0.30 * y_span)
 
-            # 生理下桿時長相容性 (Downswing Tempo Plausibility)：
-            # 180~600ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
+            # 生理下桿時長相容性 (Broad Biomechanical Tempo Plausibility)：
+            # 190~390ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
             ds_ms = times[impact_idx] - times[c]
             tempo_score = 0.0
             if is_crest:
-                if 180 <= ds_ms <= 600:
+                if 190 <= ds_ms <= 390:
                     tempo_score = 0.0
-                elif 140 <= ds_ms < 180 or 600 < ds_ms <= 650:
-                    tempo_score = -2.0
+                elif (160 <= ds_ms < 190) or (390 < ds_ms <= 430):
+                    tempo_score = -1.0
+                elif 430 < ds_ms <= 480:
+                    tempo_score = -3.5
                 else:
-                    tempo_score = -6.0
+                    tempo_score = -6.5
             else:
                 # 非手腕頂點高位區，絕不能作為 Top 候選
                 tempo_score = -8.0
 
             # 停頓期下桿爆發轉折 (Transition Breakaway Launch)
-            breakaway_bonus = 3.0 if (is_crest and acc >= 0.003 and c < n - 1 and v_y[c + 1] > 0) else 0.0
+            # 在頂點蓄力停頓期，手腕由靜止/微動轉向明確向下加速 (向下速度>0 且下一幀持續向下)
+            is_launching = bool(
+                is_crest
+                and (
+                    (cand_zc and (c < n - 1 and v_y[c + 1] > 0.00015))
+                    or (v_y[c] > 0 and acc >= 0.0020 and c < n - 1 and v_y[c + 1] > 0)
+                )
+            )
+            breakaway_bonus = 4.0 if is_launching else 0.0
 
-            # 幾何高度 (h_s) 與零交越 (zc_bonus) 居於主導地位
-            score = h_s * 5.0 + zc_bonus + p_s + acc * 35.0 + tempo_score + breakaway_bonus
-            has_accel = bool(acc >= 0.003)
+            score = h_s * 2.5 + zc_bonus + p_s + acc * 35.0 + tempo_score + breakaway_bonus
+            has_accel = bool(acc >= 0.0020)
 
             # 確定性評分元組：當分數相當且同處高位停頓期時，優先選擇更接近下桿發動點 (times 較大)
             candidates_evaluated.append({
@@ -247,7 +258,7 @@ class SwingPhaseStateMachine:
                 "score": score,
                 "cand_zc": cand_zc,
                 "has_accel": has_accel,
-                "tie_key": (round(score, 5), -wrist_ys[c], times[c]),
+                "tie_key": (round(score, 4), times[c], -wrist_ys[c]),
             })
 
         # 排序選出最佳候選 (排序鍵不依賴原始列表順序)
@@ -522,29 +533,40 @@ class SwingPhaseStateMachine:
 
                 has_zc = bool(k < n - 1 and v_y[k] <= 0 and v_y[k + 1] > 0)
                 has_pause = bool(0 < k < n - 1 and speed[k] <= speed[k - 1] and speed[k] <= speed[k + 1])
-                h_score = (max_w_y - wrist_ys[k]) / w_span
+                h_raw = (max_w_y - wrist_ys[k]) / w_span
+                # 幾何高度平滑飽和：頂部 15% 區間內高度平坦飽和 (滿分 2.5)
+                h_score = min(1.0, h_raw / 0.85)
                 post_s = speed[k : min(imp_idx + 1, k + 5)]
                 acc = float(np.max(post_s)) - speed[k] if len(post_s) > 0 else 0.0
 
-                # 生理下桿時長相容性 (Downswing Tempo Plausibility)：
-                # 180~550ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
+                # 生理下桿時長相容性 (Broad Biomechanical Tempo Plausibility)：
+                # 190~390ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
                 ds_cand = imp_t - times[k]
                 tempo_score = 0.0
-                if 180 <= ds_cand <= 550:
+                if 190 <= ds_cand <= 390:
                     tempo_score = 0.0
-                elif 140 <= ds_cand < 180 or 550 < ds_cand <= 650:
-                    tempo_score = -2.0
+                elif (160 <= ds_cand < 190) or (390 < ds_cand <= 430):
+                    tempo_score = -1.0
+                elif 430 < ds_cand <= 480:
+                    tempo_score = -3.5
                 else:
-                    tempo_score = -6.0
+                    tempo_score = -6.5
 
                 # 停頓期下桿爆發轉折 (Transition Breakaway Launch)
-                is_crest = bool(wrist_ys[k] <= min_w_y + 0.25 * w_span)
-                breakaway_bonus = 4.0 if (is_crest and acc >= 0.003 and k < n - 1 and v_y[k + 1] > 0) else 0.0
+                is_crest = bool(wrist_ys[k] <= min_w_y + 0.30 * w_span)
+                is_launching = bool(
+                    is_crest
+                    and (
+                        (has_zc and (k < n - 1 and v_y[k + 1] > 0.00015))
+                        or (v_y[k] > 0 and acc >= 0.0020 and k < n - 1 and v_y[k + 1] > 0)
+                    )
+                )
+                breakaway_bonus = 4.0 if is_launching else 0.0
 
-                # 幾何高度 (h_score) 與換向零交越居於主導
+                # 幾何高度 (h_score) 保持平坦飽和 (權重 2.5)，防止微米級高度差異壓制真實下桿發動轉折
                 cand_score = (
-                    h_score * 5.0
-                    + (3.0 if has_zc else 0.0)
+                    h_score * 2.5
+                    + (1.5 if has_zc else 0.0)
                     + (1.0 if has_pause else 0.0)
                     + acc * 35.0
                     + tempo_score
@@ -556,7 +578,7 @@ class SwingPhaseStateMachine:
                 continue
 
             # 確定性排序：同分且同處高位蓄力期時，優先選擇真正下桿發動點 (times 較大)
-            top_cands.sort(key=lambda x: (round(x[0], 5), times[x[1]], -wrist_ys[x[1]]), reverse=True)
+            top_cands.sort(key=lambda x: (round(x[0], 4), times[x[1]], -wrist_ys[x[1]]), reverse=True)
             best_top_idx = top_cands[0][1]
             top_t = times[best_top_idx]
             top_y = wrist_ys[best_top_idx]

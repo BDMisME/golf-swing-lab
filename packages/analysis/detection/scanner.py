@@ -571,7 +571,7 @@ class CoarseToFineDetector:
             # ---------------------------------------------------------
             if top_ev and imp_ev:
                 final_ds = imp_ev.time_ms - top_ev.time_ms
-                if final_ds < 180 or final_ds > 650:
+                if final_ds < 180 or final_ds > 480:
                     if "timing_anomaly_detected" not in top_ev.detection_sources:
                         top_ev.detection_sources.append("timing_anomaly_detected")
                     if "timing_anomaly_detected" not in imp_ev.detection_sources:
@@ -917,38 +917,55 @@ class CoarseToFineDetector:
 
             scored_top_cands = []
             for i in high_indices:
-                h_score = (max_y - wrist_ys[i]) / max(1e-4, wrist_span)
+                h_raw = (max_y - wrist_ys[i]) / max(1e-4, wrist_span)
+                # 幾何高度平滑飽和：頂部 15% 區間內高度平坦飽和 (滿分 2.5)
+                h_score = min(1.0, h_raw / 0.85)
                 cand_zc = bool(i < len(v_y) - 1 and v_y[i] <= 0 and v_y[i + 1] > 0)
                 post_s = speeds[i : min(len(speeds), i + 4)]
                 acc = float(np.max(post_s)) - speeds[i] if len(post_s) > 0 else 0.0
 
-                # 生理下桿時長相容性 (Downswing Tempo Plausibility)：
-                # 180~550ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
+                # 生理下桿時長相容性 (Broad Biomechanical Tempo Plausibility)：
+                # 190~390ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
                 tempo_score = 0.0
                 if ref_impact_ms is not None:
                     cand_ds = ref_impact_ms - times[i]
-                    if 180 <= cand_ds <= 550:
+                    if 190 <= cand_ds <= 390:
                         tempo_score = 0.0
-                    elif (140 <= cand_ds < 180) or (550 < cand_ds <= 650):
-                        tempo_score = -2.0
+                    elif (160 <= cand_ds < 190) or (390 < cand_ds <= 430):
+                        tempo_score = -1.0
+                    elif 430 < cand_ds <= 480:
+                        tempo_score = -3.5
                     else:
-                        tempo_score = -6.0
+                        tempo_score = -6.5
                 else:
                     dist_to_center = abs(times[i] - center_ms)
                     tempo_score = -(dist_to_center / 80.0)
 
-                # 頂點停頓結束、下桿爆發啟動加分
-                is_crest = bool(wrist_ys[i] <= min_y + 0.25 * wrist_span)
-                breakaway = 4.0 if (is_crest and acc >= 0.003 and i < len(v_y) - 1 and v_y[i + 1] > 0) else 0.0
+                # 頂點停頓結束、下桿爆發啟動加分 (Transition Breakaway Launch)
+                is_crest = bool(wrist_ys[i] <= min_y + 0.30 * wrist_span)
+                is_launching = bool(
+                    is_crest
+                    and (
+                        (cand_zc and (i < len(v_y) - 1 and v_y[i + 1] > 0.00015))
+                        or (v_y[i] > 0 and acc >= 0.0020 and i < len(v_y) - 1 and v_y[i + 1] > 0)
+                    )
+                )
+                breakaway = 4.0 if is_launching else 0.0
 
-                # 幾何高度 (h_score) 與換向零交越 (cand_zc) 居於主導地位
-                c_score = h_score * 5.0 + (3.0 if cand_zc else 0.0) + acc * 35.0 + tempo_score + breakaway
+                # 幾何高度 (h_score) 保持平坦飽和 (權重 2.5)，防止微米級高度差異壓制真實下桿發動轉折
+                c_score = (
+                    h_score * 2.5
+                    + (1.5 if cand_zc else 0.0)
+                    + acc * 35.0
+                    + tempo_score
+                    + breakaway
+                )
                 scored_top_cands.append({
                     "idx": i,
                     "score": c_score,
                     "cand_zc": cand_zc,
                     "breakaway": breakaway > 0,
-                    "tie_key": (round(c_score, 5), times[i], -wrist_ys[i]),
+                    "tie_key": (round(c_score, 4), times[i], -wrist_ys[i]),
                 })
 
             scored_top_cands.sort(key=lambda x: x["tie_key"], reverse=True)

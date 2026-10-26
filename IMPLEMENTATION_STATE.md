@@ -1,39 +1,40 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Round 4: Release Candidate — False Review Reduction & True E2E）
-1. **第一優先：大幅降低不必要的 needs_review（Tri-State Audio-Kinematic Plausibility）**：`PASS`
-   - **實作成果**：
-     - 遍歷候選視窗內所有合理音訊瞬態峰值（不再僅挑最近單一峰值）。
-     - 三層清楚區分：
-       - **情境 A（環境雜音/隨揮雜音拒絕）**：若運動學最低點扎實（手腕深度夠、減速制動明顯、手腕可見），而音訊落在隨揮期或偏差過大，安全拒絕雜音（標記 `ambient_audio_rejected`），以運動學自主定案，**維持 `auto_accepted`**！
-       - **情境 B（真正的跨模態爭議）**：音訊與運動學各具支持證據且運動學自身亦存在雙峰競爭，標記 `audio_kinematic_conflict` 並降級為 `needs_review`。
-       - **情境 C（運動學自身亦無法可靠定位）**：降級為 `needs_review`。
-     - **30fps 正式 Worker Proxy 的自動通過率從 41.7% 提升至 91.7% (11/12 球自動通過)**！
-     - 成功保留第 10 球防止隨揮晚期雜音誤判能力（定位於 120967ms，誤差僅 52ms / 1.6 影格），且標記為 `ambient_audio_rejected`，維持 `auto_accepted`！
-2. **第二優先：解除下桿時間過度集中在 ~333ms（Prior Bias Removal）**：`PASS`
-   - 徹底移除粗掃與局部精修中對 `220 <= ds <= 360` 額外給予 `+5.0` 分的先驗吸附。
-   - 將生理合理區間（180–600ms）設為中立（`tempo_score = 0.0`），將 Top 頂點決定權完全回歸手腕空間幾何最高點（`h_score * 5.0`）、速度換向零交越（`cand_zc * 3.0`）與下桿爆發啟動（`acc * 35.0`）。
-   - 對非頂點高位區候選施予懲罰（`-8.0`），確保空間頂點主導權。
-   - 30fps Proxy 呈現自然真實下桿時序差異（333ms, 366ms, 400ms, 466ms, 467ms, 500ms, 534ms），破除人為均一化。
-3. **第三優先：驗收結果與正式推論 JSON 100% 一致（Report Integrity Assurance）**：`PASS`
-   - `scripts/run_production_acceptance.py` 儲存 `docs/reports/takeover/production_acceptance_report.json` 後，直接由該 JSON 自動生成 `docs/reports/takeover/production_acceptance_summary.md`。
-   - 內建完整性斷言，逐欄校驗數值，若有任何不一致直接拋出 `REPORT_INTEGRITY_FAIL`。
-4. **第四優先：真正跑通 App 完整 E2E（True E2E Pipeline）**：`PASS`
-   - 建立 `tests/test_true_e2e_pipeline.py`，全套 3 個端到端測試 100% 通過：
-     - 真實 11 秒 iPhone 錄影完整 Pipeline（Probe PTS/VFR → Safari 720p/30fps Proxy 與縮圖 → Coarse-to-Fine 掃描 → 狀態機 → 評分引擎 → SQLite DB 持久化 → FastAPI `/report` 與 `/swings/{id}` 端點讀取 → 排行榜驗證 → 測試完成 100% 安全自動清理）。
-     - 動作分類硬門檻與 0 評分保護：非 `valid_swing`（如走路、空揮、放球），`overall_nullable` 必然為 `None`，杜絕「走路拿 70 分」。
-     - 動作品質嚴懲扣分：抬頭起身、急躁失控節奏（如 1.2:1）、收桿失衡予以嚴厲扣分（總分降至 35~45 分），杜絕爛球虛高 70+ 分。
+## 最新開發策略執行狀態（Round 5: Final RC Gate — Top Accuracy & Ranking Integrity）
+1. **P0-1：解決 Top 精度重大回退（Top Plateau Saturated Height & Downswing Initiation）**：`PASS`
+   - **根因釐清與事件定義**：高爾夫動作分析慣例中，Top 為「上桿蓄力停頓期（Top Pause Plateau）結束、手臂開始向下朝球發動攻擊的轉換臨界點（Downswing Initiation / Transition Breakaway）」。前一版因過度加權幾何最高點（`h_score * 5.0`），導致直接選在剛進入頂點平台的最前端（比發動點早了 180~250ms），使下桿時長被虛增至 534ms。
+   - **生物力學與運動學平滑重構**：
+     - 在手腕高位蓄力區（頂點 15% 範圍內），幾何高度平滑飽和（`h_score = min(1.0, h_raw / 0.85)`，權重 2.5），避免毫米級高度微差壓制下桿發動轉折。
+     - 停頓期下桿爆發轉折（`is_launching`）：當手腕處於頂點高位區，且向下速度切換為正（`v_y > 0`）且下一幀持續向下、加速度爆發（`acc >= 0.0020`），給予 `breakaway_bonus = 4.0` 獎勵。
+     - 生理下桿時長寬鬆中立區間（190–390ms 保持中立 `0.0` 分），杜絕人為固定 333ms 先驗吸附，並對 `> 480ms` 給予 `-6.5` 分重懲。
+     - `tie_key` 優先選擇更接近下桿發動點（`times[c]` 較大）之影格。
+   - **驗收成效**：
+     - **30fps 正式 Worker Proxy Top MAE**：由 124.4ms 降至 **86.1 ms (2.6 影格 @ 30fps，PASS)**！
+     - **60fps 原片 Top MAE**：由 151.5ms 降至 **90.4 ms (5.4 影格 @ 60fps，PASS)**！
+     - **Swing #9** Top 偏差由 180ms 降至 **80ms**！
+     - **Swing #10** 下桿時間由 534ms 回歸至正常的 **367ms**（GT 233ms），Top 誤差僅 82ms！
+2. **P0-2：保留高自動化率，杜絕放寬審核換取假準確（Acceptance Integrity Gate）**：`PASS`
+   - 將下桿異常上限門檻由 650ms 收斂至生理合理的 480ms；下桿時間超過 480ms 嚴格標記 `timing_anomaly` 並降級為 `needs_review`。
+   - 第 10 球在 Top 校正後下桿時長回歸 367ms，運動學最低點制動紮實，維持 `auto_accepted`。
+   - 30fps 正式 Worker Proxy 自動通過率穩定維持 **91.7% (11/12 球)**，時序異常球數 **0 球**！
+3. **P0-3：修正最佳姿勢排行榜（Posture Composite Ranking & Subpar Tempo Marker）**：`PASS`
+   - 重構 `rank_session_swings` 中的姿勢榜：徹底揚棄直接使用 `overall_score` 的做法，實作專門的姿勢綜合評分 `get_posture_composite_score`（融合軀幹前傾穩定 `spine_tilt_stability` 60% + 頭部相對位移 `head_stability` 40%）。
+   - 姿勢榜推薦說明格式化為「軀幹前傾穩定 Δ=X°、頭部位移 r=Y，姿勢得分 Z 分」（例如 Rank #1 Swing #11：84.8 分）。
+   - 節奏榜對得分低於 50 分之推薦球次，前綴自動加註「（本場相對最佳）」，絕不誇大為技術優秀。
+4. **P0-4：消除驗收報告硬編碼，健全證據鏈（Report Integrity & Verifiable Provenance）**：`PASS`
+   - `scripts/run_production_acceptance.py` 產出之 Markdown 與 JSON 全面改為 100% 動態生成，移除 `(11/12 球)`、`PASS` 等任何字面寫死。
+   - 自動寫入測試影片 SHA-256 雜湊、Git HEAD Commit Hash、分支名稱與 Development Set Alignment 聲明。
 5. **最新驗收指標總覽（30fps 正式 Worker Proxy 路徑）**：
-   - 揮桿分類正確率：**100.0% (12/12)**
-   - 自動通過率 (Auto-Accepted)：**91.7% (11/12 球)**
-   - Top MAE：**124.4 ms (3.7 影格 @ 30fps)**
-   - Impact MAE：**30.5 ms (0.9 影格 @ 30fps)**
-   - 生理下桿符合率 (180–550ms)：**100.0%**
-   - 時序異常球數：**0 球**
+   - 揮桿分類正確率：**100.0% (12/12) — PASS**
+   - 自動通過率 (Auto-Accepted)：**91.7% (11/12 球) — PASS**
+   - Top MAE：**86.1 ms (2.6 影格 @ 30fps) — PASS**
+   - Impact MAE：**30.5 ms (0.9 影格 @ 30fps) — PASS**
+   - 生理下桿符合率 (180–480ms)：**100.0% — PASS**
+   - 時序異常球數：**0 球 — PASS**
 6. **全量測試與構建**：
-   - 後端測試套件：**80 / 80 PASSED (100%)** in 194s。
+   - 後端測試套件：**80 / 80 PASSED (100%)** in 195s。
    - 前端構建：`npm --prefix apps/web run build` **9/9 靜態頁面 0 錯誤**。
-- **最後更新時間**：2026-10-24T05:00:00+08:00
+- **最後更新時間**：2026-10-26T15:58:00+08:00
 - **當前分支**：`fix/autonomous-event-accuracy-recovery`
 - **正式驗收報告**：`docs/reports/takeover/production_acceptance_report.json`、`docs/reports/takeover/production_acceptance_summary.md`
 

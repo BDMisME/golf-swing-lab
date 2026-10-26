@@ -478,19 +478,42 @@ def rank_session_swings(
         and s.get("review_status") != "rejected"
     ]
 
+    def get_posture_composite_score(s: dict[str, Any]) -> float | None:
+        subs = s.get("subscores") or {}
+        spine = (subs.get("spine_tilt_stability") or {}).get("score")
+        head = (subs.get("head_stability") or {}).get("score")
+        if spine is not None and head is not None:
+            return round(float(spine) * 0.60 + float(head) * 0.40, 1)
+        elif spine is not None:
+            return round(float(spine), 1)
+        elif head is not None:
+            return round(float(head), 1)
+        elif s.get("overall_score") is not None:
+            return float(s["overall_score"])
+        return None
+
     def _posture_reason(s: dict[str, Any], score: float | None) -> str:
-        spine = ((s.get("subscores") or {}).get("spine_tilt_stability") or {})
-        delta = spine.get("raw_value")
-        if delta is not None:
-            return f"軀幹前傾穩定 Δ={delta:.1f}°，動作總分 {score or 'N/A'} 分"
-        return f"綜合動作檢核評定 {score or 'N/A'} 分"
+        subs = s.get("subscores") or {}
+        spine = subs.get("spine_tilt_stability") or {}
+        head = subs.get("head_stability") or {}
+        delta_spine = spine.get("raw_value")
+        disp_head = head.get("raw_value")
+        parts = []
+        if delta_spine is not None:
+            parts.append(f"軀幹前傾穩定 Δ={delta_spine:.1f}°")
+        if disp_head is not None:
+            parts.append(f"頭部位移 r={disp_head:.3f}")
+        desc = "、".join(parts) if parts else "軀幹與身體姿態動作評定"
+        return f"{desc}，姿勢得分 {score if score is not None else 'N/A'} 分"
 
     def _tempo_reason(s: dict[str, Any], score: float | None) -> str:
         tempo = ((s.get("subscores") or {}).get("tempo_consistency") or {})
         ratio = tempo.get("raw_value")
+        is_subpar = score is not None and score < 50.0
+        prefix = "（本場相對最佳）" if is_subpar else ""
         if ratio is not None:
-            return f"上下桿時間比 {ratio:.2f}:1（標準 3.0:1），節奏得分 {score or 'N/A'} 分"
-        return f"揮桿節奏得分 {score or 'N/A'} 分"
+            return f"{prefix}上下桿時間比 {ratio:.2f}:1（標準 3.0:1），節奏得分 {score if score is not None else 'N/A'} 分"
+        return f"{prefix}揮桿節奏得分 {score if score is not None else 'N/A'} 分"
 
     def _finish_reason(s: dict[str, Any], score: float | None) -> str:
         fin = ((s.get("subscores") or {}).get("finish_balance") or {})
@@ -578,7 +601,7 @@ def rank_session_swings(
     return {
         "posture": _build_category_rank(
             "posture",
-            lambda x: x.get("overall_score"),
+            get_posture_composite_score,
             _posture_reason,
         ),
         "tempo": _build_category_rank(

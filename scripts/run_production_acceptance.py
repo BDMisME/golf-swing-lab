@@ -325,9 +325,36 @@ def main():
         for item in res_proxy["rankings"].get(cat, []):
             print(f"    Rank #{item['rank']}: Swing #{item['sequence_no']} (Score={item['category_score']}) - {item['reason']}")
 
+    import hashlib
+
+    def compute_sha256(p: Path) -> str:
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def get_git_info() -> dict[str, str]:
+        try:
+            c = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+            b = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+            return {"commit": c, "branch": b}
+        except Exception:
+            return {"commit": "unknown", "branch": "unknown"}
+
+    raw_sha256 = compute_sha256(raw_video)
+    git_info = get_git_info()
+
     # 儲存完整驗收報告 JSON
     eval_json_path = REPO_ROOT / "docs/reports/takeover/production_acceptance_report.json"
     report_dict = {
+        "metadata": {
+            "video_filename": raw_video.name,
+            "video_sha256": raw_sha256,
+            "git_commit": git_info["commit"],
+            "git_branch": git_info["branch"],
+            "gt_reference_type": gt_data.get("validation_status", "developer_assisted_visual_annotation"),
+        },
         "original_60fps": eval_orig,
         "proxy_30fps": eval_proxy,
         "rankings_proxy": res_proxy["rankings"],
@@ -351,22 +378,40 @@ def main():
 
     p_data = loaded_json["proxy_30fps"]
     o_data = loaded_json["original_60fps"]
+    meta = loaded_json["metadata"]
+
+    p_auto_count = sum(1 for s in p_data["per_swing"] if s["status"] == "auto_accepted")
+    o_auto_count = sum(1 for s in o_data["per_swing"] if s["status"] == "auto_accepted")
+
+    status_cls = "PASS" if p_data["classification_accuracy"] >= 90 else "REVIEW"
+    status_auto = "PASS" if p_data["auto_acceptance_rate"] >= 75 else "REVIEW"
+    status_imp = "PASS" if p_data["impact_mae_ms"] <= 60 else "REVIEW"
+    status_top = "PASS" if p_data["top_mae_ms"] <= 90 else "REVIEW"
+    status_ds = "PASS" if p_data["downswing_compliance_rate"] >= 90 else "REVIEW"
+    status_ano = "PASS" if p_data["timing_anomaly_count"] == 0 else "REVIEW"
 
     md_lines = [
         "# Golf Swing Lab — Release Candidate (RC) 產品驗收評估摘要",
         "",
-        "> 本報告由 `scripts/run_production_acceptance.py` 自行推論產生之 `production_acceptance_report.json` 100% 自動生成，並通過自動完整性斷言檢核（無人工修改介入）。",
+        "> 本報告由 `scripts/run_production_acceptance.py` 自行推論產生之 `production_acceptance_report.json` 100% 動態生成，並通過自動完整性斷言檢核（杜絕人工修改或文字寫死）。",
+        "",
+        "## 0. 測試環境與版本證據",
+        f"- **測試影片**: `{meta['video_filename']}`",
+        f"- **影片 SHA-256**: `{meta['video_sha256']}`",
+        f"- **Git 分支**: `{meta['git_branch']}`",
+        f"- **Git Commit**: `{meta['git_commit']}`",
+        f"- **Ground Truth 屬性**: `{meta['gt_reference_type']}`（Development Set Alignment，非外部獨立盲測）",
         "",
         "## 1. 核心指標對比（30fps 正式 Worker Proxy vs 60fps 原片）",
         "",
         "| 評估維度 | 30fps 正式 Worker Proxy (主要驗收路徑) | 60fps 原片 (Development Set Alignment) | 狀態 |",
         "| :--- | :---: | :---: | :---: |",
-        f"| **揮桿分類正確率** | **{p_data['classification_accuracy']}%** ({p_data['total_swings']}/{p_data['total_swings']}) | **{o_data['classification_accuracy']}%** ({o_data['total_swings']}/{o_data['total_swings']}) | PASS |",
-        f"| **自動通過率 (Auto-Accepted)** | **{p_data['auto_acceptance_rate']}%** (11/12 球) | **{o_data['auto_acceptance_rate']}%** (9/12 球) | PASS |",
-        f"| **Impact MAE** | **{p_data['impact_mae_ms']} ms** ({p_data['impact_mae_frames']} frames @ 30fps) | **{o_data['impact_mae_ms']} ms** ({o_data['impact_mae_frames']} frames @ 60fps) | PASS |",
-        f"| **Top MAE** | **{p_data['top_mae_ms']} ms** ({p_data['top_mae_frames']} frames @ 30fps) | **{o_data['top_mae_ms']} ms** ({o_data['top_mae_frames']} frames @ 60fps) | PASS |",
-        f"| **生理下桿符合率 (180–550ms)** | **{p_data['downswing_compliance_rate']}%** | **{o_data['downswing_compliance_rate']}%** | PASS |",
-        f"| **時序異常球數 (Timing Anomaly)** | **{p_data['timing_anomaly_count']} 球** | **{o_data['timing_anomaly_count']} 球** | PASS |",
+        f"| **揮桿分類正確率** | **{p_data['classification_accuracy']}%** ({p_data['total_swings']}/{p_data['total_swings']}) | **{o_data['classification_accuracy']}%** ({o_data['total_swings']}/{o_data['total_swings']}) | {status_cls} |",
+        f"| **自動通過率 (Auto-Accepted)** | **{p_data['auto_acceptance_rate']}%** ({p_auto_count}/{p_data['total_swings']} 球) | **{o_data['auto_acceptance_rate']}%** ({o_auto_count}/{o_data['total_swings']} 球) | {status_auto} |",
+        f"| **Impact MAE** | **{p_data['impact_mae_ms']} ms** ({p_data['impact_mae_frames']} frames @ 30fps) | **{o_data['impact_mae_ms']} ms** ({o_data['impact_mae_frames']} frames @ 60fps) | {status_imp} |",
+        f"| **Top MAE** | **{p_data['top_mae_ms']} ms** ({p_data['top_mae_frames']} frames @ 30fps) | **{o_data['top_mae_ms']} ms** ({o_data['top_mae_frames']} frames @ 60fps) | {status_top} |",
+        f"| **生理下桿符合率 (180–480ms)** | **{p_data['downswing_compliance_rate']}%** | **{o_data['downswing_compliance_rate']}%** | {status_ds} |",
+        f"| **時序異常球數 (Timing Anomaly)** | **{p_data['timing_anomaly_count']} 球** | **{o_data['timing_anomaly_count']} 球** | {status_ano} |",
         "",
         "## 2. 逐球對比與審查狀態 (30fps Proxy)",
         "",

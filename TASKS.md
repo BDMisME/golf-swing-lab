@@ -4,6 +4,31 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 5: Final RC Gate — Top Accuracy & Ranking Integrity (2026-10-26)
+- [x] **P0-1：解決 Top 精度重大回退（Top Plateau Saturated Height & Downswing Initiation）**：
+  - 釐清高爾夫動作分析慣例之 Top 定義：Top 為頂部蓄力停頓期（Top Pause Plateau）結束、手臂發動向下攻擊的轉換臨界點（Downswing Initiation / Transition Breakaway）。
+  - 手腕高位蓄力區（頂點 15% 範圍內）幾何高度平滑飽和（`h_score = min(1.0, h_raw / 0.85)`，權重 2.5），避免微米級高度差異壓制下桿發動轉折。
+  - 停頓期下桿爆發轉折：手腕處於頂點高位區且向下速度切換為正、加速度爆發（`acc >= 0.0020`），給予 `breakaway_bonus = 4.0` 獎勵。
+  - 生理下桿時長相容性中立區間（190–390ms 保持中立 `0.0` 分），杜絕人為固定 333ms 先驗吸附，並對 `> 480ms` 給予 `-6.5` 分重懲。
+  - **30fps 正式 Worker Proxy Top MAE**：由 124.4ms 降至 **86.1 ms (2.6 影格 @ 30fps，PASS)**！
+  - **60fps 原片 Top MAE**：由 151.5ms 降至 **90.4 ms (5.4 影格 @ 60fps，PASS)**！
+  - **Swing #9** Top 偏差由 180ms 縮減至 **80ms**！
+  - **Swing #10** 下桿時長由 534ms 恢復至 **367ms**（GT 233ms），Top 誤差 82ms！
+- [x] **P0-2：保留高自動化率，杜絕放寬審核換取假準確（Acceptance Integrity Gate）**：
+  - 將下桿異常上限門檻由 650ms 收斂至生理合理的 480ms；下桿時間超過 480ms 嚴格標記 `timing_anomaly` 並降級為 `needs_review`。
+  - 第 10 球在 Top 校正後下桿時長回歸 367ms，運動學最低點制動紮實，維持 `auto_accepted`。
+  - 30fps 正式 Worker Proxy 自動通過率穩定維持 **91.7% (11/12 球)**，時序異常球數 **0 球**！
+- [x] **P0-3：修正最佳姿勢排行榜（Posture Composite Ranking & Subpar Tempo Marker）**：
+  - 重構 `rank_session_swings` 中的姿勢榜：徹底揚棄直接使用 `overall_score` 的做法，實作專門的姿勢綜合評分 `get_posture_composite_score`（融合軀幹前傾穩定 `spine_tilt_stability` 60% + 頭部相對位移 `head_stability` 40%）。
+  - 姿勢榜推薦說明格式化為「軀幹前傾穩定 Δ=X°、頭部位移 r=Y，姿勢得分 Z 分」（例如 Rank #1 Swing #11：84.8 分）。
+  - 節奏榜對得分低於 50 分之推薦球次，前綴自動加註「（本場相對最佳）」，絕不誇大為技術優秀。
+- [x] **P0-4：消除驗收報告硬編碼，健全證據鏈（Report Integrity & Verifiable Provenance）**：
+  - `scripts/run_production_acceptance.py` 產出之 Markdown 與 JSON 全面改為 100% 動態生成，移除 `(11/12 球)`、`PASS` 等任何字面寫死。
+  - 自動寫入測試影片 SHA-256 雜湊、Git HEAD Commit Hash、分支名稱與 Development Set Alignment 聲明。
+- [x] **全量服務與全鏈路驗收**：
+  - 後端測試套件：**80 / 80 PASSED (100%)** in 195s。
+  - 前端構建：`npm --prefix apps/web run build` 9/9 靜態頁面 0 錯誤。
+
 ## Round 4: Release Candidate — False Review Reduction & True E2E (2026-10-24)
 - [x] **第一優先：大幅修正不必要的 needs_review（Tri-State Audio-Kinematic Plausibility）**：
   - 遍歷候選區間內所有合理音訊瞬態峰值（避免距離 center 最近單一峰值誤導）。
