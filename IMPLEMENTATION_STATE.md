@@ -1,31 +1,28 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Round 7: PR #1 Final Security & Visual Smoke Gate）
-1. **P0-1 真正移除 Git 中的 JWT 簽章密鑰**：`PASS`
-   - **原始碼徹底無固定金鑰**：`apps/api/config.py` 中 `session_secret` 改為 `default_factory=resolve_session_secret`，原始碼中不再有任何固定金鑰字串。
-   - **本機個人 Mac App 金鑰持久化**：實作 `resolve_session_secret()` 自動管理本機目錄 `~/.golfswinglab/session_secret`（目錄權限 `0700`，金鑰檔案權限嚴格 `0600`），每次重新啟動系統時使用相同金鑰，維持個人登入態穩定。
-   - **歷史外洩金鑰黑名單攔截**：定義 `KNOWN_LEAKED_SECRETS`（包含歷史外洩之 `change-me-...` 與 `gsl-rotated-...`），`validate_security_posture()` 於所有環境（包含 dev/prod）全面攔截外洩金鑰與長度小於 32 字元（256-bit）之弱金鑰。
-   - **生產環境弱密碼防護**：`ensure_default_admin()` 與 `validate_security_posture()` 禁止於 production 環境使用預設管理員密碼。
-   - **實測金鑰作廢與簽發**：重啟本機 Port 28000 API，實測舊外洩金鑰簽署之 Token 存取 `/api/auth/me` 回傳 `401 AUTH_INVALID_SIGNATURE`（舊憑證全數失效），新簽發 Token 存取回傳 `200 OK`。單元測試覆蓋 `test_security_posture_and_leaked_secret_rejection` 與 `test_session_secret_local_persistence_and_invalidation`。
-2. **P0-2 真實 WebKit 播放器與 Clean Motion GUI 實測**：`PASS`
-   - **macOS 原生 WebKit 驅動**：撰寫 `scripts/verify_webkit_gui_playback.py`，調用系統原生 `WebKit.framework` (WKWebView)。
-   - **場次報告與榜單**：成功載入場次報告 (`/sessions/0a93fea4-...`)，驗證 Top 5 榜單呈現與 88 張球次卡片，產生快照截圖 `01_webkit_session_report.png`。
-   - **單球播放與時間碼精準跳轉**：依序導航至第 8、9、10 球 (`/swings/{id}`)，實測跳轉至 Top 與 Impact 時間碼：
-     - Swing #8: Top (106800ms, diff=0.0ms), Impact (107167ms, diff=0.0ms)
-     - Swing #9: Top (119933ms, diff=0.0ms), Impact (120333ms, diff=0.0ms)
-     - Swing #10: Top (140700ms, diff=0.0ms), Impact (142933ms, diff=0.0ms)
-     - 影片實際播放時間 `video.currentTime` 與標記誤差均為 **0.0ms (<= 100ms 門檻)**。
-   - **Clean Motion Canvas 骨架與線條**：全畫布像素掃描驗證，Top 頂點肩膀旋轉姿態線與手腕光環、Impact 擊球定位點與頭部位移檢核圈均確實渲染（`canvas_rendered: true`），非空白畫布。
-   - **控制台與 API 檢查**：`console_errors: []`，全部 API 回應正常。
-   - **保存 7 張快照截圖與 JSON 報告**：輸出至 `docs/screenshots/webkit/` 與 `docs/reports/takeover/webkit_gui_smoke_report.json`（狀態 `PASS`）。
-3. **P1 測試覆蓋與前瞻品質保證**：`PASS`
-   - 後端測試套件：**82 / 82 PASSED (100%)**（包含 79 個單元/整合測試與 3 個真實長影片基準測試，已將計時器升級為 `time.monotonic()` 防止系統休眠時鐘跳轉）。
+## 最新開發策略執行狀態（Round 8: PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate）
+1. **P0 WebKit GUI 真實 DOM 按鈕跳轉與 Clean Motion 驗收**：`PASS`
+   - **動態取得最新 139 秒正式分析資料**：執行 `scripts/setup_verification_session.py`，驗證原片 SHA-256（`4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9`），在正式 Pipeline 中產生 12 球分析成果與 30fps Proxy，動態讀取 Session、Video 及第 8、9、10 球的真實 ID 與時間碼，杜絕跨場次寫死資料比對。
+   - **真實 DOM 按鈕觸發跳轉（Zero-Drift Pause）**：前端單球頁面 (`apps/web/src/app/swings/[id]/page.tsx`) 增強 `jumpToEvent`，點擊事件按鈕時即刻呼叫 `video.pause()` 定格畫面，並加上 `data-event` 與 `data-time-ms` 屬性。測試以原生 WebKit 執行真實 `btn.click()` 觸發。
+   - **時間碼跳轉實測（<= 100ms 門檻，實測 0.0ms 誤差）**：
+     - **Swing #8** (`829b04ed-...`): Top 目標 110833ms，解碼 110833.0ms (diff 0.0ms)；Impact 目標 111200ms，解碼 111200.0ms (diff 0.0ms)
+     - **Swing #9** (`9d733a7c-...`): Top 目標 114700ms，解碼 114700.0ms (diff 0.0ms)；Impact 目標 115067ms，解碼 115067.0ms (diff 0.0ms)
+     - **Swing #10** (`cfd10e17-...`): Top 目標 120600ms，解碼 120600.0ms (diff 0.0ms)；Impact 目標 120967ms，解碼 120967.0ms (diff 0.0ms)
+   - **Clean Motion Canvas 特徵繪製與防殘留保護**：
+     - Top 階段驗證肩膀姿態線（18~20px）與手部光環（89~90px）；Impact 階段驗證擊球點（69~71px）與頭部檢核圈（28~31px）。
+     - 驗證跨階段切換防殘留保護（`no_residual_artifacts: true`），畫布無舊影格污染。
+   - **產出 7 張原生快照與 JSON 報告**：存證於 `docs/screenshots/webkit/`，`docs/reports/takeover/webkit_gui_smoke_report.json` 標記 `GUI_EVENT_VERIFIED: PASS`，Console 0 錯誤。
+2. **P1 本機金鑰持久化 Fail-Closed 安全防護**：`PASS`
+   - `apps/api/config.py` 中 `resolve_session_secret()` 移除靜默回退臨時密鑰的漏洞。若目錄無法建立或權限不足無法持久化至 `~/.golfswinglab/session_secret` 時，明確拋出 `RuntimeError`（Fail-Closed），嚴禁靜默降級導致登入態遺失。
+   - 單元測試 `test_session_secret_local_persistence_and_invalidation` 驗證 `0700` 目錄、`0600` 檔案、唯讀目錄無法寫入時拋出例外、跨呼叫一致性，全數通過。
+3. **全鏈路與回歸品質保證**：`PASS`
+   - 後端測試套件：**82 / 82 PASSED (100%)** in 202.73s。
    - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
-4. **P1 安全回退操作指引**：`PASS`
-   - PR 內文與說明中徹底移除危險的 `git reset --hard`，改採安全無損的回退方式（`git stash`、`git checkout`、`git revert -m 1`）。
-- **最後更新時間**：2026-10-27T17:55:00+08:00
+- **最後更新時間**：2026-10-27T19:05:00+08:00
 - **當前分支**：`fix/autonomous-event-accuracy-recovery`
-- **正式驗收證據**：`docs/reports/takeover/webkit_gui_smoke_report.json`、`docs/reports/takeover/production_acceptance_report.json`、`docs/screenshots/webkit/01_webkit_session_report.png` 至 `07_webkit_swing10_impact.png`
+- **正式驗收證據**：`docs/reports/takeover/webkit_gui_smoke_report.json`、`docs/screenshots/webkit/01_webkit_session_report.png` 至 `07_webkit_swing10_impact.png`
+
+## 前期重大里程碑狀態（Round 7: PR #1 Final Security & Visual Smoke Gate）
 
 ## 前期重大里程碑狀態（Round 6: Beta Release & Merge Preparation）
 

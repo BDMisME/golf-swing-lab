@@ -4,6 +4,20 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 8: PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate (2026-10-27)
+- [x] **P0：WebKit 測試必須使用真實分析結果（真正 UI 事件跳轉驗收）**：
+  - 動態取得最新 139 秒（`2分鐘.mov`，SHA-256: `4993a3b6...`）正式分析完成之 Session (`e8e182dd-...`)、Video (`39608133-...`) 與真實球次 ID。
+  - 前端單球頁面增強：點擊事件按鈕時執行 `video.pause()` 定格畫面，杜絕播放漂移。
+  - 透過原生 WebKit DOM `button.click()` 觸發 Top 與 Impact 跳轉，實測 Swing #8、#9、#10 播放解碼誤差均為 **0.0ms (<= 100ms 門檻，PASS)**。
+  - 驗證 Clean Motion Canvas 特徵繪製（Top 轉肩線與手腕光環、Impact 擊球定位點與頭部位移檢核圈）及跨階段切換防殘留保護（`no_residual_artifacts: true`）。
+  - 控制台 0 錯誤，產出 7 張原生快照與 JSON 報告（`GUI_EVENT_VERIFIED: PASS`）。
+- [x] **P1：修正本機密鑰持久化失敗時的靜默回退（Fail-Closed Enforcement）**：
+  - 修正 `resolve_session_secret()`，目錄無法建立或權限不足無法寫入 `~/.golfswinglab/session_secret` 時明確拋出 `RuntimeError`，嚴禁靜默降級使用臨時隨機金鑰。
+  - 單元測試驗證目錄 0700、檔案 0600、唯讀目錄拋出例外防護，5/5 PASSED。
+- [x] **全量測試與構建**：
+  - 後端測試套件：**82 / 82 PASSED (100%)** in 202.73s。
+  - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
+
 ## Round 7: PR #1 Final Security & Visual Smoke Gate (2026-10-27)
 - [x] **P0-1：真正移除 Git 中的 JWT 簽章密鑰**：
   - 徹底移除原始碼與設定中所有寫死金鑰，改由 `resolve_session_secret()` 動態安全加載。

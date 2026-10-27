@@ -81,6 +81,7 @@ export default function SwingDetailPage() {
 
   const jumpToEvent = (timeMs: number) => {
     if (videoRef.current) {
+      videoRef.current.pause();
       videoRef.current.currentTime = timeMs / 1000;
     }
   };
@@ -368,6 +369,8 @@ export default function SwingDetailPage() {
                 <button
                   key={ev.id || ev.event_name}
                   type="button"
+                  data-event={ev.event_name}
+                  data-time-ms={ev.time_ms}
                   onClick={() => jumpToEvent(ev.time_ms)}
                   className="rounded-xl border border-cyan-900/50 bg-cyan-950/20 px-3 py-1.5 text-left text-xs transition hover:border-cyan-400 hover:bg-cyan-900/30"
                 >

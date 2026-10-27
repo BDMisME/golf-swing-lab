@@ -12,13 +12,13 @@ KNOWN_LEAKED_SECRETS: set[str] = {
 }
 
 
-def resolve_session_secret() -> str:
+def resolve_session_secret(key_file_path: Path | None = None) -> str:
     """
     動態安全解析 JWT 簽章密鑰，嚴禁在原始碼中存放真實密鑰：
     1. 優先由環境變數 SESSION_SECRET 或 GSL_SESSION_SECRET 載入
     2. 若未設定，檢查個人 Mac App 專屬本機安全持久化金鑰檔 (~/.golfswinglab/session_secret，權限 0600)
     3. 若該金鑰檔不存在或內容在已知外洩清單中，自動生成全新 256-bit 隨機密鑰並寫入（權限 0600）
-    4. 嚴格攔截任何歷史外洩金鑰
+    4. 嚴格攔截任何歷史外洩金鑰；若無法完成持久化，嚴格安全失敗（Fail-Closed）拋出例外，杜絕靜默回退造成登入態遺失
     """
     # 1. 檢查環境變數
     env_secret = os.environ.get("SESSION_SECRET") or os.environ.get("GSL_SESSION_SECRET")
@@ -26,22 +26,28 @@ def resolve_session_secret() -> str:
         return env_secret.strip()
 
     # 2. 個人 Mac App 本機安全金鑰目錄 (~/.golfswinglab/)
-    key_dir = Path.home() / ".golfswinglab"
-    key_file = key_dir / "session_secret"
+    key_file = key_file_path or (Path.home() / ".golfswinglab" / "session_secret")
+    key_dir = key_file.parent
 
     try:
         if key_file.exists():
-            stored = key_file.read_text(encoding="utf-8").strip()
+            try:
+                stored = key_file.read_text(encoding="utf-8").strip()
+            except OSError as e:
+                raise RuntimeError(f"無法讀取本機 session_secret 金鑰檔案 ({key_file}): {e}，請檢查檔案權限。") from e
+
             if stored and len(stored) >= 32 and stored not in KNOWN_LEAKED_SECRETS:
                 try:
                     os.chmod(key_file, 0o600)
-                except Exception:
+                except OSError:
                     pass
                 return stored
-    except Exception:
-        pass
+    except (PermissionError, OSError) as e:
+        raise RuntimeError(
+            f"無法持久化或存取本機 session_secret 金鑰檔案 ({key_file}): {e}。請檢查目錄或檔案讀寫權限。"
+        ) from e
 
-    # 3. 自動生成本機專屬隨機金鑰並以 0600 權限持久化
+    # 3. 自動生成本機專屬隨機金鑰並以 0600 權限持久化（Fail-Closed 嚴格安全防護）
     new_secret = secrets.token_hex(32)
     try:
         key_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -52,8 +58,12 @@ def resolve_session_secret() -> str:
         finally:
             os.umask(old_umask)
         return new_secret
-    except Exception:
-        return new_secret
+    except Exception as exc:
+        raise RuntimeError(
+            f"無法持久化 session_secret 金鑰檔案至 {key_file}: {exc}。"
+            f"系統拒絕在未持久化狀態下靜默啟動（避免每次重啟 App 登入態全數失效）。"
+            f"請確認該目錄具備寫入權限，或由環境變數 SESSION_SECRET 注入安全金鑰。"
+        ) from exc
 
 
 class Settings(BaseSettings):

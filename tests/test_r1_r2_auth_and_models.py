@@ -133,26 +133,41 @@ def test_security_posture_and_leaked_secret_rejection() -> None:
 
 
 def test_session_secret_local_persistence_and_invalidation(tmp_path) -> None:
-    """驗證本機金鑰檔案 0600 持久化機制，以及金鑰輪替後舊 Token 必然失效。"""
+    """驗證本機金鑰檔案 0600 持久化機制、重啟一致性、寫入失敗 fail-closed 以及舊 Token 失效。"""
     import os
+    import pytest
     from apps.api.auth import decode_session_token, APIError
     from apps.api.config import resolve_session_secret
 
-    # 1. 驗證本機生成之金鑰符合長度與權限要求
-    secret = resolve_session_secret()
-    assert len(secret) >= 32
-    key_file = os.path.expanduser("~/.golfswinglab/session_secret")
-    if os.path.exists(key_file):
-        mode = oct(os.stat(key_file).st_mode & 0o777)
-        assert mode == "0o600", f"金鑰檔案權限應為 0600，實際為 {mode}"
+    # 1. 驗證隔離目錄下生成金鑰之 0600 權限與跨呼叫一致性
+    isolated_key = tmp_path / "sub" / "secret_key"
+    first_secret = resolve_session_secret(key_file_path=isolated_key)
+    assert len(first_secret) >= 32
+    assert isolated_key.exists()
+    mode = oct(os.stat(isolated_key).st_mode & 0o777)
+    assert mode == "0o600", f"金鑰檔案權限應為 0600，實際為 {mode}"
 
-    # 2. 驗證以舊外洩金鑰簽署的 Token 於當前環境中必然驗證失敗
+    # 再次解析必須讀取相同金鑰（保持登入態一致性）
+    second_secret = resolve_session_secret(key_file_path=isolated_key)
+    assert second_secret == first_secret, "重新讀取應維持相同金鑰，不可每次更換"
+
+    # 2. 驗證無權限目錄下寫入失敗時嚴格拋出例外（Fail-Closed，杜絕靜默回退）
+    readonly_dir = tmp_path / "readonly_dir"
+    readonly_dir.mkdir(parents=True)
+    readonly_dir.chmod(0o500)  # 可讀可進，但不可寫入
+    unwritable_key = readonly_dir / "secret_key"
+    try:
+        with pytest.raises(RuntimeError, match="無法持久化 session_secret 金鑰檔案"):
+            resolve_session_secret(key_file_path=unwritable_key)
+    finally:
+        readonly_dir.chmod(0o700)  # 復原以便 tmp_path 清理
+
+    # 3. 驗證以舊外洩金鑰簽署的 Token 於當前環境中必然驗證失敗
     import base64
     import hashlib
     import hmac
     import json
     import time
-    import pytest
 
     old_leaked_key = "gsl-rotated-session-secret-7578cfc2fc2e5e4964be15b584741a88e550d330"
     payload = {"sub": "fake-admin", "exp": int(time.time()) + 3600}
