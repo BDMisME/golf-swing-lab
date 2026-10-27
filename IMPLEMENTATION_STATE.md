@@ -1,30 +1,33 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Round 6: Beta Release & Merge Preparation）
-1. **A. P0 安全修復（憑證輪替與硬編碼移除）**：`PASS`
-   - **移除硬編碼 JWT**：徹底清理 `scripts/capture_webkit_screenshots.py` 中的 `DEFAULT_TOKEN`，新增 `get_auth_token()` 優先自環境變數 `GSL_AUTH_TOKEN` / `GSL_SESSION_TOKEN` 讀取，或由本機 auth 模組動態簽發短效測試 Token。
-   - **輪替 Session Secret**：更新 `apps/api/config.py` 中的 `session_secret`（已更換為 `gsl-rotated-session-secret-7578cfc2fc2e5e4964be15b584741a88e550d330`），使先前外洩之舊 Token 徹底失效（`decode_session_token` 實測回傳 `AUTH_INVALID_SIGNATURE`）。
-2. **B. 排行榜最後修正（Posture Composite Independence）**：`PASS`
-   - 移除 `packages/analysis/scoring/engine.py` 之 `get_posture_composite_score()` 中當缺少姿勢分項時退回使用 `overall_score` 的錯誤回退。
-   - 姿勢分項（`spine_tilt_stability` 60% + `head_stability` 40%）不可得時嚴格回傳 `None`，杜絕用總分冒充姿勢評分。
-3. **C. 修正測試版本追溯（Verifiable Provenance）**：`PASS`
-   - 重構 `scripts/run_production_acceptance.py`：動態收集 Git SHA (`git rev-parse HEAD`)、工作目錄狀態 (`working_tree_state: clean/dirty`)、修改檔案數、原片 SHA-256、測試執行時間 (ISO 8601 UTC) 與分析程式版本 (`2.1.0-beta`)。
-   - Markdown 報告與 JSON 100% 同步動態生成，杜絕使用提交前之舊 HEAD 冒充最終版本驗證。
-4. **D. 實際 Mac App Smoke Test（端到端隔離實測）**：`PASS`
-   - 建立 `scripts/smoke_test_mac_app.py`，在完全隔離的臨時環境（臨時 SQLite DB 與 Local Storage）中執行真實 139 秒 iPhone 錄影完整 Pipeline（Video Ingest -> 720p/30fps Proxy 轉碼 -> Coarse-to-Fine 偵測 -> MediaPipe 姿態抽取 -> 狀態機 -> 評分引擎 -> DB 持久化）。
-   - 透過 FastAPI TestClient 驗證場次報告 API (`/api/sessions/{id}/report`)：確認偵測 12 球、有效 12 球、四大排行榜完整、姿勢榜獨立計分、爭議球嚴格排除。
-   - 驗證單球播放 API (`/api/swings/{id}`) 與 Clean Motion：特別檢驗第 8、9、10 球之 Top/Impact 時間碼（Downswing 均為生理合規 367ms）、關鍵影格 Keyframes、人體骨架 Landmarks 幾何座標與審查狀態。
-   - 測試結束後 100% 安全清理臨時資料庫與暫存檔案，使用者既有練習紀錄完全不受影響。
-5. **E. 驗收指標與發布準備總覽**：
-   - 30fps 正式 Worker Proxy：分類正確率 **100.0%**、自動通過率 **91.7% (11/12 球)**、Top MAE **86.1ms**、Impact MAE **30.5ms**、時序異常 **0 球**。
-   - 後端測試套件：**80 / 80 PASSED (100%)** in 194s。
-   - 前端構建：Next.js 15.5.28 **9/9 靜態頁面 0 錯誤**。
-   - 隔離 Mac App Smoke Test：**100% PASS**（報告於 `docs/reports/takeover/smoke_test_report.json`）。
-- **最後更新時間**：2026-10-27T02:38:00+08:00
+## 最新開發策略執行狀態（Round 7: PR #1 Final Security & Visual Smoke Gate）
+1. **P0-1 真正移除 Git 中的 JWT 簽章密鑰**：`PASS`
+   - **原始碼徹底無固定金鑰**：`apps/api/config.py` 中 `session_secret` 改為 `default_factory=resolve_session_secret`，原始碼中不再有任何固定金鑰字串。
+   - **本機個人 Mac App 金鑰持久化**：實作 `resolve_session_secret()` 自動管理本機目錄 `~/.golfswinglab/session_secret`（目錄權限 `0700`，金鑰檔案權限嚴格 `0600`），每次重新啟動系統時使用相同金鑰，維持個人登入態穩定。
+   - **歷史外洩金鑰黑名單攔截**：定義 `KNOWN_LEAKED_SECRETS`（包含歷史外洩之 `change-me-...` 與 `gsl-rotated-...`），`validate_security_posture()` 於所有環境（包含 dev/prod）全面攔截外洩金鑰與長度小於 32 字元（256-bit）之弱金鑰。
+   - **生產環境弱密碼防護**：`ensure_default_admin()` 與 `validate_security_posture()` 禁止於 production 環境使用預設管理員密碼。
+   - **實測金鑰作廢與簽發**：重啟本機 Port 28000 API，實測舊外洩金鑰簽署之 Token 存取 `/api/auth/me` 回傳 `401 AUTH_INVALID_SIGNATURE`（舊憑證全數失效），新簽發 Token 存取回傳 `200 OK`。單元測試覆蓋 `test_security_posture_and_leaked_secret_rejection` 與 `test_session_secret_local_persistence_and_invalidation`。
+2. **P0-2 真實 WebKit 播放器與 Clean Motion GUI 實測**：`PASS`
+   - **macOS 原生 WebKit 驅動**：撰寫 `scripts/verify_webkit_gui_playback.py`，調用系統原生 `WebKit.framework` (WKWebView)。
+   - **場次報告與榜單**：成功載入場次報告 (`/sessions/0a93fea4-...`)，驗證 Top 5 榜單呈現與 88 張球次卡片，產生快照截圖 `01_webkit_session_report.png`。
+   - **單球播放與時間碼精準跳轉**：依序導航至第 8、9、10 球 (`/swings/{id}`)，實測跳轉至 Top 與 Impact 時間碼：
+     - Swing #8: Top (106800ms, diff=0.0ms), Impact (107167ms, diff=0.0ms)
+     - Swing #9: Top (119933ms, diff=0.0ms), Impact (120333ms, diff=0.0ms)
+     - Swing #10: Top (140700ms, diff=0.0ms), Impact (142933ms, diff=0.0ms)
+     - 影片實際播放時間 `video.currentTime` 與標記誤差均為 **0.0ms (<= 100ms 門檻)**。
+   - **Clean Motion Canvas 骨架與線條**：全畫布像素掃描驗證，Top 頂點肩膀旋轉姿態線與手腕光環、Impact 擊球定位點與頭部位移檢核圈均確實渲染（`canvas_rendered: true`），非空白畫布。
+   - **控制台與 API 檢查**：`console_errors: []`，全部 API 回應正常。
+   - **保存 7 張快照截圖與 JSON 報告**：輸出至 `docs/screenshots/webkit/` 與 `docs/reports/takeover/webkit_gui_smoke_report.json`（狀態 `PASS`）。
+3. **P1 測試覆蓋與前瞻品質保證**：`PASS`
+   - 後端測試套件：**82 / 82 PASSED (100%)**（包含 79 個單元/整合測試與 3 個真實長影片基準測試，已將計時器升級為 `time.monotonic()` 防止系統休眠時鐘跳轉）。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
+4. **P1 安全回退操作指引**：`PASS`
+   - PR 內文與說明中徹底移除危險的 `git reset --hard`，改採安全無損的回退方式（`git stash`、`git checkout`、`git revert -m 1`）。
+- **最後更新時間**：2026-10-27T17:55:00+08:00
 - **當前分支**：`fix/autonomous-event-accuracy-recovery`
-- **正式驗收報告**：`docs/reports/takeover/production_acceptance_report.json`、`docs/reports/takeover/production_acceptance_summary.md`、`docs/reports/takeover/smoke_test_report.json`
+- **正式驗收證據**：`docs/reports/takeover/webkit_gui_smoke_report.json`、`docs/reports/takeover/production_acceptance_report.json`、`docs/screenshots/webkit/01_webkit_session_report.png` 至 `07_webkit_swing10_impact.png`
 
-## 前期開發策略執行狀態（Round 5: Final RC Gate — Top Accuracy & Ranking Integrity）
+## 前期重大里程碑狀態（Round 6: Beta Release & Merge Preparation）
 
 ## 前期重大里程碑狀態（Final Reliability Gate）
 1. **P0-1：Top 重對齊邏輯修復與候選順序不變性**：`PASS`

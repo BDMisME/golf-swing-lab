@@ -4,6 +4,24 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 7: PR #1 Final Security & Visual Smoke Gate (2026-10-27)
+- [x] **P0-1：真正移除 Git 中的 JWT 簽章密鑰**：
+  - 徹底移除原始碼與設定中所有寫死金鑰，改由 `resolve_session_secret()` 動態安全加載。
+  - 實作本機專屬安全金鑰持久化機制：`~/.golfswinglab/session_secret`（目錄 `0700`、檔案 `0600`），重啟維持穩定登入態。
+  - 定義 `KNOWN_LEAKED_SECRETS` 黑名單，全面阻絕歷史已外洩金鑰；強化 `validate_security_posture` 與 `ensure_default_admin`。
+  - 實測本機 API 舊 Token 回傳 `401 AUTH_INVALID_SIGNATURE`（徹底失效），新 Token 簽發與驗證 100% 正常。
+- [x] **P0-2：真實 WebKit 播放器與 Clean Motion 驗收**：
+  - 撰寫並執行 `scripts/verify_webkit_gui_playback.py`，調用 macOS 原生 `WebKit.framework` (WKWebView)。
+  - 驗證場次報告頁面與 Top 5 榜單，產出截圖 `01_webkit_session_report.png`。
+  - 實測導航至第 8、9、10 球，精準跳轉 Top 與 Impact 時間碼（播放誤差為 0.0ms <= 100ms 門檻）。
+  - 全畫布像素掃描驗證 Clean Motion Canvas 骨架確實繪製（Top 頂點肩膀線、Impact 擊球定位點與頭部檢核圈），Console 0 錯誤。
+  - 儲存全部 7 張快照截圖至 `docs/screenshots/webkit/`，產出 `docs/reports/takeover/webkit_gui_smoke_report.json`（狀態 `PASS`）。
+- [x] **P1：驗收證據與版本一致性**：
+  - 確保報告資訊真實反映 HEAD 與乾淨工作樹狀態，修復測試中 `time.monotonic()` 計時器，全套 82 個測試 100% 通過。
+  - 前端 Next.js 15.5.28 構建 0 錯誤。
+- [x] **P1：修正不安全的回退說明**：
+  - 徹底移除 PR 說明中的 `git reset --hard`，替換為安全無損的 `git stash`、`git checkout` 與 `git revert -m 1` 指引。
+
 ## Round 6: Beta Release & Merge Preparation (2026-10-27)
 - [x] **A. P0 安全修復（憑證輪替與硬編碼移除）**：
   - 移除 `scripts/capture_webkit_screenshots.py` 中的硬編碼 JWT `DEFAULT_TOKEN`，改由本機環境變數 `GSL_AUTH_TOKEN` / `GSL_SESSION_TOKEN` 或 auth 模組動態簽發短效測試 Token。

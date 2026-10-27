@@ -1,0 +1,39 @@
+{
+  "tested_at": "2026-10-27T07:54:42.201056+00:00",
+  "session_id": "0a93fea4-9a0c-438f-ba2a-293d3952bdee",
+  "session_report_verified": true,
+  "swings_verified": {
+    "swing_8": {
+      "top_target_ms": 106800,
+      "top_actual_ms": 106800.0,
+      "top_time_diff_ms": 0.0,
+      "top_canvas_rendered": true,
+      "imp_target_ms": 107167,
+      "imp_actual_ms": 107167.0,
+      "imp_time_diff_ms": 0.0,
+      "imp_canvas_rendered": true
+    },
+    "swing_9": {
+      "top_target_ms": 119933,
+      "top_actual_ms": 119933.0,
+      "top_time_diff_ms": 0.0,
+      "top_canvas_rendered": true,
+      "imp_target_ms": 120333,
+      "imp_actual_ms": 120333.0,
+      "imp_time_diff_ms": 0.0,
+      "imp_canvas_rendered": true
+    },
+    "swing_10": {
+      "top_target_ms": 140700,
+      "top_actual_ms": 140700.0,
+      "top_time_diff_ms": 0.0,
+      "top_canvas_rendered": true,
+      "imp_target_ms": 142933,
+      "imp_actual_ms": 142933.0,
+      "imp_time_diff_ms": 0.0,
+      "imp_canvas_rendered": true
+    }
+  },
+  "console_errors": [],
+  "status": "PASS"
+}

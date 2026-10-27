@@ -101,3 +101,68 @@ def test_login_and_cross_user_isolation() -> None:
 
     r_del = client.delete(f"/api/sessions/{session_id}", headers=other_headers)
     assert r_del.status_code == 403
+
+
+def test_security_posture_and_leaked_secret_rejection() -> None:
+    """驗證 validate_security_posture 會徹底攔截所有歷史已公開外洩金鑰與預設弱密碼。"""
+    import pytest
+    from apps.api.config import KNOWN_LEAKED_SECRETS, Settings
+
+    for leaked in KNOWN_LEAKED_SECRETS:
+        s_bad = Settings(session_secret=leaked, app_env="production")
+        with pytest.raises(RuntimeError, match="已知公開外洩之歷史 session_secret"):
+            s_bad.validate_security_posture()
+
+        s_bad_dev = Settings(session_secret=leaked, app_env="development")
+        with pytest.raises(RuntimeError, match="已知公開外洩之歷史 session_secret"):
+            s_bad_dev.validate_security_posture()
+
+    # 驗證長度過短金鑰
+    s_short = Settings(session_secret="too-short", app_env="production")
+    with pytest.raises(RuntimeError, match="長度過短"):
+        s_short.validate_security_posture()
+
+    # 驗證生產環境預設密碼攔截
+    s_default_pwd = Settings(
+        session_secret="a-valid-secure-random-secret-key-of-at-least-32-bytes",
+        admin_password="GolfSwingLab!2026",
+        app_env="production",
+    )
+    with pytest.raises(RuntimeError, match="生產環境嚴禁使用預設 admin_password"):
+        s_default_pwd.validate_security_posture()
+
+
+def test_session_secret_local_persistence_and_invalidation(tmp_path) -> None:
+    """驗證本機金鑰檔案 0600 持久化機制，以及金鑰輪替後舊 Token 必然失效。"""
+    import os
+    from apps.api.auth import decode_session_token, APIError
+    from apps.api.config import resolve_session_secret
+
+    # 1. 驗證本機生成之金鑰符合長度與權限要求
+    secret = resolve_session_secret()
+    assert len(secret) >= 32
+    key_file = os.path.expanduser("~/.golfswinglab/session_secret")
+    if os.path.exists(key_file):
+        mode = oct(os.stat(key_file).st_mode & 0o777)
+        assert mode == "0o600", f"金鑰檔案權限應為 0600，實際為 {mode}"
+
+    # 2. 驗證以舊外洩金鑰簽署的 Token 於當前環境中必然驗證失敗
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import time
+    import pytest
+
+    old_leaked_key = "gsl-rotated-session-secret-7578cfc2fc2e5e4964be15b584741a88e550d330"
+    payload = {"sub": "fake-admin", "exp": int(time.time()) + 3600}
+    raw = json.dumps(payload).encode("utf-8")
+    b64_p = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+    old_sig = hmac.new(old_leaked_key.encode("utf-8"), b64_p.encode("ascii"), hashlib.sha256).hexdigest()
+    old_token = f"{b64_p}.{old_sig}"
+
+    # 在當前安全密鑰下解析舊 token 必須失敗
+    with pytest.raises(APIError) as exc_info:
+        decode_session_token(old_token)
+    assert exc_info.value.code == "AUTH_INVALID_SIGNATURE"
+
