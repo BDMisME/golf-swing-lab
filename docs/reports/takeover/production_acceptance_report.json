@@ -3,12 +3,12 @@
     "analyzer_version": "2.1.0-beta",
     "video_filename": "2分鐘.mov",
     "video_sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
-    "git_commit": "79753f66d3b89686007b2ac8b14b6d44dffadee3",
-    "git_branch": "fix/autonomous-event-accuracy-recovery",
-    "working_tree_state": "dirty",
-    "is_dirty": true,
-    "dirty_files_count": 9,
-    "tested_at": "2026-10-26T18:34:16.061205+00:00",
+    "git_commit": "275254e9786fba948688490f8c8d7e5e0c71eb23",
+    "git_branch": "main",
+    "working_tree_state": "clean",
+    "is_dirty": false,
+    "dirty_files_count": 0,
+    "tested_at": "2026-10-28T10:45:35.870184+00:00",
     "gt_reference_type": "developer_assisted_visual_annotation"
   },
   "original_60fps": {

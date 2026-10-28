@@ -4,6 +4,21 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 9: 大影片分段上傳與登入憑證失效處理修復 (2026-10-28)
+- [x] **P0：大檔案（1.38GB）分段上傳 85% 失敗根因徹底修復**：
+  - 診斷查明 Docker Desktop 虛擬機磁碟空間被佔滿導致 MinIO 拋出 `XMinioStorageFull`，`HybridStorageService` 將後續分段非法降級寫入本地造成分段分裂。
+  - 徹底移除分段跨後端降級邏輯，新增 `_get_backend_for_upload` 依 `upload_id` 嚴格綁定單一存儲後端。
+  - 切換至 Mac 本機 NVMe 大容量存儲模式（`LOCAL_STORAGE_DIR=~/.golfswinglab/storage`，享有 160GB+ 高速空間），繞過 Docker VM 磁碟限制。
+  - 實作雙向向後相容讀取 Fallback，確保既有 340 筆 MinIO 歷史場次影片與本機新影片皆能無縫播放。
+  - 實測真實 24MB iPhone MOV 影片（5 分段）發起 multipart 上傳、合併、ffprobe 解析、背景 Worker 分析與 HTTP 206 Range 串流 100% 通過。
+- [x] **P0：舊憑證失效與首頁錯誤導航修復**：
+  - 修復 `apiFetch` 捕捉 401 自動清除失效 token 並導向 `/login?expired=1`。
+  - 修復首頁 catch 捕捉 401 與中文簽章失敗訊息，並在 UI 增加「重新登入」與「重新整理」按鈕，徹底解決卡在無資料畫面問題。
+  - 前端 Next.js 15.5.28 9/9 靜態路由編譯 0 錯誤。
+- [x] **服務就緒與回歸測試**：
+  - 重啟 Worker 與 Web daemon，確認 `/healthz` 與 `/readyz` (postgres, redis, storage 全部為 true)。
+  - 後端核心測試與回歸測試 27/27 PASSED。
+
 ## Round 8: PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate (2026-10-27)
 - [x] **P0：WebKit 測試必須使用真實分析結果（真正 UI 事件跳轉驗收）**：
   - 動態取得最新 139 秒（`2分鐘.mov`，SHA-256: `4993a3b6...`）正式分析完成之 Session (`e8e182dd-...`)、Video (`39608133-...`) 與真實球次 ID。

@@ -296,13 +296,22 @@ class S3StorageService:
     ) -> dict[str, Any]:
         self.ensure_bucket()
         sha256_hex = hashlib.sha256(data).hexdigest()
-        resp = self.internal_client.upload_part(
-            Bucket=self.bucket,
-            Key=storage_key,
-            UploadId=s3_upload_id,
-            PartNumber=part_number,
-            Body=data,
-        )
+        try:
+            resp = self.internal_client.upload_part(
+                Bucket=self.bucket,
+                Key=storage_key,
+                UploadId=s3_upload_id,
+                PartNumber=part_number,
+                Body=data,
+            )
+        except ClientError as exc:
+            err_code = exc.response.get("Error", {}).get("Code", "")
+            if err_code == "XMinioStorageFull":
+                raise RuntimeError(
+                    "S3/MinIO 存儲空間已滿 (XMinioStorageFull)。"
+                    "建議於 .env 設定 STORAGE_PROVIDER=local 改用本機大容量硬碟存儲 (享 160GB+ 空間)，或清理 Docker 容器空間。"
+                ) from exc
+            raise
         etag = str(resp.get("ETag", "")).strip('"')
         return {
             "etag": etag,
@@ -321,12 +330,21 @@ class S3StorageService:
             }
             for p in sorted_parts
         ]
-        self.internal_client.complete_multipart_upload(
-            Bucket=self.bucket,
-            Key=storage_key,
-            UploadId=s3_upload_id,
-            MultipartUpload={"Parts": s3_parts},
-        )
+        try:
+            self.internal_client.complete_multipart_upload(
+                Bucket=self.bucket,
+                Key=storage_key,
+                UploadId=s3_upload_id,
+                MultipartUpload={"Parts": s3_parts},
+            )
+        except ClientError as exc:
+            err_code = exc.response.get("Error", {}).get("Code", "")
+            if err_code == "XMinioStorageFull":
+                raise RuntimeError(
+                    "S3/MinIO 存儲空間已滿 (XMinioStorageFull)。"
+                    "建議於 .env 設定 STORAGE_PROVIDER=local 改用本機大容量硬碟存儲 (享 160GB+ 空間)，或清理 Docker 容器空間。"
+                ) from exc
+            raise
         head = self.head_object(storage_key)
         return head
 
@@ -450,6 +468,18 @@ class HybridStorageService:
             self._s3_available = False
             return self.local_service
 
+    def _get_backend_for_upload(self, s3_upload_id: str) -> S3StorageService | LocalStorageService:
+        """
+        依據 upload_id 來源精準分派儲存後端：
+        以 local_up_ 開頭必然為 LocalStorageService；其餘必然為 S3StorageService。
+        嚴禁跨後端分裂分段或降級，確保所有分段全數寫入同一個物理後端。
+        """
+        if str(s3_upload_id).startswith("local_up_"):
+            return self.local_service
+        if self.s3_service:
+            return self.s3_service
+        return self.local_service
+
     def ensure_bucket(self) -> bool:
         backend = self._get_active_backend()
         try:
@@ -471,34 +501,23 @@ class HybridStorageService:
             return self.local_service.create_multipart_upload(storage_key, content_type)
 
     def sign_upload_part(self, storage_key: str, s3_upload_id: str, part_number: int) -> str:
-        backend = self._get_active_backend()
-        try:
-            return backend.sign_upload_part(storage_key, s3_upload_id, part_number)
-        except Exception:
-            return self.local_service.sign_upload_part(storage_key, s3_upload_id, part_number)
+        backend = self._get_backend_for_upload(s3_upload_id)
+        return backend.sign_upload_part(storage_key, s3_upload_id, part_number)
 
     def put_part_bytes(
         self, storage_key: str, s3_upload_id: str, part_number: int, data: bytes
     ) -> dict[str, Any]:
-        backend = self._get_active_backend()
-        try:
-            return backend.put_part_bytes(storage_key, s3_upload_id, part_number, data)
-        except Exception as e:
-            logger.warning(f"S3 寫入分段失敗 ({e})，降級寫入 LocalStorage")
-            return self.local_service.put_part_bytes(storage_key, s3_upload_id, part_number, data)
+        backend = self._get_backend_for_upload(s3_upload_id)
+        return backend.put_part_bytes(storage_key, s3_upload_id, part_number, data)
 
     def complete_multipart_upload(
         self, storage_key: str, s3_upload_id: str, parts: list[dict[str, Any]]
     ) -> dict[str, Any]:
-        backend = self._get_active_backend()
-        try:
-            return backend.complete_multipart_upload(storage_key, s3_upload_id, parts)
-        except Exception as e:
-            logger.warning(f"S3 完成分段失敗 ({e})，降級由 LocalStorage 完成")
-            return self.local_service.complete_multipart_upload(storage_key, s3_upload_id, parts)
+        backend = self._get_backend_for_upload(s3_upload_id)
+        return backend.complete_multipart_upload(storage_key, s3_upload_id, parts)
 
     def abort_multipart_upload(self, storage_key: str, s3_upload_id: str) -> None:
-        backend = self._get_active_backend()
+        backend = self._get_backend_for_upload(s3_upload_id)
         backend.abort_multipart_upload(storage_key, s3_upload_id)
 
     def head_object(self, storage_key: str) -> dict[str, Any]:
@@ -506,28 +525,28 @@ class HybridStorageService:
         try:
             return backend.head_object(storage_key)
         except Exception:
-            return self.local_service.head_object(storage_key)
+            fallback = self.local_service if backend != self.local_service else self.s3_service
+            if fallback:
+                return fallback.head_object(storage_key)
+            raise
 
     def put_file(self, storage_key: str, local_path: str | Path, content_type: str) -> dict[str, Any]:
         backend = self._get_active_backend()
-        try:
-            return backend.put_file(storage_key, local_path, content_type)
-        except Exception:
-            return self.local_service.put_file(storage_key, local_path, content_type)
+        return backend.put_file(storage_key, local_path, content_type)
 
     def put_bytes(self, storage_key: str, data: bytes, content_type: str) -> dict[str, Any]:
         backend = self._get_active_backend()
-        try:
-            return backend.put_bytes(storage_key, data, content_type)
-        except Exception:
-            return self.local_service.put_bytes(storage_key, data, content_type)
+        return backend.put_bytes(storage_key, data, content_type)
 
     def download_to_path(self, storage_key: str, local_path: str | Path) -> Path:
         backend = self._get_active_backend()
         try:
             return backend.download_to_path(storage_key, local_path)
         except Exception:
-            return self.local_service.download_to_path(storage_key, local_path)
+            fallback = self.local_service if backend != self.local_service else self.s3_service
+            if fallback:
+                return fallback.download_to_path(storage_key, local_path)
+            raise
 
     def get_object_range(
         self, storage_key: str, start_byte: int | None = None, end_byte: int | None = None
@@ -536,14 +555,20 @@ class HybridStorageService:
         try:
             return backend.get_object_range(storage_key, start_byte, end_byte)
         except Exception:
-            return self.local_service.get_object_range(storage_key, start_byte, end_byte)
+            fallback = self.local_service if backend != self.local_service else self.s3_service
+            if fallback:
+                return fallback.get_object_range(storage_key, start_byte, end_byte)
+            raise
 
     def generate_presigned_get_url(self, storage_key: str, expires_in: int | None = None) -> str:
         backend = self._get_active_backend()
         try:
             return backend.generate_presigned_get_url(storage_key, expires_in)
         except Exception:
-            return self.local_service.generate_presigned_get_url(storage_key, expires_in)
+            fallback = self.local_service if backend != self.local_service else self.s3_service
+            if fallback:
+                return fallback.generate_presigned_get_url(storage_key, expires_in)
+            raise
 
 
 @lru_cache

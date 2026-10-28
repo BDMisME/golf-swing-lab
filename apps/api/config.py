@@ -66,6 +66,19 @@ def resolve_session_secret(key_file_path: Path | None = None) -> str:
         ) from exc
 
 
+def resolve_local_storage_dir() -> str:
+    """動態解析本機儲存目錄，優先使用環境變數 LOCAL_STORAGE_DIR，預設持久化至 ~/.golfswinglab/storage。"""
+    env_dir = os.environ.get("LOCAL_STORAGE_DIR")
+    if env_dir:
+        return env_dir
+    local_dir = Path.home() / ".golfswinglab" / "storage"
+    try:
+        local_dir.mkdir(parents=True, exist_ok=True)
+        return str(local_dir)
+    except Exception:
+        return "/tmp/gsl_storage"
+
+
 class Settings(BaseSettings):
     """系統環境變數與組態設定（支援本機開發、測試與 Zeabur 部署）。"""
 
@@ -83,7 +96,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:26379/0"
 
     storage_provider: str = "s3"
-    local_storage_dir: str = "/tmp/gsl_storage"
+    local_storage_dir: str = Field(default_factory=resolve_local_storage_dir)
     s3_endpoint_url: str = "http://localhost:29000"
     s3_internal_endpoint_url: str = "http://localhost:29000"
     s3_region: str = "us-east-1"

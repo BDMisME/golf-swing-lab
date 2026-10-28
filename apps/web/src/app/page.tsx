@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apiFetch, getAuthToken, PracticeSession } from "@/lib/api";
+import { apiFetch, getAuthToken, clearAuthToken, PracticeSession } from "@/lib/api";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -22,8 +22,13 @@ export default function DashboardPage() {
         setSessions(res.items || []);
       })
       .catch((err) => {
-        if (String(err.message).includes("401")) {
-          router.push("/login");
+        if (
+          err.status === 401 ||
+          String(err.message).includes("401") ||
+          String(err.message).includes("登入憑證") ||
+          String(err.message).includes("簽章驗證失敗")
+        ) {
+          router.push("/login?expired=1");
         } else {
           setError(err.message);
         }
@@ -94,8 +99,25 @@ export default function DashboardPage() {
       </section>
 
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-950/40 p-4 text-xs text-red-200">
-          載入失敗：{error}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-950/40 p-4 text-xs text-red-200">
+          <div>載入失敗：{error}</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                clearAuthToken();
+                router.push("/login");
+              }}
+              className="rounded-lg bg-red-800/80 hover:bg-red-700 px-3 py-1.5 font-medium text-white transition"
+            >
+              重新登入
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-lg border border-red-700/60 hover:bg-red-900/40 px-3 py-1.5 font-medium text-red-300 transition"
+            >
+              重新整理
+            </button>
+          </div>
         </div>
       )}
 

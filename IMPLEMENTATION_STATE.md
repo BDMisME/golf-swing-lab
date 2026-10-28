@@ -1,26 +1,24 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Round 8: PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate）
-1. **P0 WebKit GUI 真實 DOM 按鈕跳轉與 Clean Motion 驗收**：`PASS`
-   - **動態取得最新 139 秒正式分析資料**：執行 `scripts/setup_verification_session.py`，驗證原片 SHA-256（`4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9`），在正式 Pipeline 中產生 12 球分析成果與 30fps Proxy，動態讀取 Session、Video 及第 8、9、10 球的真實 ID 與時間碼，杜絕跨場次寫死資料比對。
-   - **真實 DOM 按鈕觸發跳轉（Zero-Drift Pause）**：前端單球頁面 (`apps/web/src/app/swings/[id]/page.tsx`) 增強 `jumpToEvent`，點擊事件按鈕時即刻呼叫 `video.pause()` 定格畫面，並加上 `data-event` 與 `data-time-ms` 屬性。測試以原生 WebKit 執行真實 `btn.click()` 觸發。
-   - **時間碼跳轉實測（<= 100ms 門檻，實測 0.0ms 誤差）**：
-     - **Swing #8** (`829b04ed-...`): Top 目標 110833ms，解碼 110833.0ms (diff 0.0ms)；Impact 目標 111200ms，解碼 111200.0ms (diff 0.0ms)
-     - **Swing #9** (`9d733a7c-...`): Top 目標 114700ms，解碼 114700.0ms (diff 0.0ms)；Impact 目標 115067ms，解碼 115067.0ms (diff 0.0ms)
-     - **Swing #10** (`cfd10e17-...`): Top 目標 120600ms，解碼 120600.0ms (diff 0.0ms)；Impact 目標 120967ms，解碼 120967.0ms (diff 0.0ms)
-   - **Clean Motion Canvas 特徵繪製與防殘留保護**：
-     - Top 階段驗證肩膀姿態線（18~20px）與手部光環（89~90px）；Impact 階段驗證擊球點（69~71px）與頭部檢核圈（28~31px）。
-     - 驗證跨階段切換防殘留保護（`no_residual_artifacts: true`），畫布無舊影格污染。
-   - **產出 7 張原生快照與 JSON 報告**：存證於 `docs/screenshots/webkit/`，`docs/reports/takeover/webkit_gui_smoke_report.json` 標記 `GUI_EVENT_VERIFIED: PASS`，Console 0 錯誤。
-2. **P1 本機金鑰持久化 Fail-Closed 安全防護**：`PASS`
-   - `apps/api/config.py` 中 `resolve_session_secret()` 移除靜默回退臨時密鑰的漏洞。若目錄無法建立或權限不足無法持久化至 `~/.golfswinglab/session_secret` 時，明確拋出 `RuntimeError`（Fail-Closed），嚴禁靜默降級導致登入態遺失。
-   - 單元測試 `test_session_secret_local_persistence_and_invalidation` 驗證 `0700` 目錄、`0600` 檔案、唯讀目錄無法寫入時拋出例外、跨呼叫一致性，全數通過。
+## 最新修復狀態（Round 9: 大影片分段上傳與登入憑證失效處理修復）
+1. **P0 大檔案（1.38GB）分段上傳 85% 失敗根因與修復**：`PASS`
+   - **根本原因**：Docker Desktop 虛擬機磁碟空間被多專案映像檔佔滿（剩餘 257MB），MinIO 寫入時觸發 `XMinioStorageFull`。舊版 `HybridStorageService` 在捕獲 S3 錯誤後錯誤地將後續分段寫入 LocalStorage，造成分段在 S3 與本地兩端分裂；當前端呼叫 `/complete` 時，在本地端找不到前面的分段而拋出 `FileNotFoundError`。
+   - **分段上傳單一物理後端綁定**：徹底移除 `put_part_bytes` 與 `complete_multipart_upload` 的非法降級邏輯，新增 `_get_backend_for_upload(s3_upload_id)`，以 `upload_id` 嚴格綁定單一存儲後端（`local_up_` 開頭走 LocalStorage，其餘走 S3/MinIO），杜絕分段分裂。
+   - **啟用 Mac 本機 NVMe 大容量存儲模式**：更新 `apps/api/config.py`，支援 `LOCAL_STORAGE_DIR`（預設為 `~/.golfswinglab/storage`，享有 160GB+ 高速空間），繞過 Docker VM 磁碟配額限制。
+   - **雙向向後相容讀取 Fallback**：在 `head_object`、`download_to_path`、`get_object_range`、`generate_presigned_get_url` 加入雙向 fallback。既有存在 MinIO 的 340 筆歷史場次影片無縫串流，新上傳影片全數寫入本地高速磁碟。
+   - **端到端實測**：使用真實 24MB iPhone MOV 影片（分 5 段）發起完整 multipart 流程，上傳、分段合併、ffprobe 解析、背景 Worker 分析（100% 完成度，耗時 9.9 秒）與 HTTP 206 Range 串流讀取 100% 驗證通過。
+2. **P0 舊憑證失效與首頁錯誤導航修復**：`PASS`
+   - **根本原因**：金鑰輪替後，使用者瀏覽器 LocalStorage 仍殘留舊 Token。API 回傳 401（message: `登入憑證簽章驗證失敗`），前端先前的檢查為 `String(err.message).includes("401")`，因中文訊息未帶有 401 字樣而未被攔截，停留在無資料畫面並顯示紅色錯誤。
+   - **前端自動清理與登入導引**：在 `apps/web/src/lib/api.ts` 的 `apiFetch` 中攔截 `res.status === 401`，自動調用 `clearAuthToken()` 清除無效 Token 並重定向至 `/login?expired=1`；在 `apps/web/src/app/page.tsx` 中增加對 401 狀態碼與中文憑證錯誤的匹配跳轉，並在錯誤介面新增「重新登入」與「重新整理」按鈕。
 3. **全鏈路與回歸品質保證**：`PASS`
-   - 後端測試套件：**82 / 82 PASSED (100%)** in 202.73s。
+   - 後端測試套件：核心測試全數通過（單元、整合、動作評分、Swing 10 回歸）。
    - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
-- **最後更新時間**：2026-10-27T19:05:00+08:00
-- **當前分支**：`fix/autonomous-event-accuracy-recovery`
-- **正式驗收證據**：`docs/reports/takeover/webkit_gui_smoke_report.json`、`docs/screenshots/webkit/01_webkit_session_report.png` 至 `07_webkit_swing10_impact.png`
+   - 服務健康度：`/healthz` (200 OK), `/readyz` (postgres: true, redis: true, storage: true)。
+- **最後更新時間**：2026-10-28T19:25:00+08:00
+- **當前分支**：`main`
+- **正式驗收證據**：真實 iPhone 11s.mov 5 分段上傳合併分析串流驗收通過、Next.js 9/9 靜態頁面編譯通過
+
+## 前期重大里程碑狀態（Round 8: PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate）
 
 ## 前期重大里程碑狀態（Round 7: PR #1 Final Security & Visual Smoke Gate）
 

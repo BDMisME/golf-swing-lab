@@ -697,7 +697,17 @@ async def upload_part_content(
         raise APIError(400, "EMPTY_PART_BODY", "分段內容不可為空")
 
     storage = get_storage_service()
-    part_info = storage.put_part_bytes(up.storage_key, up.s3_upload_id, part_number, body)
+    try:
+        part_info = storage.put_part_bytes(up.storage_key, up.s3_upload_id, part_number, body)
+    except Exception as exc:
+        err_str = str(exc)
+        if "XMinioStorageFull" in err_str or "Storage backend has reached its minimum free drive" in err_str:
+            raise APIError(
+                507,
+                "STORAGE_FULL",
+                "儲存空間已滿 (S3/MinIO Storage Full)。請釋放 Docker 容器空間，或於 .env 設定 STORAGE_PROVIDER=local 改用本機大容量硬碟 (享 160GB+ 空間)。",
+            ) from exc
+        raise APIError(500, "UPLOAD_PART_FAILED", f"寫入分段失敗: {exc}") from exc
 
     existing_part = db.scalar(
         select(UploadPart).where(
@@ -785,7 +795,14 @@ def complete_upload(
             up.storage_key, up.s3_upload_id, list(part_map.values())
         )
     except Exception as exc:
-        raise APIError(400, "S3_COMPLETE_FAILED", f"S3 分段合併失敗: {exc}") from exc
+        err_str = str(exc)
+        if "XMinioStorageFull" in err_str or "Storage backend has reached its minimum free drive" in err_str:
+            raise APIError(
+                507,
+                "STORAGE_FULL",
+                "儲存空間已滿 (S3/MinIO Storage Full)。請釋放 Docker 容器空間，或於 .env 設定 STORAGE_PROVIDER=local 改用本機大容量硬碟 (享 160GB+ 空間)。",
+            ) from exc
+        raise APIError(400, "STORAGE_COMPLETE_FAILED", f"分段合併失敗: {exc}") from exc
 
     # 下載至暫存進行 ffprobe 完整性與時長檢查（拒絕損毀檔、空檔或超過 30 分鐘限制之影片）
     s = get_settings()

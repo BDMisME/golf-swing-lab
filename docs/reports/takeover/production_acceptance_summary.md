@@ -3,13 +3,13 @@
 > 本報告由 `scripts/run_production_acceptance.py` 自行推論產生之 `production_acceptance_report.json` 100% 動態生成，並通過自動完整性斷言檢核（杜絕人工修改或文字寫死）。
 
 ## 0. 測試環境與版本證據
-- **測試執行時間 (UTC)**: `2026-10-26T18:34:16.061205+00:00`
+- **測試執行時間 (UTC)**: `2026-10-28T10:45:35.870184+00:00`
 - **分析程式版本**: `2.1.0-beta`
 - **測試影片**: `2分鐘.mov`
 - **影片 SHA-256**: `4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9`
-- **Git 分支**: `fix/autonomous-event-accuracy-recovery`
-- **Git Commit SHA**: `79753f66d3b89686007b2ac8b14b6d44dffadee3`
-- **工作樹狀態**: `dirty` (9 modified files)
+- **Git 分支**: `main`
+- **Git Commit SHA**: `275254e9786fba948688490f8c8d7e5e0c71eb23`
+- **工作樹狀態**: `clean`
 - **Ground Truth 屬性**: `developer_assisted_visual_annotation`（Development Set Alignment，非外部獨立盲測）
 
 ## 1. 核心指標對比（30fps 正式 Worker Proxy vs 60fps 原片）

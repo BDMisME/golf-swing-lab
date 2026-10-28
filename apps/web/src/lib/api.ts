@@ -175,7 +175,20 @@ export async function apiFetch<T = any>(
     } catch {
       errPayload = { message: res.statusText };
     }
-    throw new Error(errPayload?.message || `API 請求失敗 (${res.status})`);
+    const errMsg = errPayload?.message || `API 請求失敗 (${res.status})`;
+
+    // 若為 401 認證無效或過期，自動清除本機過期憑證並跳轉至登入頁面
+    if (res.status === 401) {
+      clearAuthToken();
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?expired=1";
+      }
+    }
+
+    const err = new Error(errMsg);
+    (err as any).status = res.status;
+    (err as any).code = errPayload?.code;
+    throw err;
   }
 
   return res.json() as Promise<T>;
