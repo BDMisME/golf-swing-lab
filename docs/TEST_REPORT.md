@@ -16,6 +16,7 @@
 
 | 輪次 | 測試範圍 | 執行指令 | 通過 / 失敗 | 性質 (Real / Mock) | 狀態 |
 |---|---|---|---|---|---|
+| **Round 10 雙影片專業比較播放器、17 球桿示範庫與動作差異 AI 教練 (Evidence-Based Coaching R2) 驗收** | P0 單球播放器升級（重播與循環播放 Toggle、±1f/±5f 真實影格步進約束、9 階段發光跟隨與推估擊球標註）；P1 專業揮桿比較（17 種球桿分類標準、ReferenceSwing 資料模型與 REST API、HTTP 206 串流、7I 標準 DTL 與 Driver 特寫示範種子、雙影片比較播放器組件、SwingSynchronizationEngine Mode A 自然節奏與 Mode B 分段線性同步、等比例 Auto-Framing、missing_reference 誠實標籤）；P2 動作差異分析 AI Coach（精煉 1~2 項客觀幾何差異卡片、影格一鍵跳轉、深入分析此差異 Vision AI 運動學解讀與練習 Drill 課表、最高誠信原則免責聲明）；專項測試 4/4 通過、回歸測試 26/26 通過、Next.js 9/9 靜態路由編譯 0 錯誤、macOS 原生 WebKit WKWebView 6 大步驟實測 100% 通過（產出 6 張原生快照與 swing_comparison_r2_report.json）。 | `uv run pytest tests/test_swing_comparison_and_coach.py` + `uv run pytest tests/test_auto_accuracy_correction.py tests/test_final_evidence_lock.py tests/test_swing_10_regression.py tests/test_r3_verifiable_scoring.py` + `npm --prefix apps/web run build` + `uv run python scripts/verify_webkit_comparison_and_coach.py` | 4 / 4 專項測試通過 (100%), 26 / 26 回歸測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 6 步驟 100% PASS | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機示範庫) | `PASS` (可視覺同步比較與證據驅動教練全面就緒) |
 | **Round 9 大影片分段上傳與登入憑證失效處理修復** | 1.38GB 大影片分段上傳 85% 失敗根因修復（Docker VM 空間滿引發 MinIO 錯誤，移除 HybridStorage 非法分段跨後端降級，依 upload_id 嚴格綁定單一物理後端，改用本機 NVMe `~/.golfswinglab/storage` 160GB+ 大容量高速存儲模式；保留雙向向後相容 fallback 支援歷史 340 場次播放；真實 24MB iPhone MOV 影片 5 分段上傳合併、ffprobe 解析、背景 Worker 分析 100% 耗時 9.9s 與 HTTP 206 串流實測全數通過）；首頁「登入憑證簽章驗證失敗」修復（`apiFetch` 捕捉 401 自動清除無效 Token 並重定向至 `/login?expired=1`，首頁提供重新登入與重新整理引導）；核心測試 27/27 通過，前端 Next.js 9 路由編譯 0 錯誤。 | `uv run pytest tests/` + `uv run python scripts/verify_multipart_upload.py` + `npm --prefix apps/web run build` | 27 / 27 核心測試通過 (100%), 分段上傳合併串流 100% PASS, 前端 9 路由 0 錯誤 | Real (真實 iPhone 11s.mov 24MB, 本機 NVMe, Port 28000 API, Port 23000 Web) | `PASS` (生產阻斷問題徹底解除) |
 | **Round 8 PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate 驗收** | P0 真實 UI 事件跳轉驗收（動態讀取 139 秒最新分析 Session `e8e182dd-...` 與真實球次 ID；前端事件跳轉加入定格暫停 `video.pause()`，原生 WebKit 以真實 DOM `btn.click()` 點擊觸發；Swing #8、#9、#10 點擊 Top 與 Impact 實測播放解碼誤差均為 0.0ms <= 100ms 門檻；Clean Motion Canvas 姿態線、手腕光環、擊球點、頭部圈特徵驗證與跨階段防殘留保護全數通過，Console 0 錯誤，產出 7 張原生快照與 JSON 報告）；P1 本機金鑰持久化 Fail-Closed（`resolve_session_secret` 於目錄建立失敗或權限不足時明確拋出 `RuntimeError`，杜絕靜默降級，單元測試通過）；後端測試套件 82/82 100% 通過 (202.73s)，前端 Next.js 15 構建 0 錯誤。 | `uv run python scripts/verify_webkit_gui_playback.py` + `uv run pytest` + `npm --prefix apps/web run build` | 82 / 82 通過 (100%), WebKit GUI 真實跳轉 100% PASS (0.0ms 誤差), 前端 9 路由 0 錯誤 | Real (macOS 原生 WebKit WKWebView, 本機 Port 28000 API, Port 23000 Web, 真實 139 秒 iPhone 錄影) | `PASS` (個人 Beta 發布全部閘門就緒) |
 | **Round 7 PR #1 Final Security & Visual Smoke Gate 驗收** | 真正移除 Git 中的 JWT 簽章密鑰（`resolve_session_secret()` 動態解析與 `~/.golfswinglab/session_secret` 本機 0600 持久化，禁止在代碼中寫死金鑰；`KNOWN_LEAKED_SECRETS` 黑名單全面攔截外洩金鑰；舊 Token 實測回傳 `401 AUTH_INVALID_SIGNATURE` 徹底作廢，新 Token 正常簽發與驗證）；macOS 原生 WebKit.framework GUI 實測（真實開啟場次報告頁面與 Top 5 榜單，產出 `01_webkit_session_report.png`；導航至第 8、9、10 球逐球跳轉 Top 與 Impact，影片播放時間 `video.currentTime` 與標記時間誤差均為 0.0ms <= 100ms 門檻；全畫布像素掃描驗證 Clean Motion Canvas 骨架確實繪製，Console 0 錯誤，產出全部 7 張截圖與 JSON 報告）；後端測試套件 82/82 100% 通過（`time.monotonic()` 防時鐘跳轉升級），前端 Next.js 15 構建 0 錯誤。 | `uv run python scripts/verify_webkit_gui_playback.py` + `uv run pytest` + `npm --prefix apps/web run build` | 82 / 82 通過 (100%), WebKit GUI 實測 100% PASS, 前端 9 路由 0 錯誤 | Real (macOS 原生 WebKit WKWebView, 本機 Port 28000 API, Port 23000 Web, 測試影片) | `PASS` (個人 Beta 發布安全與視覺播放閘門通過) |
@@ -82,6 +83,15 @@
 - `docs/screenshots/04_swing_detail_pose_subscores.png`：單球詳情頁（逐幀 `±33ms` 控制、2D 骨架 Canvas 疊圖、9 階段事件跳轉、5 項子分數與「怎麼算的？」展開公式、人工時間軸校正表單）
 - `docs/screenshots/05_exports_center.png`：精選揮桿短片匯出中心（顯示單球原始比例與雙球 `9:16` 直式社群合輯 MP4 下載）
 - `docs/screenshots/06_settings_weights_coach.png`：個人球桿偏好、`score-v1` 5 項子分數權重滑桿與可插拔教練設定頁
+
+### Round 10 macOS 原生 WebKit 視訊快照存證 (`docs/screenshots/webkit_r2/`)
+- `docs/screenshots/webkit_r2/01_single_player_view.png`：P0 單球播放器升級（包含重播、循環播放 Toggle、±1f/±5f 真實影格步進按鈕、9 階段發光跟隨與推估擊球標籤）
+- `docs/screenshots/webkit_r2/02_action_differences_cards.png`：P2 動作差異分析 AI Coach（精煉 1~2 項客觀幾何差異卡片、影格一鍵跳轉）
+- `docs/screenshots/webkit_r2/03_deep_insight_expanded.png`：P2 深入分析此差異 Vision AI 運動學解讀與分步練習 Drill 課表展開
+- `docs/screenshots/webkit_r2/04_comparison_side_by_side.png`：P1 雙影片比較左右並列佈局（Side-by-side Layout，標準 7I DTL 示範影片 vs 使用者揮桿）
+- `docs/screenshots/webkit_r2/05_comparison_missing_3w.png`：P1 完整 17 球桿支援與缺失示範誠實標註（3W missing_reference 狀態指示，提供手動匯入示範影片互動入口）
+- `docs/screenshots/webkit_r2/06_comparison_stacked_layout.png`：P1 雙影片比較上下堆疊佈局（Stacked Layout，上下緊湊對齊）
+
 
 ---
 

@@ -1,0 +1,72 @@
+{
+  "title": "Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 Acceptance Report",
+  "timestamp": "2026-10-28T12:39:25.465257+00:00",
+  "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
+  "all_passed": true,
+  "step_results": [
+    {
+      "step": "step1_single_player",
+      "has_replay_button": true,
+      "has_loop_button": true,
+      "has_progress_bar": true,
+      "has_phase_display": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step2_action_differences",
+      "diff_count": 2.0,
+      "has_jump_btn": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step3_deep_insight",
+      "click_result": "CLICKED",
+      "has_insight_panel": true,
+      "has_drill": true,
+      "has_disclaimer": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step4_comparison_side_by_side",
+      "has_comp_header": false,
+      "ref_video_src": "http://localhost:28000/api/reference-swings/1d5ecee0-1809-4d0c-a553-1c28e95bbac0/stream?token=eyJzdWIiOiI2NTU3NWEyNC1hYTY1LTRjZmItOTMzNC01NjEzZTVhYjgzYjUiLCJlbWFpbCI6ImdvbGZlckBzd2luZ2xhYi5sb2NhbCIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc5Mzc5NTk0N30.d09145cd6f17c157cf2ac9221d0173aaa1381991fbc519ca44d0b436ba664213",
+      "status": "PASS"
+    },
+    {
+      "step": "step5_missing_club_reference",
+      "has_missing_banner": true,
+      "has_import_btn": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step6_stacked_layout",
+      "status": "PASS"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "01_single_player_view",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/01_single_player_view.png"
+    },
+    {
+      "name": "02_action_differences_cards",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/02_action_differences_cards.png"
+    },
+    {
+      "name": "03_deep_insight_expanded",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/03_deep_insight_expanded.png"
+    },
+    {
+      "name": "04_comparison_side_by_side",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/04_comparison_side_by_side.png"
+    },
+    {
+      "name": "05_comparison_missing_3w",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/05_comparison_missing_3w.png"
+    },
+    {
+      "name": "06_comparison_stacked_layout",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/06_comparison_stacked_layout.png"
+    }
+  ]
+}

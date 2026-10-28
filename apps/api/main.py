@@ -47,6 +47,7 @@ from apps.api.models import (
     Video,
 )
 from apps.api.routers.audit import router as audit_router
+from apps.api.routers.reference_swings import router as reference_swings_router
 from apps.api.schemas import (
     CreateExportRequest,
     CreateManualSwingRequest,
@@ -61,10 +62,13 @@ from apps.api.schemas import (
 )
 from apps.worker.tasks import run_export_job, run_video_analysis_job
 from packages.analysis.coach import (
+    ActionDifference,
     GeminiCoachProvider,
     GolfCoachProvider,
     OpenAICompatibleCoachProvider,
     RuleBasedCoachProvider,
+    compute_swing_action_differences,
+    generate_deep_vision_insight,
 )
 from packages.analysis.detection.scanner import CoarseToFineDetector
 from packages.analysis.probe import VideoProbeError, probe_video_file
@@ -171,6 +175,7 @@ app.add_middleware(
 )
 
 app.include_router(audit_router)
+app.include_router(reference_swings_router)
 
 
 
@@ -1309,6 +1314,14 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
             }
             for m in metrics
         ],
+        "action_differences": [
+            d.model_dump()
+            for d in compute_swing_action_differences(
+                subscores=score.subscores_json if score else {},
+                events=[{"event_name": e.event_name, "time_ms": e.time_ms} for e in events],
+                metrics=[{"metric_key": m.metric_key, "value": m.value} for m in metrics],
+            )
+        ],
     }
 
     if include_detail:
@@ -1529,6 +1542,42 @@ def get_swing_detail(
         raise APIError(404, "SWING_NOT_FOUND", "找不到指定的揮桿片段")
     verify_owner(db, current_user, seg.owner_id, "swing_segment", seg.id)
     return _serialize_segment(db, seg, include_detail=True)
+
+
+@app.post("/api/swings/{swing_id}/deep-insight")
+def get_swing_deep_insight(
+    swing_id: str,
+    payload: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    seg = db.get(SwingSegment, swing_id)
+    if not seg:
+        raise APIError(404, "SWING_NOT_FOUND", "找不到指定的揮桿片段")
+    verify_owner(db, current_user, seg.owner_id, "swing_segment", seg.id)
+
+    diff_id = payload.get("diff_id", "")
+    serialized = _serialize_segment(db, seg, include_detail=True)
+    action_diffs = [ActionDifference(**d) for d in serialized.get("action_differences", [])]
+    target_diff = next((d for d in action_diffs if d.id == diff_id), None)
+    if not target_diff:
+        if action_diffs:
+            target_diff = action_diffs[0]
+        else:
+            target_diff = ActionDifference(
+                id="default_diff",
+                title="動作協調與穩定性分析",
+                phase="top",
+                time_ms=seg.start_ms,
+                magnitude="基準動作",
+                evidence_text="依據可觀測 2D 關節座標分析。",
+                suggested_cue="維持體感流暢度。",
+                retest_target="完成揮桿穩定平衡。",
+                confidence=0.85,
+            )
+
+    report = generate_deep_vision_insight(target_diff, serialized)
+    return report.model_dump()
 
 
 @app.patch("/api/swings/{swing_id}")

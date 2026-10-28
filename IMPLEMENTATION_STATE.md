@@ -1,6 +1,32 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 9: 大影片分段上傳與登入憑證失效處理修復）
+## 最新修復狀態（Round 10: Swing Comparison & Evidence-Based Coaching R2）
+1. **P0 單球播放器修復與體驗升級**：`PASS`
+   - **自然結束重播機制**：影片自然結束或進度條拖曳至末端後，點擊 Play 自動重設回 `start_ms / 1000` 並從頭流暢起播，解決舊版畫面卡死問題。
+   - **顯著重播與循環控制**：新增顯著「↺ 重新播放 (Replay)」與「⟲ 循環播放 (Loop)」Toggle 按鈕（預設關閉，開啟時呈翡翠綠發光標記）。
+   - **真實 FPS 逐幀步進與邊界防呆**：逐幀步進嚴格依據影片真實 FPS（30fps 每次 `±33.3ms`，5f 每次 `±166.7ms`），並嚴格鎖定在 `[start_ms, end_ms]` 區間內，絕不溢出至前後其他球。
+   - **時間軸與事件動態跟隨**：新增青光進度條與階段游標；9 大事件按鈕隨時間碼動態高亮青光指示燈；未確認擊球標註「推估擊球瞬間」與信心度。
+2. **P1 專業揮桿比較 (Professional Swing Comparison)**：`PASS`
+   - **17 種完整球桿分類支援**：資料模型與前端全數支援 `Driver`, `3W`, `5W`, `3H`, `4H`, `5H`, `4I`, `5I`, `6I`, `7I`, `8I`, `9I`, `PW`, `GW/AW`, `SW`, `LW`, `Putter`。
+   - **示範影片資料庫模型與 API**：新增 `ReferenceSwing` 模型、PostgreSQL 資料表與完整 REST API (`/api/reference-swings`, 支援 HTTP 206 Partial Content Range 串流與本機匯入)。
+   - **標準素材庫與誠信原則**：從標準原片中精準裁切 7I DTL 高清示範影片 (`ref_7i_dtl_standard.mp4`, 1080x1920 60fps) 作為基準；Driver 擊球特寫影片標記 `close_up` 與 `verified=false` 並觸發視角差異警示；其餘 15 種球桿誠實標記 `missing_reference`，絕不將鐵桿冒充其他球桿，並提供手動匯入引導。
+   - **雙影片比較播放器組件 (`<SwingComparisonPlayer>`)**：支援左右並列 (side-by-side)、上下堆疊 (stacked)、半透明疊影 (ghost overlay)。
+   - **揮桿同步引擎 (`SwingSynchronizationEngine`)**：支援 Mode A（自然節奏，保留原始速度，依 Impact 或 Top 錨點對齊）與 Mode B（動作階段分段線性對齊）；提供等比例 Auto-Framing 縮放與置中（保護身體不被拉伸）以及手動微調。
+3. **P2 動作差異分析 AI Coach (Evidence-Based Action Differences)**：`PASS`
+   - **移除空泛分數卡片**：將原先大篇幅生硬分數改為精煉的「動作差異分析」卡片（最多 1~2 項具有真實影像證據之具體動作差異）。
+   - **精準影格對齊**：每項標明關鍵階段標籤 (`[TOP]`, `[IMPACT]`)、時間碼（如 `120600ms`）、偏差幅度（如 `前傾角變化 9.4°` 或 `上下桿比例 2.00:1`）與客觀影像測量證據。
+   - **一鍵跳轉對齊**：提供「🎯 影格 ({time_ms}ms)」按鈕，點擊後單球播放器立即跳轉至該關鍵影格。
+   - **深入分析此差異 (Vision AI 解讀)**：提供專屬非同步分析按鈕與 API (`POST /api/swings/{id}/deep-insight`)，展開運動學深度解析報告（2D 骨架關節運動趨勢、動力鏈影響、分步 Drill 課表、最高誠信原則免責聲明）。
+4. **全鏈路驗證證據**：`PASS`
+   - 後端專項測試：`tests/test_swing_comparison_and_coach.py` 4/4 PASSED (100%)。
+   - 回歸測試：26/26 PASSED (100%)。
+   - 前端打包：`npm run build` 9/9 靜態路由 0 錯誤。
+   - WebKit 原生 GUI 驗收：`scripts/verify_webkit_comparison_and_coach.py` 6 大步驟全數 PASS，生成 6 張真實 GPU 渲染截圖與結構化 JSON 報告。
+   - 文件產出：`docs/REFERENCE_CLUB_LIBRARY.md` 與 `docs/reports/swing_comparison_r2_report.json`。
+- **最後更新時間**：2026-10-28T20:41:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+
+## 前期重大里程碑狀態（Round 9: 大影片分段上傳與登入憑證失效處理修復）
 1. **P0 大檔案（1.38GB）分段上傳 85% 失敗根因與修復**：`PASS`
    - **根本原因**：Docker Desktop 虛擬機磁碟空間被多專案映像檔佔滿（剩餘 257MB），MinIO 寫入時觸發 `XMinioStorageFull`。舊版 `HybridStorageService` 在捕獲 S3 錯誤後錯誤地將後續分段寫入 LocalStorage，造成分段在 S3 與本地兩端分裂；當前端呼叫 `/complete` 時，在本地端找不到前面的分段而拋出 `FileNotFoundError`。
    - **分段上傳單一物理後端綁定**：徹底移除 `put_part_bytes` 與 `complete_multipart_upload` 的非法降級邏輯，新增 `_get_backend_for_upload(s3_upload_id)`，以 `upload_id` 嚴格綁定單一存儲後端（`local_up_` 開頭走 LocalStorage，其餘走 S3/MinIO），杜絕分段分裂。

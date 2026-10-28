@@ -4,6 +4,31 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 10: Swing Comparison & Evidence-Based Coaching R2 (2026-10-28)
+- [x] **P0：單球播放器修復與體驗升級**：
+  - 實作自然結束或拖曳至尾端後點擊 Play 自動從起點 `start_ms / 1000` 重播，解決畫面卡住無法重播問題。
+  - 新增顯著「↺ 重新播放 (Replay)」與「⟲ 循環播放 (Loop)」Toggle 按鈕（開啟時翡翠綠發光標記）。
+  - 逐幀步進嚴格依據真實 FPS（30fps 每次 `±33.3ms`，5f 每次 `±166.7ms`），且嚴格限制在 `[start_ms, end_ms]` 區間，絕不溢出至相鄰球次。
+  - 增加青光進度條與階段游標；9 大動作事件按鈕動態發光跟隨；推估擊球標註「擊球瞬間 (推估)」與信心度。
+- [x] **P1：專業揮桿比較 (Professional Swing Comparison)**：
+  - 完整支援 17 種球桿分類（`Driver`, `3W`, `5W`, `3H`, `4H`, `5H`, `4I`, `5I`, `6I`, `7I`, `8I`, `9I`, `PW`, `GW/AW`, `SW`, `LW`, `Putter`）。
+  - 建立 `ReferenceSwing` 資料庫模型與 REST API (`/api/reference-swings`，支援 17 球桿狀態目錄、詳情、HTTP 206 Partial Content Range 串流與本機匯入）。
+  - 裁切標準 7I DTL 高清影片種子 (`assets/reference_videos/ref_7i_dtl_standard.mp4`, 1080x1920 60fps) 與 Driver 特寫 (`ref_driver_closeup.mp4`, 標註 `close_up` 與 `verified=false`)。
+  - 實作 `<SwingComparisonPlayer>` 組件：支援左右並列 (side-by-side)、上下堆疊 (stacked)、半透明疊影 (ghost overlay)。
+  - 揮桿時間同步引擎 `SwingSynchronizationEngine`：支援 Mode A（自然節奏，依 Impact/Top 錨點對齊）與 Mode B（動作階段分段線性同步）；等比例 Auto-Framing 縮放與置中（保護身體不扭曲）及手動 Zoom/Offset。
+  - 缺素材球桿明確標註 `missing_reference`，絕不將鐵桿冒充其他球桿，提供手動匯入途徑。
+- [x] **P2：動作差異分析 AI Coach (Evidence-Based Action Differences)**：
+  - 移除大篇幅泛泛而談的分數卡片，改為精煉之「動作差異分析」卡片（最多 1~2 項具有可信影像證據之具體動作差異）。
+  - 精準影格對齊：標記關鍵階段標籤 (`[TOP]`, `[IMPACT]`)、時間碼、偏差幅度（如 `前傾角變化 9.4°`）與客觀影像測量證據。
+  - 一鍵跳轉對齊：提供「🎯 影格 ({time_ms}ms)」按鈕，點擊立即跳轉至該關鍵影格。
+  - 深入分析此差異：提供「🔍 深入分析此差異 (Vision AI)」按鈕與端點 (`POST /api/swings/{id}/deep-insight`)，展開運動學深度解析報告（2D 骨架關節運動趨勢、動力鏈影響、分步 Drill 課表、最高誠信原則免責聲明）。
+- [x] **品質保證與驗收證據**：
+  - 後端專項測試 `tests/test_swing_comparison_and_coach.py` 4/4 PASSED (100%)。
+  - 核心回歸測試 26/26 PASSED (100%)。
+  - 前端 Next.js 15.5.28 9/9 靜態路由 build 0 錯誤。
+  - WebKit 原生 GUI 驗收 `scripts/verify_webkit_comparison_and_coach.py` 6 步驟全數 PASS，生成 6 張真實 GPU 渲染截圖與結構化 JSON 報告。
+  - 文件產出：`docs/REFERENCE_CLUB_LIBRARY.md` 與 `docs/reports/swing_comparison_r2_report.json`。
+
 ## Round 9: 大影片分段上傳與登入憑證失效處理修復 (2026-10-28)
 - [x] **P0：大檔案（1.38GB）分段上傳 85% 失敗根因徹底修復**：
   - 診斷查明 Docker Desktop 虛擬機磁碟空間被佔滿導致 MinIO 拋出 `XMinioStorageFull`，`HybridStorageService` 將後續分段非法降級寫入本地造成分段分裂。
