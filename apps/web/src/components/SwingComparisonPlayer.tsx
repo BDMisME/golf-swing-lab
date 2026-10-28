@@ -300,13 +300,55 @@ export function SwingComparisonPlayer({
     [refSwing, syncMode, isPhaseSyncValid, userTimeline, refTimeline, syncAnchor, manualOffsetMs]
   );
 
+  // 影片元數據載入時進行初始定位
+  const handleUserLoadedMetadata = useCallback(() => {
+    const uVid = userVideoRef.current;
+    if (!uVid) return;
+    const targetSec = userTimeline.startMs / 1000;
+    if (uVid.currentTime < targetSec - 0.1 || uVid.currentTime > userTimeline.endMs / 1000) {
+      uVid.currentTime = targetSec;
+    }
+    setUserCurrentMs(userTimeline.startMs);
+  }, [userTimeline.startMs, userTimeline.endMs]);
+
+  const handleRefLoadedMetadata = useCallback(() => {
+    const rVid = refVideoRef.current;
+    if (!rVid || !refSwing) return;
+    const targetRefMs = computeExpectedRefMs(userTimeline.startMs);
+    const targetSec = targetRefMs / 1000;
+    if (Math.abs(rVid.currentTime - targetSec) > 0.1) {
+      rVid.currentTime = targetSec;
+    }
+    setRefCurrentMs(targetRefMs);
+  }, [refSwing, userTimeline.startMs, computeExpectedRefMs]);
+
+  // 當 userSwing.id 或 selectedClub 改變時，主動確保定位在 startMs
+  const prevSwingKeyRef = useRef<string>(`${userSwing.id}_${selectedClub}`);
+  useEffect(() => {
+    const currentKey = `${userSwing.id}_${selectedClub}`;
+    if (prevSwingKeyRef.current !== currentKey) {
+      prevSwingKeyRef.current = currentKey;
+      const uVid = userVideoRef.current;
+      if (uVid && uVid.readyState >= 1) {
+        uVid.currentTime = userTimeline.startMs / 1000;
+        setUserCurrentMs(userTimeline.startMs);
+      }
+      const rVid = refVideoRef.current;
+      if (rVid && rVid.readyState >= 1 && refSwing) {
+        const targetRefMs = computeExpectedRefMs(userTimeline.startMs);
+        rVid.currentTime = targetRefMs / 1000;
+        setRefCurrentMs(targetRefMs);
+      }
+    }
+  }, [userSwing.id, selectedClub, refSwing, userTimeline.startMs, computeExpectedRefMs]);
+
   // 同步播放生命週期控制：同時發動 play()
   const handlePlay = useCallback(async () => {
     const uVid = userVideoRef.current;
     const rVid = refVideoRef.current;
     if (!uVid) return;
 
-    if (uVid.currentTime >= userTimeline.endMs / 1000 - 0.05) {
+    if (uVid.currentTime >= userTimeline.endMs / 1000 - 0.05 || uVid.currentTime < userTimeline.startMs / 1000) {
       uVid.currentTime = userTimeline.startMs / 1000;
     }
 
@@ -379,7 +421,13 @@ export function SwingComparisonPlayer({
     setUserCurrentMs(targetUserMs);
 
     if (rVid && refSwing) {
-      const targetRefMs = computeExpectedRefMs(targetUserMs);
+      const targetRefMs = SwingSynchronizationEngine.computeRealTimeRefMs(
+        targetUserMs,
+        userTimeline,
+        refTimeline,
+        anchor,
+        manualOffsetMs
+      );
       rVid.currentTime = targetRefMs / 1000;
       setRefCurrentMs(targetRefMs);
     }
@@ -532,21 +580,25 @@ export function SwingComparisonPlayer({
   };
 
   const userVideoSrc = `${API_BASE_URL}/api/videos/${userSwing.video_id}/stream${
-    getAuthToken() ? `?token=${getAuthToken()}` : ""
-  }`;
+    getAuthToken() ? `?token=${encodeURIComponent(getAuthToken() || "")}` : ""
+  }#t=${(userTimeline.startMs / 1000).toFixed(2)}`;
 
   const refVideoSrc = refSwing
-    ? `${API_BASE_URL}${refSwing.stream_url}${getAuthToken() ? `?token=${getAuthToken()}` : ""}`
+    ? `${API_BASE_URL}${refSwing.stream_url}${
+        getAuthToken() ? `?token=${encodeURIComponent(getAuthToken() || "")}` : ""
+      }#t=${(((computeExpectedRefMs(userTimeline.startMs) || 0) / 1000)).toFixed(2)}`
     : "";
 
   return (
     <div className="rounded-2xl border border-sky-800/80 bg-gradient-to-b from-[#0a141f] to-[#070d14] p-4 text-white shadow-xl space-y-4">
-      {/* 頂部標題與關閉列 */}
+      {/* 頂部標題與關閉列 (P0-3 誠信標題) */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3">
         <div className="flex items-center gap-2">
           <span className="flex h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
           <h2 className="text-base font-bold text-white tracking-wide">
-            示範揮桿對照模式 (Professional Swing Comparison)
+            {refSwing?.is_verified_standard
+              ? "已驗證職業示範對照"
+              : "揮桿雙影片對照 (Dual Swing Comparison)"}
           </h2>
           <span className="rounded bg-sky-950 px-2 py-0.5 text-xs text-sky-300 font-mono border border-sky-800/50">
             Mode: {syncMode === "real_time" ? "自然時間同步" : "階段線性同步"}
@@ -567,17 +619,43 @@ export function SwingComparisonPlayer({
         </div>
       </div>
 
-      {/* 17 種球桿選擇器 */}
+      {/* 17 種球桿選擇器與三態統計 (P0-3) */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs text-gray-400">
+        <div className="flex items-center justify-between text-xs text-gray-400 flex-wrap gap-2">
           <span className="font-semibold text-gray-300">選擇球桿參考 (17 Club Types)：</span>
-          <span className="text-[11px]">
-            已收錄:{" "}
-            <strong className="text-emerald-400">
-              {clubsCatalog.filter((c) => c.status === "available").length}
-            </strong>{" "}
-            / 17 種球桿
-          </span>
+          <div className="flex items-center gap-3 text-[11px] flex-wrap">
+            <span>
+              可用示範影片：
+              <strong className="text-emerald-400 font-bold">
+                {clubsCatalog.filter((c) => c.status === "available").length}
+              </strong>{" "}
+              / 17 種
+            </span>
+            <span>
+              全身姿勢比對：
+              <strong className="text-cyan-400 font-bold">
+                {
+                  clubsCatalog.filter(
+                    (c) =>
+                      c.default_reference &&
+                      c.default_reference.camera_angle?.toLowerCase() === "dtl"
+                  ).length
+                }
+              </strong>{" "}
+              / 17 種
+            </span>
+            <span className="text-amber-400 font-semibold">
+              已驗證職業標準：
+              <strong>
+                {
+                  clubsCatalog.filter(
+                    (c) => Boolean(c.default_reference?.is_verified_standard)
+                  ).length
+                }
+              </strong>{" "}
+              支 (尚無)
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5 p-1 bg-black/40 rounded-xl border border-gray-800/80">
           {ALL_CLUBS.map((club) => {
@@ -672,131 +750,93 @@ export function SwingComparisonPlayer({
         </div>
       )}
 
-      {/* 影片播放區域 (支援 side_by_side / stacked / ghost_overlay) */}
+      {/* 影片播放區域 (單一 DOM 樹架構，切換 layout 永不銷毀重建物件，防止黑屏) */}
       <div className="relative rounded-xl overflow-hidden bg-black border border-gray-800">
-        {layout === "side_by_side" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1 bg-gray-950">
-            {/* 左側：示範影片 */}
-            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+        <div
+          className={
+            layout === "side_by_side"
+              ? "grid grid-cols-1 md:grid-cols-2 gap-1 bg-gray-950"
+              : layout === "stacked"
+              ? "flex flex-col gap-1 bg-gray-950"
+              : "relative aspect-video bg-black flex items-center justify-center overflow-hidden"
+          }
+        >
+          {/* 示範影片容器 (左側 / 上方 / 疊影層) */}
+          <div
+            className={
+              layout === "ghost_overlay"
+                ? "absolute inset-0 w-full h-full z-10 pointer-events-none mix-blend-screen overflow-hidden"
+                : layout === "stacked"
+                ? "relative aspect-[21/9] md:aspect-video bg-black flex items-center justify-center overflow-hidden"
+                : "relative aspect-video bg-black flex items-center justify-center overflow-hidden"
+            }
+            style={layout === "ghost_overlay" ? { opacity: ghostOpacity } : undefined}
+          >
+            {layout !== "ghost_overlay" && (
               <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-cyan-300 border border-cyan-800/40">
-                標準參考 ({selectedClub})
+                {refSwing?.reference_category === "test_fixture"
+                  ? `技術測試基準 (${selectedClub})`
+                  : refSwing?.is_verified_standard
+                  ? `已驗證職業示範 (${selectedClub})`
+                  : `示範對照 (${selectedClub})`}
               </span>
-              {refSwing ? (
-                <video
-                  ref={refVideoRef}
-                  src={refVideoSrc}
-                  playsInline
-                  muted
-                  preload="auto"
-                  className="w-full h-full object-contain"
-                  style={{
-                    transform: `scale(${calibration.scale * calibration.zoom}) translate(${
-                      calibration.offsetX
-                    }px, ${calibration.offsetY}px)`,
-                  }}
-                />
-              ) : (
-                <div className="text-gray-500 text-xs text-center p-4">
-                  尚無此球桿示範影片
-                </div>
-              )}
-            </div>
-
-            {/* 右側：使用者揮桿 */}
-            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
-              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-emerald-300 border border-emerald-800/40">
-                個人揮桿 (Swing #{userSwing.sequence_no})
-              </span>
-              <video
-                ref={userVideoRef}
-                src={userVideoSrc}
-                playsInline
-                muted
-                preload="auto"
-                className="w-full h-full object-contain"
-              />
-            </div>
-          </div>
-        )}
-
-        {layout === "stacked" && (
-          <div className="flex flex-col gap-1 bg-gray-950">
-            {/* 上：示範影片 */}
-            <div className="relative aspect-[21/9] md:aspect-video bg-black flex items-center justify-center overflow-hidden">
-              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-cyan-300 border border-cyan-800/40">
-                標準參考 ({selectedClub})
-              </span>
-              {refSwing ? (
-                <video
-                  ref={refVideoRef}
-                  src={refVideoSrc}
-                  playsInline
-                  muted
-                  preload="auto"
-                  className="w-full h-full object-contain"
-                  style={{
-                    transform: `scale(${calibration.scale * calibration.zoom}) translate(${
-                      calibration.offsetX
-                    }px, ${calibration.offsetY}px)`,
-                  }}
-                />
-              ) : (
-                <div className="text-gray-500 text-xs">尚無此球桿示範影片</div>
-              )}
-            </div>
-
-            {/* 下：使用者揮桿 */}
-            <div className="relative aspect-[21/9] md:aspect-video bg-black flex items-center justify-center overflow-hidden">
-              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-emerald-300 border border-emerald-800/40">
-                個人揮桿 (Swing #{userSwing.sequence_no})
-              </span>
-              <video
-                ref={userVideoRef}
-                src={userVideoSrc}
-                playsInline
-                muted
-                preload="auto"
-                className="w-full h-full object-contain"
-              />
-            </div>
-          </div>
-        )}
-
-        {layout === "ghost_overlay" && (
-          <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
-            <span className="absolute top-2 left-2 z-20 rounded bg-black/75 px-2.5 py-1 text-xs font-bold text-cyan-300 border border-cyan-700/60">
-              疊影對照 (Ghost Overlay) · 透明度 {Math.round(ghostOpacity * 100)}%
-            </span>
-
-            {/* 底層：使用者揮桿 */}
-            <video
-              ref={userVideoRef}
-              src={userVideoSrc}
-              playsInline
-              muted
-              preload="auto"
-              className="absolute inset-0 w-full h-full object-contain z-0"
-            />
-
-            {/* 上層：參考示範 (半透明疊印) */}
-            {refSwing && (
+            )}
+            {refSwing ? (
               <video
                 ref={refVideoRef}
                 src={refVideoSrc}
                 playsInline
                 muted
                 preload="auto"
-                className="absolute inset-0 w-full h-full object-contain z-10 pointer-events-none mix-blend-screen"
+                crossOrigin="anonymous"
+                onLoadedMetadata={handleRefLoadedMetadata}
+                onCanPlay={handleRefLoadedMetadata}
+                className="w-full h-full object-contain"
                 style={{
-                  opacity: ghostOpacity,
                   transform: `scale(${calibration.scale * calibration.zoom}) translate(${
                     calibration.offsetX
                   }px, ${calibration.offsetY}px)`,
                 }}
               />
+            ) : (
+              <div className="text-gray-500 text-xs text-center p-4">
+                尚無此球桿示範影片 (missing_reference)
+              </div>
             )}
           </div>
-        )}
+
+          {/* 個人揮桿容器 (右側 / 下方 / 底層) */}
+          <div
+            className={
+              layout === "ghost_overlay"
+                ? "absolute inset-0 w-full h-full z-0 overflow-hidden"
+                : layout === "stacked"
+                ? "relative aspect-[21/9] md:aspect-video bg-black flex items-center justify-center overflow-hidden"
+                : "relative aspect-video bg-black flex items-center justify-center overflow-hidden"
+            }
+          >
+            {layout !== "ghost_overlay" ? (
+              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-emerald-300 border border-emerald-800/40">
+                個人揮桿 (Swing #{userSwing.sequence_no})
+              </span>
+            ) : (
+              <span className="absolute top-2 left-2 z-20 rounded bg-black/75 px-2.5 py-1 text-xs font-bold text-cyan-300 border border-cyan-700/60">
+                疊影對照 · 示範透明度 {Math.round(ghostOpacity * 100)}%
+              </span>
+            )}
+            <video
+              ref={userVideoRef}
+              src={userVideoSrc}
+              playsInline
+              muted
+              preload="auto"
+              crossOrigin="anonymous"
+              onLoadedMetadata={handleUserLoadedMetadata}
+              onCanPlay={handleUserLoadedMetadata}
+              className="w-full h-full object-contain"
+            />
+          </div>
+        </div>
       </div>
 
       {/* 播放控制與時間軸 */}

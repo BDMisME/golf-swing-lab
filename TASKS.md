@@ -4,6 +4,32 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 12: PR #2 最後視覺驗收與 Beta 收斂 (2026-10-29) — 雙影片同步播放與全流程實測完成
+- [x] **P0-1：真正證明雙影片同步播放成功**：
+  - 查明黑畫面真實根因（本地 storage 缺失 `video_2min.mov` 與 `proxy.mp4` 導致 404），實體拷貝 139 秒 iPhone 錄影 (`4993a3b6...`) 並轉碼 Safari 相容 H.264 proxy.mp4 (57MB) 與縮圖，驗證 HTTP 206 串流成功。
+  - 重構 `<SwingComparisonPlayer>` 為單一 DOM 容器，佈局切換時不銷毀重建 `<video>` 節點，解碼器 buffer 零重置。
+  - WebKit 32x32 Canvas 畫素檢驗：個人影片 Mean=111.5, Std=64.5，示範影片 Mean=115.8, Std=64.4（遠大於 Mean>5.0, Std>2.0 門檻），客觀證明兩側非黑畫面且具備真實動態細節。
+  - 同步起播與播放進行中截圖 (`04_comparison_playing_side_by_side.png`)，個人揮桿前進 1.010s，示範影片前進 1.002s，時鐘漂移僅 8.1ms。
+  - 上下堆疊切換與播放進行中截圖 (`05_comparison_playing_stacked.png`)，DOM flex-col 正常且影片持續解碼播放。
+  - 修復 `useEffect` 過度重設示範片為 0 秒之 bug，實測點擊 TOP 錨點跳轉（User=120600ms, Ref=1533ms，誤差 0ms），點擊 IMPACT 錨點跳轉（User=120967ms, Ref=1900ms，誤差 0ms），產出 `06_comparison_jump_top.png` 與 `07_comparison_jump_impact.png`。
+- [x] **P0-2：移除 WebKit 假 PASS 與動態脫敏報告**：
+  - 徹底移除 `else "PASS" if has_comp_header else "FAIL"` 寬鬆 fallback，所有解碼、推進與非黑畫面斷言嚴格檢核。
+  - 動態驗收報告 `docs/reports/swing_comparison_r2_report.json` 包含 Git SHA (`9ac6b3ed...`)、Dirty 狀態、時間戳、影片 SHA-256、解碼狀態、兩側尺寸與同步漂移。
+  - 全域 URL 脫敏過濾（`token=[REDACTED]`），無任何 Token 洩漏。
+- [x] **P0-3：示範影片真偽及 UI 語意一致**：
+  - 取消將 7I `test_fixture` 顯示為「標準參考」，改為「技術測試基準 (7I)」或中立的「揮桿雙影片對照」。
+  - 統計區塊明確區分三態：可用示範影片 2 / 17、全身姿勢比對 1 / 17、已驗證職業標準示範 0 / 17（尚無）。
+- [x] **P1：AI 教練功能誠實標示**：
+  - 規則式分析明確標記幾何提示與「ℹ️ 規則式幾何運動學引擎生成 (未調用多模態 AI 影像模型)」。
+  - 杜絕不可觀測之物理因果臆測。
+- [x] **P1：示範影片素材管理與串流匯入**：
+  - 更新 `docs/REFERENCE_CLUB_LIBRARY.md`，清楚列出 4 種分類現狀。
+  - 示範影片上傳與本地匯入全面改為 `storage.put_file` 串流拷貝，徹底解決 500MB 大檔整支讀入記憶體 OOM 問題。
+- [x] **全鏈路驗收與品質保證**：
+  - 後端測試：**90/90 PASSED (100%)** in 214s。
+  - 前端打包：Next.js 15.5.28 **9/9 靜態路由 build 0 錯誤**。
+  - WebKit 原生 GUI 驗收：`scripts/verify_webkit_comparison_and_coach.py` 9 步驟全數 PASS，產出 8 張真實 GPU 渲染截圖與結構化脫敏報告。
+
 ## Round 11: PR #2 Independent Audit Remediation (2026-10-29) — 解除 NO-GO 判定
 - [x] **P0-A：立即處理驗收 Token 洩漏與金鑰輪替**：
   - 全新 256-bit 密鑰持久化存入 `~/.golfswinglab/session_secret` (0600)。

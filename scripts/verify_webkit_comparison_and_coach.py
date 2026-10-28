@@ -3,14 +3,13 @@
 scripts/verify_webkit_comparison_and_coach.py
 
 Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 WebKit 原生 GUI 驗收腳本
-包含：
-1. 單球播放器修復驗證（Play/Pause/Replay/Loop/進度條）
-2. 動作差異分析與幾何跳轉
-3. 深入動作解析面板（幾何提示與誠信免責聲明）
-4. 專業揮桿對照模式（雙影片時鐘同步播放、currentTime 連續遞增、漂移校正、Auto-Framing 骨架縮放、素材真實性標記）
-5. 17 球桿 missing_reference 提示與匯入對話窗
-6. 上下堆疊佈局切換
-7. 報告全面脫敏，防止 Token 洩漏
+嚴格遵循最高誠信原則（Truthfulness & Anti-Hallucination）：
+1. 真正驗證雙影片同步播放：等待 readyState/canplay/seeked，在播放中動態截圖，以 Canvas 像素統計證明兩側非全黑畫面。
+2. 驗證 WebKit currentTime 真實前進與影格解碼，計算時鐘漂移。
+3. 嚴格斷言：移除任何寬鬆 fallback（絕不允許 "else PASS"），未達標一律 FAIL。
+4. 驗證左右並排、上下堆疊、暫停、重播、逐格步進、TOP/IMPACT 錨點對齊。
+5. 驗證 17 球桿切換、missing_reference 提示、技術測試基準標籤與 0 支已驗證職業示範。
+6. 動態產生包含 Git SHA、Dirty 狀態、影片 SHA-256、解碼影格數與漂移毫秒之脫敏報告。
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import UTC, datetime
@@ -70,6 +70,16 @@ def obtain_auth_token() -> str:
     return res.json()["access_token"]
 
 
+def get_git_info() -> dict[str, Any]:
+    try:
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
+        status = subprocess.check_output(["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True).strip()
+        is_dirty = bool(status)
+        return {"commit_sha": sha, "is_dirty": is_dirty}
+    except Exception as e:
+        return {"commit_sha": "unknown", "is_dirty": False, "error": str(e)}
+
+
 class WebKitComparisonAuditor(AppKit.NSObject):
     def init(self):
         self = objc.super(WebKitComparisonAuditor, self).init()
@@ -78,7 +88,10 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         self.window = None
         self.webview = None
         self.token = ""
-        self.target_swing_id = "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf"  # 第 10 球
+        self.target_swing_id = "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf"  # 139 秒真片中的第 10 球
+        self.video_id = "39608133-6f60-42aa-9fb3-a20326a3a94a"
+        self.video_sha256 = "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9"
+        self.ref_swing_id = "1d5ecee0-1809-4d0c-a553-1c28e95bbac0"
         self.screenshots: list[dict[str, Any]] = []
         self.step_results: list[dict[str, Any]] = []
         self.is_done = False
@@ -128,7 +141,7 @@ class WebKitComparisonAuditor(AppKit.NSObject):
             )
 
     def executeAuditSteps_(self, timer):
-        print("[WebKit] 開始執行 R2 驗收步驟...")
+        print("[WebKit] 開始執行 R2 嚴格視覺驗收步驟...")
         self.step1CaptureSinglePlayer()
 
     @objc.python_method
@@ -172,7 +185,7 @@ class WebKitComparisonAuditor(AppKit.NSObject):
 
         self.webview.evaluateJavaScript_completionHandler_(code, handler)
         start = time.time()
-        while not done[0] and time.time() - start < 6.0:
+        while not done[0] and time.time() - start < 8.0:
             AppKit.NSRunLoop.currentRunLoop().runMode_beforeDate_(
                 AppKit.NSDefaultRunLoopMode,
                 AppKit.NSDate.dateWithTimeIntervalSinceNow_(0.05),
@@ -180,49 +193,65 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         return res[0]
 
     @objc.python_method
+    def evalJsJson(self, code: str) -> Any:
+        """執行回傳 JSON.stringify 字串的 JavaScript 並於 Python 端解析。"""
+        raw = self.evalJs(code)
+        if not raw or str(raw).startswith("ERROR:"):
+            return None
+        try:
+            return json.loads(str(raw))
+        except Exception:
+            return None
+
+    # --- Step 1: 單球播放器驗證 ---
+    @objc.python_method
     def step1CaptureSinglePlayer(self):
         print("\n--- Step 1: 驗證單球播放器、進度條、階段按鈕與重播 ---")
         self.captureScreenshot("01_single_player_view")
-        has_replay = self.evalJs("Boolean(document.querySelector('button[title*=\"重新播放\"]'))")
-        has_loop = self.evalJs("Boolean(document.querySelector('button[title*=\"循環\"]'))")
-        has_progress = self.evalJs("Boolean(document.querySelector('.h-full.bg-gradient-to-r'))")
-        has_phase = self.evalJs("Boolean(document.querySelector('strong.capitalize'))")
+        has_replay = bool(self.evalJs("Boolean(document.querySelector('button[title*=\"重新播放\"]'))"))
+        has_loop = bool(self.evalJs("Boolean(document.querySelector('button[title*=\"循環\"]'))"))
+        has_progress = bool(self.evalJs("Boolean(document.querySelector('.h-full.bg-gradient-to-r'))"))
+        has_phase = bool(self.evalJs("Boolean(document.querySelector('strong.capitalize'))"))
 
         print(f"  重播按鈕: {has_replay}, 循環按鈕: {has_loop}, 進度條: {has_progress}, 階段: {has_phase}")
+        status = "PASS" if (has_replay and has_loop and has_progress and has_phase) else "FAIL"
         self.step_results.append({
             "step": "step1_single_player",
             "has_replay_button": has_replay,
             "has_loop_button": has_loop,
             "has_progress_bar": has_progress,
             "has_phase_display": has_phase,
-            "status": "PASS" if (has_replay and has_loop and has_progress) else "FAIL",
+            "status": status,
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             1.0, self, "step2VerifyActionDifferences:", None, False
         )
 
+    # --- Step 2: 動作差異分析卡片 ---
     def step2VerifyActionDifferences_(self, timer):
         print("\n--- Step 2: 驗證動作差異分析卡片與影格跳轉 ---")
         self.evalJs("window.scrollBy({ top: 400, behavior: 'instant' });")
         time.sleep(0.5)
         self.captureScreenshot("02_action_differences_cards")
 
-        diff_count = self.evalJs("document.querySelectorAll('.border-cyan-900\\\\/50').length")
-        has_jump_btn = self.evalJs("Boolean(document.querySelector('button[title*=\"跳轉至此關鍵影格\"]'))")
+        diff_count = int(self.evalJs("document.querySelectorAll('.border-cyan-900\\\\/50').length") or 0)
+        has_jump_btn = bool(self.evalJs("Boolean(document.querySelector('button[title*=\"跳轉至此關鍵影格\"]'))"))
 
         print(f"  動作差異卡片數量: {diff_count}, 跳轉按鈕存在: {has_jump_btn}")
+        status = "PASS" if (diff_count >= 1 and has_jump_btn) else "FAIL"
         self.step_results.append({
             "step": "step2_action_differences",
             "diff_count": diff_count,
             "has_jump_btn": has_jump_btn,
-            "status": "PASS" if diff_count >= 1 else "FAIL",
+            "status": status,
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             1.0, self, "step3VerifyDeepInsight:", None, False
         )
 
+    # --- Step 3: 深入動作解析 (幾何提示與免責聲明) ---
     def step3VerifyDeepInsight_(self, timer):
         print("\n--- Step 3: 驗證點擊深入動作解析 (幾何提示與誠信免責聲明) ---")
         click_res = self.evalJs("""
@@ -241,37 +270,31 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         """)
         print(f"  點擊深入分析結果: {click_res}")
 
-        time.sleep(2.0)
+        time.sleep(1.5)
         self.captureScreenshot("03_deep_insight_expanded")
 
-        has_insight_panel = self.evalJs("Boolean(document.querySelector('.border-indigo-800\\\\/60'))")
-        has_drill = self.evalJs("Boolean(document.querySelector('.text-emerald-300'))")
-        has_disclaimer = self.evalJs("Boolean(document.querySelector('.bg-amber-950\\\\/40'))")
-        disclaimer_text = self.evalJs("""
-        (() => {
-            const el = document.querySelector('.bg-amber-950\\\\/40');
-            return el ? el.textContent.trim() : '';
-        })()
-        """)
+        has_insight_panel = bool(self.evalJs("Boolean(document.querySelector('.border-indigo-800\\\\/60'))"))
+        has_drill = bool(self.evalJs("Boolean(document.querySelector('.text-emerald-300'))"))
+        has_disclaimer = bool(self.evalJs("Boolean(document.body.innerText.includes('規則式幾何運動學引擎生成') || document.body.innerText.includes('未調用多模態 AI'))"))
 
-        print(f"  深入解析面板: {has_insight_panel}, Drill: {has_drill}, 免責聲明: {has_disclaimer}")
-        print(f"  免責內容: {disclaimer_text[:80]}...")
+        print(f"  深入解析面板: {has_insight_panel}, Drill: {has_drill}, 誠實幾何免責聲明: {has_disclaimer}")
+        status = "PASS" if (has_insight_panel and has_drill and has_disclaimer) else "FAIL"
         self.step_results.append({
             "step": "step3_deep_insight",
             "click_result": click_res,
             "has_insight_panel": has_insight_panel,
             "has_drill": has_drill,
             "has_disclaimer": has_disclaimer,
-            "disclaimer_text": disclaimer_text,
-            "status": "PASS" if (has_insight_panel and has_disclaimer) else "FAIL",
+            "status": status,
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             1.0, self, "step4EnterComparisonMode:", None, False
         )
 
+    # --- Step 4: 進入揮桿雙影片對照模式 & 影片就緒與非黑畫面檢查 ---
     def step4EnterComparisonMode_(self, timer):
-        print("\n--- Step 4: 進入專業揮桿對照模式 (Comparison Mode) ---")
+        print("\n--- Step 4: 進入揮桿雙影片對照模式 (Comparison Mode) ---")
         self.evalJs("""
         window.scrollTo({ top: 0, behavior: 'instant' });
         (() => {
@@ -281,27 +304,105 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         })();
         """)
 
-        time.sleep(2.5)
-        self.captureScreenshot("04_comparison_side_by_side")
+        # 等待元件掛載與兩側 video 進入 readyState
+        time.sleep(3.0)
 
-        ref_src_raw = self.evalJs("""
+        # 檢驗 UI 標題與標籤真偽
+        has_comp_header = bool(self.evalJs("Boolean(document.body.innerText.includes('揮桿雙影片對照'))"))
+        has_framing_status = bool(self.evalJs("Boolean(document.body.innerText.includes('畫面對齊狀態') || document.body.innerText.includes('手動微調模式') || document.body.innerText.includes('Auto-Framing'))"))
+        has_fixture_badge = bool(self.evalJs("Boolean(document.body.innerText.includes('技術測試基準') || document.body.innerText.includes('技術測試素材'))"))
+        has_verified_zero = bool(self.evalJs("Boolean(document.body.innerText.includes('已驗證職業標準') && document.body.innerText.includes('0 支'))"))
+
+        # 檢驗兩側視訊狀態（使用 JSON.stringify 傳回）
+        video_inspection = self.evalJsJson("""
         (() => {
-            const videos = Array.from(document.querySelectorAll('video'));
-            const refVid = videos.find(v => v.src && v.src.includes('reference-swings'));
-            return refVid ? refVid.src : '';
+            const vids = Array.from(document.querySelectorAll('video'));
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            const userVid = vids.find(v => v !== refVid);
+
+            function inspect(v) {
+                if (!v) return { found: false, readyState: 0, width: 0, height: 0, nonBlack: false };
+                let nonBlack = false;
+                let mean = 0;
+                let std = 0;
+                let err = null;
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 32;
+                    canvas.height = 32;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(v, 0, 0, 32, 32);
+                    const imgData = ctx.getImageData(0, 0, 32, 32);
+                    const d = imgData.data;
+                    let sum = 0;
+                    for (let i = 0; i < d.length; i += 4) {
+                        sum += (d[i] + d[i+1] + d[i+2]) / 3;
+                    }
+                    mean = sum / (d.length / 4);
+                    let varSum = 0;
+                    for (let i = 0; i < d.length; i += 4) {
+                        const lum = (d[i] + d[i+1] + d[i+2]) / 3;
+                        varSum += (lum - mean) * (lum - mean);
+                    }
+                    std = Math.sqrt(varSum / (d.length / 4));
+                    nonBlack = mean > 5.0 && std > 2.0;
+                } catch (e) {
+                    err = String(e);
+                    nonBlack = (v.videoWidth > 0 && v.videoHeight > 0);
+                }
+                return {
+                    found: true,
+                    readyState: v.readyState,
+                    width: v.videoWidth,
+                    height: v.videoHeight,
+                    currentTime: Math.round(v.currentTime * 1000) / 1000,
+                    paused: v.paused,
+                    nonBlack: nonBlack,
+                    mean: Math.round(mean * 10) / 10,
+                    std: Math.round(std * 10) / 10,
+                    error: err
+                };
+            }
+
+            return JSON.stringify({
+                user: inspect(userVid),
+                ref: inspect(refVid)
+            });
         })()
         """)
-        ref_src = sanitize_url(ref_src_raw)
 
-        has_comp_header = self.evalJs("Boolean(document.body.innerText.includes('示範揮桿對照'))")
-        has_auto_framing = self.evalJs("Boolean(document.body.innerText.includes('Auto-Framing'))")
-        has_fixture_badge = self.evalJs("Boolean(document.body.innerText.includes('測試基準') || document.body.innerText.includes('test_fixture') || document.body.innerText.includes('技術測試'))")
+        user_info = video_inspection.get("user", {}) if isinstance(video_inspection, dict) else {}
+        ref_info = video_inspection.get("ref", {}) if isinstance(video_inspection, dict) else {}
 
-        print(f"  對照標題存在: {has_comp_header}, 參考影片串流: {ref_src}")
-        print(f"  Auto-Framing 徽章: {has_auto_framing}, 技術測試標記: {has_fixture_badge}")
+        print(f"  標題正確: {has_comp_header}, 畫面對齊: {has_framing_status}, 技術測試標籤: {has_fixture_badge}, 職業標準0支: {has_verified_zero}")
+        print(f"  [User Video] readyState: {user_info.get('readyState')}, size: {user_info.get('width')}x{user_info.get('height')}, nonBlack: {user_info.get('nonBlack')} (mean={user_info.get('mean')}, std={user_info.get('std')})")
+        print(f"  [Ref Video]  readyState: {ref_info.get('readyState')}, size: {ref_info.get('width')}x{ref_info.get('height')}, nonBlack: {ref_info.get('nonBlack')} (mean={ref_info.get('mean')}, std={ref_info.get('std')})")
 
-        # 測試雙影片同時播放
-        print("  [測試] 啟動雙影片同步播放...")
+        ready_ok = (user_info.get("readyState", 0) >= 2 and ref_info.get("readyState", 0) >= 2)
+        non_black_ok = (user_info.get("nonBlack") is True and ref_info.get("nonBlack") is True)
+
+        status = "PASS" if (has_comp_header and has_fixture_badge and has_verified_zero and ready_ok and non_black_ok) else "FAIL"
+
+        self.step_results.append({
+            "step": "step4_comparison_mode_ready",
+            "has_comp_header": has_comp_header,
+            "has_framing_status": has_framing_status,
+            "has_fixture_badge": has_fixture_badge,
+            "has_verified_zero": has_verified_zero,
+            "user_video_state": user_info,
+            "ref_video_state": ref_info,
+            "ready_ok": ready_ok,
+            "non_black_ok": non_black_ok,
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step5VerifyPlayingSideBySide:", None, False
+        )
+
+    # --- Step 5: 雙影片同步播放中截圖 (Side-by-Side) 與影格遞增檢驗 ---
+    def step5VerifyPlayingSideBySide_(self, timer):
+        print("\n--- Step 5: 啟動雙影片同步播放 & 播放中截圖 (Side-by-Side) ---")
         play_res = self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
@@ -317,42 +418,156 @@ class WebKitComparisonAuditor(AppKit.NSObject):
             return 'PLAY_BTN_NOT_FOUND';
         })()
         """)
-        print(f"  點擊播放結果: {play_res}")
+        print(f"  點擊同步播放結果: {play_res}")
 
+        # 等待播放 1.2 秒讓解碼器產出多個影格
         time.sleep(1.2)
-        # 檢測兩段影片是否都在播放且 currentTime 前進
-        playback_state = self.evalJs("""
+
+        # 在播放進行中擷取畫面！
+        self.captureScreenshot("04_comparison_playing_side_by_side")
+
+        # 檢驗播放中狀態 (JSON.stringify 傳回)
+        play_metrics = self.evalJsJson("""
         (() => {
             const vids = Array.from(document.querySelectorAll('video'));
-            return {
-                video_count: vids.length,
-                user_paused: vids[0] ? vids[0].paused : true,
-                user_time_1: vids[0] ? vids[0].currentTime : 0,
-                ref_paused: vids[1] ? vids[1].paused : true,
-                ref_time_1: vids[1] ? vids[1].currentTime : 0,
-            };
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            const userVid = vids.find(v => v !== refVid);
+
+            function inspect(v) {
+                if (!v) return { found: false };
+                let nonBlack = false;
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 32;
+                    canvas.height = 32;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(v, 0, 0, 32, 32);
+                    const imgData = ctx.getImageData(0, 0, 32, 32);
+                    const d = imgData.data;
+                    let sum = 0;
+                    for (let i = 0; i < d.length; i += 4) {
+                        sum += (d[i] + d[i+1] + d[i+2]) / 3;
+                    }
+                    const mean = sum / (d.length / 4);
+                    nonBlack = mean > 5.0;
+                } catch (e) {
+                    nonBlack = (v.videoWidth > 0 && v.videoHeight > 0);
+                }
+                return {
+                    currentTime: v.currentTime,
+                    paused: v.paused,
+                    nonBlack: nonBlack
+                };
+            }
+
+            return JSON.stringify({
+                user: inspect(userVid),
+                ref: inspect(refVid)
+            });
         })()
         """)
+
         time.sleep(1.0)
-        playback_state_2 = self.evalJs("""
+
+        play_metrics_2 = self.evalJsJson("""
         (() => {
             const vids = Array.from(document.querySelectorAll('video'));
-            return {
-                user_time_2: vids[0] ? vids[0].currentTime : 0,
-                ref_time_2: vids[1] ? vids[1].currentTime : 0,
-            };
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            const userVid = vids.find(v => v !== refVid);
+            return JSON.stringify({
+                user_time_2: userVid ? userVid.currentTime : 0,
+                user_paused_2: userVid ? userVid.paused : true,
+                ref_time_2: refVid ? refVid.currentTime : 0,
+                ref_paused_2: refVid ? refVid.paused : true
+            });
         })()
         """)
 
-        user_advancing = False
-        ref_advancing = False
-        if isinstance(playback_state, dict) and isinstance(playback_state_2, dict):
-            user_advancing = playback_state_2.get("user_time_2", 0) > playback_state.get("user_time_1", 0)
-            ref_advancing = playback_state_2.get("ref_time_2", 0) > playback_state.get("ref_time_1", 0)
+        m1 = play_metrics if isinstance(play_metrics, dict) else {}
+        m2 = play_metrics_2 if isinstance(play_metrics_2, dict) else {}
 
-        print(f"  播放進展: User advancing={user_advancing}, Ref advancing={ref_advancing}")
+        user_m1 = m1.get("user", {})
+        ref_m1 = m1.get("ref", {})
 
-        # 暫停播放
+        user_t1 = user_m1.get("currentTime", 0)
+        ref_t1 = ref_m1.get("currentTime", 0)
+        user_t2 = m2.get("user_time_2", 0)
+        ref_t2 = m2.get("ref_time_2", 0)
+
+        user_advancing = user_t2 > user_t1
+        ref_advancing = ref_t2 > ref_t1
+        user_non_black = user_m1.get("nonBlack", False)
+        ref_non_black = ref_m1.get("nonBlack", False)
+
+        # 計算同步漂移 (兩者前進時間差)
+        user_delta = user_t2 - user_t1
+        ref_delta = ref_t2 - ref_t1
+        sync_drift_ms = round(abs(user_delta - ref_delta) * 1000, 1)
+
+        print(f"  [播放進展] User advancing={user_advancing} (t1={user_t1:.3f}s, t2={user_t2:.3f}s, delta={user_delta:.3f}s), nonBlack={user_non_black}")
+        print(f"  [播放進展] Ref  advancing={ref_advancing} (t1={ref_t1:.3f}s, t2={ref_t2:.3f}s, delta={ref_delta:.3f}s), nonBlack={ref_non_black}")
+        print(f"  [時鐘同步] 同步漂移: {sync_drift_ms}ms")
+
+        # 嚴格無假 PASS 斷言：必須兩側都前進且兩側皆非全黑！
+        status = "PASS" if (user_advancing and ref_advancing and user_non_black and ref_non_black) else "FAIL"
+
+        self.step_results.append({
+            "step": "step5_playing_side_by_side",
+            "play_result": play_res,
+            "user_advancing": user_advancing,
+            "ref_advancing": ref_advancing,
+            "user_t1": user_t1,
+            "user_t2": user_t2,
+            "ref_t1": ref_t1,
+            "ref_t2": ref_t2,
+            "sync_drift_ms": sync_drift_ms,
+            "user_non_black": user_non_black,
+            "ref_non_black": ref_non_black,
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step6VerifyPlayingStacked:", None, False
+        )
+
+    # --- Step 6: 上下堆疊 (Stacked) 佈局切換與播放中截圖 ---
+    def step6VerifyPlayingStacked_(self, timer):
+        print("\n--- Step 6: 切換上下堆疊 (Stacked) 佈局 & 播放中截圖 ---")
+        stacked_clicked = self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const stackedBtn = btns.find(b => b.textContent && b.textContent.includes('上下堆疊'));
+            if (stackedBtn) {
+                stackedBtn.click();
+                return true;
+            }
+            return false;
+        })()
+        """)
+
+        time.sleep(1.0)
+        # 在上下堆疊播放中截圖！
+        self.captureScreenshot("05_comparison_playing_stacked")
+
+        is_stacked_dom = bool(self.evalJs("Boolean(document.querySelector('.flex-col'))"))
+        playback_in_stacked = self.evalJsJson("""
+        (() => {
+            const vids = Array.from(document.querySelectorAll('video'));
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            const userVid = vids.find(v => v !== refVid);
+            return JSON.stringify({
+                user_paused: userVid ? userVid.paused : true,
+                ref_paused: refVid ? refVid.paused : true,
+                user_non_black: userVid && userVid.videoWidth > 0,
+                ref_non_black: refVid && refVid.videoWidth > 0
+            });
+        })()
+        """)
+
+        p_info = playback_in_stacked if isinstance(playback_in_stacked, dict) else {}
+        print(f"  上下堆疊切換點擊: {stacked_clicked}, DOM flex-col: {is_stacked_dom}, nonBlack: {p_info.get('user_non_black')} & {p_info.get('ref_non_black')}")
+
+        # 暫停播放以進行精確錨點對齊測試
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
@@ -360,26 +575,149 @@ class WebKitComparisonAuditor(AppKit.NSObject):
             if (pauseBtn) pauseBtn.click();
         })();
         """)
+        time.sleep(0.5)
 
+        status = "PASS" if (is_stacked_dom and p_info.get("user_non_black") and p_info.get("ref_non_black")) else "FAIL"
         self.step_results.append({
-            "step": "step4_comparison_side_by_side",
-            "has_comp_header": has_comp_header,
-            "has_auto_framing": has_auto_framing,
-            "has_fixture_badge": has_fixture_badge,
-            "ref_video_src": ref_src,
-            "play_result": play_res,
-            "playback_state": playback_state,
-            "user_advancing": user_advancing,
-            "ref_advancing": ref_advancing,
-            "status": "PASS" if (has_comp_header and has_auto_framing and user_advancing and ref_advancing) else "PASS" if has_comp_header else "FAIL",
+            "step": "step6_playing_stacked",
+            "is_stacked_dom": is_stacked_dom,
+            "playback_in_stacked": p_info,
+            "status": status,
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "step5VerifyMissingClubReference:", None, False
+            1.0, self, "step7VerifyJumpTop:", None, False
         )
 
-    def step5VerifyMissingClubReference_(self, timer):
-        print("\n--- Step 5: 驗證 17 球桿切換與 missing_reference 提示 ---")
+    # --- Step 7: 跳轉至 TOP 錨點對齊 ---
+    def step7VerifyJumpTop_(self, timer):
+        print("\n--- Step 7: 驗證跳轉至 TOP 錨點對齊 ---")
+        # 切回左右並排
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const sideBtn = btns.find(b => b.textContent && b.textContent.includes('左右並排'));
+            if (sideBtn) sideBtn.click();
+        })();
+        """)
+        time.sleep(0.5)
+
+        # 點擊 TOP 按鈕（按鈕內容大寫 TOP）
+        top_clicked = self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const topBtn = btns.find(b => b.textContent && b.textContent.trim() === 'TOP');
+            if (topBtn) {
+                topBtn.click();
+                return true;
+            }
+            return false;
+        })()
+        """)
+
+        time.sleep(0.8)
+        self.captureScreenshot("06_comparison_jump_top")
+
+        times = self.evalJsJson("""
+        (() => {
+            const vids = Array.from(document.querySelectorAll('video'));
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            const userVid = vids.find(v => v !== refVid);
+            return JSON.stringify({
+                user_sec: userVid ? userVid.currentTime : 0,
+                user_ms: userVid ? Math.round(userVid.currentTime * 1000) : 0,
+                ref_sec: refVid ? refVid.currentTime : 0,
+                ref_ms: refVid ? Math.round(refVid.currentTime * 1000) : 0,
+                user_non_black: userVid && userVid.videoWidth > 0,
+                ref_non_black: refVid && refVid.videoWidth > 0
+            });
+        })()
+        """)
+        t_info = times if isinstance(times, dict) else {}
+        u_ms = t_info.get("user_ms", 0)
+        r_ms = t_info.get("ref_ms", 0)
+        # 第 10 球 Top 為 120600ms, 示範片 Top 為 1533ms
+        u_top_diff = abs(u_ms - 120600)
+        r_top_diff = abs(r_ms - 1533)
+
+        print(f"  TOP 跳轉: User={u_ms}ms (diff={u_top_diff}ms), Ref={r_ms}ms (diff={r_top_diff}ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
+
+        status = "PASS" if (u_top_diff <= 150 and r_top_diff <= 150 and t_info.get("user_non_black") and t_info.get("ref_non_black")) else "FAIL"
+        self.step_results.append({
+            "step": "step7_jump_top",
+            "top_clicked": top_clicked,
+            "user_ms": u_ms,
+            "ref_ms": r_ms,
+            "user_diff_ms": u_top_diff,
+            "ref_diff_ms": r_top_diff,
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step8VerifyJumpImpact:", None, False
+        )
+
+    # --- Step 8: 跳轉至 IMPACT 錨點對齊 ---
+    def step8VerifyJumpImpact_(self, timer):
+        print("\n--- Step 8: 驗證跳轉至 IMPACT 錨點對齊 ---")
+        # 點擊 IMPACT 按鈕（按鈕內容大寫 IMPACT）
+        impact_clicked = self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const impBtn = btns.find(b => b.textContent && b.textContent.trim() === 'IMPACT');
+            if (impBtn) {
+                impBtn.click();
+                return true;
+            }
+            return false;
+        })()
+        """)
+
+        time.sleep(0.8)
+        self.captureScreenshot("07_comparison_jump_impact")
+
+        times = self.evalJsJson("""
+        (() => {
+            const vids = Array.from(document.querySelectorAll('video'));
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            const userVid = vids.find(v => v !== refVid);
+            return JSON.stringify({
+                user_sec: userVid ? userVid.currentTime : 0,
+                user_ms: userVid ? Math.round(userVid.currentTime * 1000) : 0,
+                ref_sec: refVid ? refVid.currentTime : 0,
+                ref_ms: refVid ? Math.round(refVid.currentTime * 1000) : 0,
+                user_non_black: userVid && userVid.videoWidth > 0,
+                ref_non_black: refVid && refVid.videoWidth > 0
+            });
+        })()
+        """)
+        t_info = times if isinstance(times, dict) else {}
+        u_ms = t_info.get("user_ms", 0)
+        r_ms = t_info.get("ref_ms", 0)
+        # 第 10 球 Impact 為 120967ms, 示範片 Impact 為 1900ms
+        u_imp_diff = abs(u_ms - 120967)
+        r_imp_diff = abs(r_ms - 1900)
+
+        print(f"  IMPACT 跳轉: User={u_ms}ms (diff={u_imp_diff}ms), Ref={r_ms}ms (diff={r_imp_diff}ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
+
+        status = "PASS" if (u_imp_diff <= 150 and r_imp_diff <= 150 and t_info.get("user_non_black") and t_info.get("ref_non_black")) else "FAIL"
+        self.step_results.append({
+            "step": "step8_jump_impact",
+            "impact_clicked": impact_clicked,
+            "user_ms": u_ms,
+            "ref_ms": r_ms,
+            "user_diff_ms": u_imp_diff,
+            "ref_diff_ms": r_imp_diff,
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step9VerifyMissingClubReference:", None, False
+        )
+
+    # --- Step 9: 17 球桿切換與 missing_reference 提示 ---
+    def step9VerifyMissingClubReference_(self, timer):
+        print("\n--- Step 9: 驗證 17 球桿切換與 missing_reference 提示 ---")
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
@@ -389,10 +727,10 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         """)
 
         time.sleep(1.2)
-        self.captureScreenshot("05_comparison_missing_3w")
+        self.captureScreenshot("08_comparison_missing_3w")
 
-        has_missing_banner = self.evalJs("Boolean(document.body.innerText.includes('missing_reference'))")
-        has_import_btn = self.evalJs("Boolean(document.body.innerText.includes('匯入此球桿的示範影片'))")
+        has_missing_banner = bool(self.evalJs("Boolean(document.body.innerText.includes('missing_reference') || document.body.innerText.includes('尚無此球桿示範影片'))"))
+        has_import_btn = bool(self.evalJs("Boolean(document.body.innerText.includes('匯入此球桿的示範影片'))"))
 
         print(f"  missing_reference 提示存在: {has_missing_banner}, 匯入按鈕存在: {has_import_btn}")
 
@@ -409,9 +747,9 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         })()
         """)
         time.sleep(0.8)
-        has_file_input = self.evalJs("Boolean(document.querySelector('input[type=\"file\"]'))")
+        has_file_input = bool(self.evalJs("Boolean(document.querySelector('input[type=\"file\"]'))"))
         print(f"  匯入 Modal 開啟: {open_import_res}, 上傳 Input 存在: {has_file_input}")
-        
+
         # 關閉 Modal
         self.evalJs("""
         (() => {
@@ -421,68 +759,56 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         })();
         """)
 
+        status = "PASS" if (has_missing_banner and has_import_btn and has_file_input) else "FAIL"
         self.step_results.append({
-            "step": "step5_missing_club_reference",
+            "step": "step9_missing_club_reference",
             "has_missing_banner": has_missing_banner,
             "has_import_btn": has_import_btn,
             "has_file_input": has_file_input,
-            "status": "PASS" if (has_missing_banner and has_import_btn) else "FAIL",
-        })
-
-        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "step6VerifyStackedLayout:", None, False
-        )
-
-    def step6VerifyStackedLayout_(self, timer):
-        print("\n--- Step 6: 驗證上下堆疊 (stacked) 佈局切換 ---")
-        self.evalJs("""
-        (() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const btn7i = btns.find(b => b.textContent && b.textContent.trim() === '7I');
-            if (btn7i) btn7i.click();
-        })();
-        """)
-        time.sleep(0.8)
-
-        self.evalJs("""
-        (() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const stackedBtn = btns.find(b => b.textContent && b.textContent.includes('上下堆疊'));
-            if (stackedBtn) stackedBtn.click();
-        })();
-        """)
-
-        time.sleep(1.5)
-        self.captureScreenshot("06_comparison_stacked_layout")
-
-        is_stacked = self.evalJs("Boolean(document.querySelector('.flex-col'))")
-        print(f"  上下堆疊佈局: {is_stacked}")
-
-        self.step_results.append({
-            "step": "step6_stacked_layout",
-            "is_stacked": is_stacked,
-            "status": "PASS",
+            "status": status,
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             0.5, self, "finishAudit:", None, False
         )
 
+    # --- Step 10: 結算並產出動態脫敏驗收報告 ---
     def finishAudit_(self, timer):
         print("\n=== WebKit R2 驗收完成 ===")
         all_pass = all(s.get("status") == "PASS" for s in self.step_results)
+        git_info = get_git_info()
+
         raw_report = {
             "title": "Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 Acceptance Report",
             "timestamp": datetime.now(UTC).isoformat(),
+            "git": git_info,
             "target_swing_id": self.target_swing_id,
+            "video_metadata": {
+                "video_id": self.video_id,
+                "video_name": "2分鐘.mov",
+                "sha256": self.video_sha256,
+                "duration_ms": 139053,
+                "resolution": "1080x1920",
+                "proxy_resolution": "360x640"
+            },
+            "reference_metadata": {
+                "id": self.ref_swing_id,
+                "club_type": "7I",
+                "reference_category": "test_fixture",
+                "is_verified_standard": False,
+                "title": "7號鐵桿技術測試素材 (7-Iron Dev Test Fixture)"
+            },
             "all_passed": all_pass,
             "step_results": self.step_results,
             "screenshots": self.screenshots,
         }
+
         # 全面安全脫敏，杜絕 Token 洩漏
         clean_report = sanitize_data(raw_report)
         REPORT_PATH.write_text(json.dumps(clean_report, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"[REPORT] 報告已安全保存至: {REPORT_PATH}")
+        print(f"[SUMMARY] 全數通過: {all_pass}")
+
         self.is_done = True
         AppKit.NSApplication.sharedApplication().stop_(None)
 

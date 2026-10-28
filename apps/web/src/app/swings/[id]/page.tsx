@@ -50,7 +50,7 @@ export default function SwingDetailPage() {
   const [showComparison, setShowComparison] = useState<boolean>(false);
   const [selectedClub, setSelectedClub] = useState<string>("7I");
 
-  // 深入分析此差異 (Vision AI 解讀) 狀態
+  // 深入動作解析 (幾何提示與運動學報告) 狀態
   const [deepInsight, setDeepInsight] = useState<DeepInsightReportItem | null>(null);
   const [analyzingDiffId, setAnalyzingDiffId] = useState<string | null>(null);
 
@@ -839,7 +839,7 @@ export default function SwingDetailPage() {
                           <>
                             <span>
                               {deepInsight?.diff_id === diff.id && deepInsight.analysis_mode === "multimodal_vision_ai"
-                                ? "🔍 深入分析此差異 (Vision AI)"
+                                ? "🔍 深入動作解析 (多模態視覺模型)"
                                 : "📋 深入動作解析 (幾何提示)"}
                             </span>
                           </>
@@ -857,7 +857,7 @@ export default function SwingDetailPage() {
                             </strong>
                             {deepInsight.analysis_mode === "multimodal_vision_ai" ? (
                               <span className="rounded bg-emerald-950/70 border border-emerald-700/60 px-2 py-0.5 text-[10px] text-emerald-300 font-semibold">
-                                ● 多模態 Vision AI 檢測 ({deepInsight.model_name})
+                                ● 多模態視覺模型檢測 ({deepInsight.model_name})
                               </span>
                             ) : (
                               <span className="rounded bg-cyan-950/70 border border-cyan-800/60 px-2 py-0.5 text-[10px] text-cyan-300 font-semibold">

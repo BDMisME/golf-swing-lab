@@ -35,11 +35,106 @@ from apps.api.auth import get_current_user
 from apps.api.config import get_settings
 from apps.api.db import get_db
 from apps.api.models import ReferenceSwing, User, utcnow
+from packages.analysis.detection.scanner import CoarseToFineDetector
 from packages.storage.s3_client import get_storage_service
 
 logger = logging.getLogger("gsl.reference_swings")
 
 router = APIRouter(prefix="/api/reference-swings", tags=["Reference Swings"])
+
+
+def _analyze_reference_video(
+    video_path: Path,
+    duration_ms: int,
+    v_width: int,
+    v_height: int,
+    manual_events: dict[str, int] | None = None,
+) -> tuple[str, dict[str, int], dict[str, Any], dict[str, Any], str]:
+    """
+    接入現有影片分析管線：
+    1. 優先採用合法手動校準時間碼
+    2. 自動啟動 CoarseToFineDetector 抽取真實揮桿事件與骨架
+    3. 信心度 >= 0.50 且關鍵事件齊全時標記 completed；否則安全標記 needs_calibration，杜絕百分比偽造
+    """
+    if manual_events and isinstance(manual_events, dict):
+        top = manual_events.get("top", 0)
+        impact = manual_events.get("impact", 0)
+        if 0 < top < impact <= duration_ms:
+            return (
+                "completed",
+                manual_events,
+                {},
+                {
+                    "scale": 1.0,
+                    "zoom": 1.0,
+                    "offset_x": 0,
+                    "offset_y": 0,
+                    "video_width": v_width,
+                    "video_height": v_height,
+                    "torso_length": 100.0,
+                },
+                "由使用者手動校正標記時間碼",
+            )
+
+    try:
+        detector = CoarseToFineDetector()
+        detected_segments, _ = detector.analyze_video(video_path, duration_ms)
+        if detected_segments:
+            best_cand = max(detected_segments, key=lambda s: getattr(s, "confidence", 0))
+            ev_map = {ev.event_name: ev.time_ms for ev in best_cand.events}
+            
+            has_top = "top" in ev_map
+            impact_key = "impact" if "impact" in ev_map else "impact_estimated" if "impact_estimated" in ev_map else None
+            
+            pose_art: dict[str, Any] = {}
+            if best_cand.keyframes:
+                pose_art = {"landmarks": best_cand.keyframes[0].get("landmarks", [])}
+
+            if has_top and impact_key and (ev_map["top"] < ev_map[impact_key]) and best_cand.confidence >= 0.50:
+                normalized_events = {
+                    "address": ev_map.get("address", best_cand.start_ms),
+                    "takeaway": ev_map.get("takeaway", best_cand.start_ms + 200),
+                    "top": ev_map["top"],
+                    "downswing": ev_map.get("downswing", (ev_map["top"] + ev_map[impact_key]) // 2),
+                    "impact": ev_map[impact_key],
+                    "follow_through": ev_map.get("follow_through", ev_map[impact_key] + 300),
+                    "finish": ev_map.get("finish", best_cand.end_ms),
+                }
+                calib = {
+                    "scale": 1.0,
+                    "zoom": 1.0,
+                    "offset_x": 0,
+                    "offset_y": 0,
+                    "video_width": v_width,
+                    "video_height": v_height,
+                    "torso_length": 100.0,
+                }
+                return (
+                    "completed",
+                    normalized_events,
+                    pose_art,
+                    calib,
+                    f"由自動分析管線偵測 (信心度 {best_cand.confidence:.2f})，已完成同步錨點提取",
+                )
+    except Exception as exc:
+        logger.warning(f"示範影片自動分析管線執行異常: {exc}")
+
+    # 若自動分析不可靠，安全降級為 needs_calibration，絕不捏造固定百分比！
+    return (
+        "needs_calibration",
+        {},
+        {},
+        {
+            "scale": 1.0,
+            "zoom": 1.0,
+            "offset_x": 0,
+            "offset_y": 0,
+            "video_width": v_width,
+            "video_height": v_height,
+            "torso_length": 100.0,
+        },
+        "⚠️ 自動分析信心度不足或未偵測到完整揮桿，需手動校正時間碼",
+    )
 
 ALL_CLUB_TYPES = [
     "Driver",
@@ -451,42 +546,20 @@ def import_local_reference_swing(
             detail=f"無法使用 ffprobe 解析影片真實元數據: {exc}",
         )
 
-    # 存入 Storage (分塊存入)
+    # 存入 Storage (串流方式，避免 OOM)
     storage = get_storage_service()
     ref_id = str(uuid.uuid4())
     storage_key = f"references/{payload.club_type.lower().replace('/', '_')}/{ref_id}_{file_path.name}"
-    with open(file_path, "rb") as f:
-        storage.put_bytes(storage_key, f.read(), "video/mp4" if ext == ".mp4" else "video/quicktime")
+    storage.put_file(storage_key, file_path, "video/mp4" if ext == ".mp4" else "video/quicktime")
 
-    # 事件時間碼真實性檢查
-    if payload.event_timestamps and isinstance(payload.event_timestamps, dict):
-        # 驗證是否具備基本順序性
-        et = payload.event_timestamps
-        top = et.get("top", 0)
-        impact = et.get("impact", 0)
-        if 0 < top < impact <= duration_ms:
-            event_ts = payload.event_timestamps
-            analysis_status_val = "completed"
-            verif_notes = "由使用者手動校正標記時間碼"
-        else:
-            event_ts = {}
-            analysis_status_val = "needs_calibration"
-            verif_notes = "⚠️ 傳入之事件時間碼時序不合理 (Top 必須小於 Impact)，已標記待校準"
-    else:
-        # 嚴格遵循誠信原則：未標記時絕不以固定百分比捏造時間碼！
-        event_ts = {}
-        analysis_status_val = "needs_calibration"
-        verif_notes = "⚠️ 尚未進行動作事件偵測或人工校正，暫無可靠 Top／Impact 標籤"
-
-    calibration = {
-        "scale": 1.0,
-        "zoom": 1.0,
-        "offset_x": 0,
-        "offset_y": 0,
-        "video_width": v_width,
-        "video_height": v_height,
-        "torso_length": 100.0,
-    }
+    # 接入現有分析管線執行揮桿偵測、事件提取與骨架分析
+    analysis_status_val, event_ts, pose_art, calibration, verif_notes = _analyze_reference_video(
+        video_path=file_path,
+        duration_ms=duration_ms,
+        v_width=v_width,
+        v_height=v_height,
+        manual_events=payload.event_timestamps,
+    )
 
     if payload.is_default:
         db.execute(
@@ -521,7 +594,7 @@ def import_local_reference_swing(
         duration_ms=duration_ms,
         sha256=file_sha256,
         event_timestamps=event_ts,
-        pose_artifact={},
+        pose_artifact=pose_art,
         calibration_params=calibration,
         is_default=payload.is_default,
         notes=payload.notes,
@@ -687,8 +760,16 @@ async def upload_reference_swing(
     storage = get_storage_service()
     ref_id = str(uuid.uuid4())
     storage_key = f"references/{club_type.lower().replace('/', '_')}/{ref_id}_{Path(filename).name}"
-    with open(tmp_path, "rb") as f:
-        storage.put_bytes(storage_key, f.read(), "video/mp4" if ext == ".mp4" else "video/quicktime")
+    storage.put_file(storage_key, tmp_path, "video/mp4" if ext == ".mp4" else "video/quicktime")
+
+    # 接入現有分析管線執行揮桿偵測、事件提取與骨架分析
+    analysis_status_val, event_ts, pose_art, calibration, verif_notes = _analyze_reference_video(
+        video_path=tmp_path,
+        duration_ms=duration_ms,
+        v_width=v_width,
+        v_height=v_height,
+        manual_events=None,
+    )
     tmp_path.unlink(missing_ok=True)
 
     if is_default:
@@ -715,25 +796,17 @@ async def upload_reference_swing(
         thumbnail_url=None,
         verified_club=False,
         verified_camera_angle=False,
-        analysis_status="needs_calibration",
+        analysis_status=analysis_status_val,
         reference_category="community_reference",
         is_verified_standard=False,
-        verification_notes="⚠️ 尚未完成動作事件偵測或人工校正，暫無可靠 Top／Impact 標籤",
+        verification_notes=verif_notes,
         source_type="user_imported",
         fps=fps,
         duration_ms=duration_ms,
         sha256=file_sha256,
-        event_timestamps={},
-        pose_artifact={},
-        calibration_params={
-            "scale": 1.0,
-            "zoom": 1.0,
-            "offset_x": 0,
-            "offset_y": 0,
-            "video_width": v_width,
-            "video_height": v_height,
-            "torso_length": 100.0,
-        },
+        event_timestamps=event_ts,
+        pose_artifact=pose_art,
+        calibration_params=calibration,
         is_default=is_default,
         notes=notes,
         analysis_version="pose-v1",

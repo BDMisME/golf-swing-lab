@@ -1,7 +1,26 @@
 {
   "title": "Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 Acceptance Report",
-  "timestamp": "2026-10-28T12:39:25.465257+00:00",
+  "timestamp": "2026-10-28T18:46:55.178627+00:00",
+  "git": {
+    "commit_sha": "9ac6b3ede801df377edd2e9c50e03bfae3e48993",
+    "is_dirty": true
+  },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
+  "video_metadata": {
+    "video_id": "39608133-6f60-42aa-9fb3-a20326a3a94a",
+    "video_name": "2分鐘.mov",
+    "sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
+    "duration_ms": 139053,
+    "resolution": "1080x1920",
+    "proxy_resolution": "360x640"
+  },
+  "reference_metadata": {
+    "id": "1d5ecee0-1809-4d0c-a553-1c28e95bbac0",
+    "club_type": "7I",
+    "reference_category": "test_fixture",
+    "is_verified_standard": false,
+    "title": "7號鐵桿技術測試素材 (7-Iron Dev Test Fixture)"
+  },
   "all_passed": true,
   "step_results": [
     {
@@ -14,32 +33,100 @@
     },
     {
       "step": "step2_action_differences",
-      "diff_count": 2.0,
+      "diff_count": 2,
       "has_jump_btn": true,
       "status": "PASS"
     },
     {
       "step": "step3_deep_insight",
-      "click_result": "CLICKED",
+      "click_result": "CLICKED: 📋 深入動作解析 (幾何提示)",
       "has_insight_panel": true,
       "has_drill": true,
       "has_disclaimer": true,
       "status": "PASS"
     },
     {
-      "step": "step4_comparison_side_by_side",
-      "has_comp_header": false,
-      "ref_video_src": "http://localhost:28000/api/reference-swings/1d5ecee0-1809-4d0c-a553-1c28e95bbac0/stream?token=[REDACTED]",
+      "step": "step4_comparison_mode_ready",
+      "has_comp_header": true,
+      "has_framing_status": true,
+      "has_fixture_badge": true,
+      "has_verified_zero": true,
+      "user_video_state": {
+        "found": true,
+        "readyState": 4,
+        "width": 720,
+        "height": 1280,
+        "currentTime": 119,
+        "paused": true,
+        "nonBlack": true,
+        "mean": 111.5,
+        "std": 64.5,
+        "error": null
+      },
+      "ref_video_state": {
+        "found": true,
+        "readyState": 4,
+        "width": 1080,
+        "height": 1920,
+        "currentTime": 0,
+        "paused": true,
+        "nonBlack": true,
+        "mean": 115.8,
+        "std": 64.4,
+        "error": null
+      },
+      "ready_ok": true,
+      "non_black_ok": true,
       "status": "PASS"
     },
     {
-      "step": "step5_missing_club_reference",
+      "step": "step5_playing_side_by_side",
+      "play_result": "PLAY_CLICKED",
+      "user_advancing": true,
+      "ref_advancing": true,
+      "user_t1": 120.0339439139295,
+      "user_t2": 121.04393262211065,
+      "ref_t1": 0.9567312084024463,
+      "ref_t2": 1.9586361233956686,
+      "sync_drift_ms": 8.1,
+      "user_non_black": true,
+      "ref_non_black": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step6_playing_stacked",
+      "is_stacked_dom": true,
+      "playback_in_stacked": {
+        "user_paused": true,
+        "ref_paused": true,
+        "user_non_black": true,
+        "ref_non_black": true
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step7_jump_top",
+      "top_clicked": true,
+      "user_ms": 120600,
+      "ref_ms": 1533,
+      "user_diff_ms": 0,
+      "ref_diff_ms": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "step8_jump_impact",
+      "impact_clicked": true,
+      "user_ms": 120967,
+      "ref_ms": 1900,
+      "user_diff_ms": 0,
+      "ref_diff_ms": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "step9_missing_club_reference",
       "has_missing_banner": true,
       "has_import_btn": true,
-      "status": "PASS"
-    },
-    {
-      "step": "step6_stacked_layout",
+      "has_file_input": true,
       "status": "PASS"
     }
   ],
@@ -57,16 +144,24 @@
       "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/03_deep_insight_expanded.png"
     },
     {
-      "name": "04_comparison_side_by_side",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/04_comparison_side_by_side.png"
+      "name": "04_comparison_playing_side_by_side",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/04_comparison_playing_side_by_side.png"
     },
     {
-      "name": "05_comparison_missing_3w",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/05_comparison_missing_3w.png"
+      "name": "05_comparison_playing_stacked",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/05_comparison_playing_stacked.png"
     },
     {
-      "name": "06_comparison_stacked_layout",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/06_comparison_stacked_layout.png"
+      "name": "06_comparison_jump_top",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/06_comparison_jump_top.png"
+    },
+    {
+      "name": "07_comparison_jump_impact",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/07_comparison_jump_impact.png"
+    },
+    {
+      "name": "08_comparison_missing_3w",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/08_comparison_missing_3w.png"
     }
   ]
 }

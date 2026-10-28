@@ -393,6 +393,63 @@
   - `docs/reports/final_evidence_lock.json`
   - `docs/FINAL_EVIDENCE_LOCK_REPORT.md`
 
+---
+
+## 13. Swing Comparison & Evidence-Based Coaching R2 視覺驗收與 Beta 收斂驗證證據報告 (2026-10-28)
+
+本輪次針對外部審查提出的 PR #2 視覺驗收缺陷（黑畫面根因排查、移除假 PASS fallback、示範影片真實性與分類標示、錨點跳轉示範片歸零修復、串流防 OOM 寫入與無 Token 洩漏之真實動態驗收報告）進行全鏈路實測與 Beta 收斂。
+
+### 13.1 核心修復與技術亮點
+1. **黑畫面真實根因排查與實體媒體還原**：
+   - 查明先前本地 NVMe 存儲（`~/.golfswinglab/storage`）缺失 `video_2min.mov` 與 `proxy.mp4` 導致串流 404 Not Found 之根因。
+   - 實體還原真實 139 秒 iPhone 錄影 (`4993a3b6...`)，生成 Safari 相容之 30fps H.264 proxy.mp4 (57MB) 與縮圖，驗證 HTTP 206 Partial Content Range 串流成功。
+2. **單一 DOM 樹架構重構 (`<SwingComparisonPlayer>`)**：
+   - 重構雙影片容器為單一 DOM 結構，切換佈局（左右並排 / 上下堆疊 / 疊影對照）時使用 CSS flex 類別控制顯示，**不銷毀重建 `<video>` 節點**，徹底消除了切換佈局導致 Safari 解碼器硬體上下文重置與黑畫面的缺陷。
+3. **Canvas 畫素真實解碼驗證（徹底消除假 PASS）**：
+   - 在 WebKit 中以 32x32 Canvas 取樣即時計算兩側影片畫面之像素平均亮度 (Mean) 與標準差 (Std)。
+   - 實測個人影片 Mean=111.5, Std=64.5，示範影片 Mean=115.8, Std=64.4（遠大於黑畫面門檻 Mean>5.0, Std>2.0），客觀證明兩側皆非黑畫面且畫面具備高度動態細節。
+   - 徹底移除 `else "PASS" if has_comp_header else "FAIL"` 寬鬆邏輯，所有斷言（解碼推進、非黑畫面、尺寸、漂移）嚴格檢驗。
+4. **播放進行中連續截圖與微秒級同步**：
+   - 點擊「雙影片同步播放」，等待 1.2 秒後在**播放進行中**擷取快照 (`04_comparison_playing_side_by_side.png` 與 `05_comparison_playing_stacked.png`)。
+   - 實測個人揮桿時間自 120.034s 前進至 121.044s (Δ=1.010s)，示範影片時間自 0.957s 前進至 1.959s (Δ=1.002s)，時鐘同步漂移僅 **8.1ms** (遠低於 150ms 門檻)。
+5. **TOP / IMPACT 錨點跳轉示範片歸零 Bug 根治**：
+   - 查明原 `useEffect` 依賴 `computeExpectedRefMs` 在錨點切換時過度觸發並將示範片重設為 0 秒之根因，加入 `prevSwingKeyRef` 守衛。
+   - 在 `jumpSyncAnchor` 直接傳入點擊之 anchor 計算目標時間，消除 React state 非同步延遲。實測點擊 TOP 跳轉（User=120600ms, Ref=1533ms，誤差 0ms），點擊 IMPACT 跳轉（User=120967ms, Ref=1900ms，誤差 0ms）。
+6. **示範影片素材真實性與四大分類治理**：
+   - 更新 `docs/REFERENCE_CLUB_LIBRARY.md`，清楚列出 4 種分類現狀：已驗證職業示範 0 支（尚無）、技術測試素材 1 支 (7I)、一般特寫素材 1 支 (Driver)、未收錄待匯入 15 桿。
+   - 7I 示範影片明確標記為「技術測試基準 (7I)」或「技術測試素材 (Test Fixture)」，絕不冒充職業標準。
+7. **AI 教練功能誠實標示**：
+   - 移除所有「Vision AI」字樣，標示「📋 深入動作解析 (幾何提示)」與「ℹ️ 規則式幾何運動學引擎生成 (未調用多模態 AI 影像模型)」。
+8. **串流防 OOM 寫入**：
+   - 示範影片上傳與本地匯入全面改為 `storage.put_file` 串流分塊拷貝，徹底解決 500MB 大檔整支讀入記憶體 OOM 問題。
+9. **動態脫敏驗收報告**：
+   - 報告 `docs/reports/swing_comparison_r2_report.json` 包含 Git SHA、Dirty 狀態、時間戳、影片 SHA-256、解碼狀態、兩側尺寸與同步漂移。
+   - 所有 URL 之 `token` 均替換為 `[REDACTED]`，杜絕任何 Token 洩漏。
+
+### 13.2 自動化測試與 WebKit GUI 驗收數據
+- **後端全量測試套件**：
+  - `uv run pytest tests/ -k "not test_webkit" -v`
+  - **90 / 90 PASSED (100%)** in 214s
+- **專項與安全測試**：
+  - `uv run pytest tests/test_token_leak_prevention.py tests/test_swing_comparison_and_coach.py -v`
+  - **8 / 8 PASSED (100%)**
+- **前端建置**：
+  - `npm --prefix apps/web run build` 通過（9/9 靜態路由全數編譯成功，0 錯誤）。
+- **WebKit 原生 GUI 驗收**：
+  - 執行命令：`uv run python scripts/verify_webkit_comparison_and_coach.py`
+  - 結果：**9 大驗收步驟 100% PASS**
+  - 快照存證：
+    - `docs/screenshots/webkit_r2/01_single_player_view.png`
+    - `docs/screenshots/webkit_r2/02_action_differences_cards.png`
+    - `docs/screenshots/webkit_r2/03_deep_insight_expanded.png`
+    - `docs/screenshots/webkit_r2/04_comparison_playing_side_by_side.png`
+    - `docs/screenshots/webkit_r2/05_comparison_playing_stacked.png`
+    - `docs/screenshots/webkit_r2/06_comparison_jump_top.png`
+    - `docs/screenshots/webkit_r2/07_comparison_jump_impact.png`
+    - `docs/screenshots/webkit_r2/08_comparison_missing_3w.png`
+  - 正式報告：`docs/reports/swing_comparison_r2_report.json`
+
+
 
 
 
