@@ -29,7 +29,7 @@
     {
       "step": "step4_comparison_side_by_side",
       "has_comp_header": false,
-      "ref_video_src": "http://localhost:28000/api/reference-swings/1d5ecee0-1809-4d0c-a553-1c28e95bbac0/stream?token=eyJzdWIiOiI2NTU3NWEyNC1hYTY1LTRjZmItOTMzNC01NjEzZTVhYjgzYjUiLCJlbWFpbCI6ImdvbGZlckBzd2luZ2xhYi5sb2NhbCIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc5Mzc5NTk0N30.d09145cd6f17c157cf2ac9221d0173aaa1381991fbc519ca44d0b436ba664213",
+      "ref_video_src": "http://localhost:28000/api/reference-swings/1d5ecee0-1809-4d0c-a553-1c28e95bbac0/stream?token=[REDACTED]",
       "status": "PASS"
     },
     {

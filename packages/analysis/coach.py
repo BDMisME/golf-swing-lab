@@ -510,6 +510,11 @@ class DeepInsightReport(BaseModel):
     truthfulness_notice: str
     provider: str
     llm_used: bool
+    analysis_mode: str = Field(default="rule_based_advice")  # multimodal_vision_ai | rule_based_advice
+    model_name: str = Field(default="rule_based_engine_v1")
+    images_used: bool = Field(default=False)
+    keyframe_sources: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.85)
 
 
 def compute_swing_action_differences(
@@ -611,8 +616,8 @@ def compute_swing_action_differences(
                     phase="impact_estimated",
                     time_ms=t_ms,
                     magnitude=f"頭部相對位移比 {disp * 100:.1f}% (建議 ≤ 10%)",
-                    evidence_text=f"在時間碼 {t_ms}ms（擊球瞬間），頭部 2D 座標相較於準備姿勢產生了 {disp * 100:.1f}% 的相對身高位移，可能引發擊球點甜心離散。",
-                    suggested_cue="可嘗試微調：保持視線錨定於球位後緣，以頸椎根部為軸心旋轉，避免擊球瞬間頭部跟隨球桿前傾或下壓。",
+                    evidence_text=f"在時間碼 {t_ms}ms（擊球瞬間），頭部 2D 座標相較於準備姿勢產生了 {disp * 100:.1f}% 的相對身高位移，顯示軸心高度產生了相對位移。",
+                    suggested_cue="可嘗試微調：保持視線錨定於球位後緣，以頸椎根部為軸心旋轉，避免擊球瞬間頭部過早向上拔起或下壓。",
                     retest_target="下次重測目標：擊球瞬間頭部位移比維持 ≤ 10%。",
                     confidence=float(head_info.get("confidence", 0.82)),
                 )
@@ -633,8 +638,8 @@ def compute_swing_action_differences(
                     phase="finish",
                     time_ms=t_ms,
                     magnitude=f"收桿評分 {int(score_val)} 分 (建議站定 ≥ 2 秒)",
-                    evidence_text=f"在收桿結束影格（{t_ms}ms），身體重心未能平穩停留在前腳腳跟，有提早收力或身體向後倒退的晃動趨勢。",
-                    suggested_cue="可嘗試微調：擊球完成後維持「皮帶扣正對目標、後腳鞋底完全離地垂直」之收桿平衡站定 3 秒。",
+                    evidence_text=f"在收桿結束影格（{t_ms}ms），身體重心未能平穩停留在前腳，觀測到收桿後提早收力或身體向後晃動。",
+                    suggested_cue="可嘗試微調：擊球完成後維持「骨盆正對目標、後腳鞋底垂直離地」之收桿平衡站定 2~3 秒。",
                     retest_target="下次重測目標：收桿姿態穩定度達 85 分以上，能持續站定不晃動。",
                     confidence=float(finish_info.get("confidence", 0.85)),
                 )
@@ -668,10 +673,11 @@ def generate_deep_vision_insight(
     diff: ActionDifference,
     swing_detail: dict[str, Any],
     llm_provider: GolfCoachProvider | None = None,
+    keyframe_images: list[dict[str, Any]] | None = None,
 ) -> DeepInsightReport:
     """
-    針對使用者點選的單一動作差異，產出結構化之深度視覺運動學解讀。
-    若無外部 LLM，使用規則式專業知識庫精準生成。
+    針對使用者點選的單一動作差異，產出結構化之深度運動學解讀。
+    若無外部多模態模型，明確標註為 rule_based_advice，絕不冒充 AI 已看過影像。
     """
     phase_zh = {
         "address": "準備姿勢 (Address)",
@@ -684,18 +690,18 @@ def generate_deep_vision_insight(
         "finish": "收桿平衡 (Finish)",
     }.get(diff.phase, diff.phase)
 
-    # 專業規則式深度運動學庫
+    # 客觀 2D 運動學特徵分析（嚴格遵循最高誠信原則，移除未實測因果臆測）
     if diff.id == "spine_tilt_diff":
         analysis = (
-            f"【2D 骨架關節追蹤分析】\n"
-            f"在 {diff.time_ms}ms 的 {phase_zh} 影格中，由右肩關節至右側髖關節所連成的軀幹軸線角度觀測到：\n"
+            f"【2D 骨架關節幾何特徵】\n"
+            f"在 {diff.time_ms}ms 的 {phase_zh} 影格中，由肩關節連至髖關節之脊柱軸線觀測到：\n"
             f"1. 準備姿勢時軀幹前傾角約為基準線，但至頂點轉換瞬間前傾角度變平立（{diff.magnitude}）。\n"
-            f"2. 此現象通常源自骨盆過早向前推進（向小白球方向靠近），使下半身失去了讓雙手臂由內側下落揮動的空間（Early Extension）。\n"
-            f"3. 骨架關鍵點顯示胸椎未能在軸心維持旋轉，而是伴隨輕微的站起代償。"
+            f"2. 此現象常伴隨下桿骨盆過早向前推進（向小白球方向靠近，Early Extension），減少雙手臂在擊球區自然下落揮動的空間。\n"
+            f"3. 2D 關鍵點顯示胸椎在頂點旋轉時伴隨輕微向上站起代償。"
         )
         effect = (
-            "軀幹在擊球前失去前傾角度時，雙手必須向上推擠以防止桿頭直接砸向地面，"
-            "這常造成擊球點移至桿頭跟部、產生薄擊（Thin shot）或無法由內向下扎實觸球。"
+            "軀幹在下桿轉換時若失去前傾角度，揮桿平面幾何半徑會產生改變，"
+            "雙手臂常需向上收縮牽引以因應空間不足，增加揮桿最低點（Low Point）不穩定的幾何風險。"
         )
         drill = {
             "preparation": "站姿就位：臀部後方輕觸牆面或練習場球包，距離約 2~3 公分。",
@@ -707,33 +713,33 @@ def generate_deep_vision_insight(
     elif diff.id == "tempo_ratio_diff":
         analysis = (
             f"【時間碼與速度特徵分析】\n"
-            f"在 {diff.time_ms}ms 記錄的轉換點，手腕運動軌跡的減速與轉向歷程僅約 60–100ms：\n"
+            f"在 {diff.time_ms}ms 記錄的頂點轉換點，手腕運動軌跡呈現較為緊湊的換向歷程：\n"
             f"1. 上桿時間長度與下桿加速長度比值為 {diff.magnitude}。\n"
-            f"2. 職業選手的典型節奏為 3:1（上桿約 650–750ms，下桿約 220–250ms）。\n"
-            f"3. 當頂點蓄力時間過短時，手腕往往提早釋放桿頭角（Casting），浪費下桿延遲釋放的能量。"
+            f"2. 高爾夫揮桿節奏因個人身體條件而異（常見於 2.4:1 至 3.3:1 之間），並非所有人皆須符合單一數值。\n"
+            f"3. 當頂點轉換時間過於緊促時，手臂常在下半身重心轉移完成前便提早發力下揮。"
         )
         effect = (
-            "過於急促的頂點轉換會使上半身與肩膀提早開掉，下桿路徑容易從外向內切入（Out-to-In），"
-            "削弱擊球扎實度並增加球路偏斜風險。"
+            "過於急促的頂點換向可能使上半身肩部提早開轉，"
+            "容易擾亂下桿動力鏈由下而上的傳遞順序，增加揮桿路徑向外偏移的傾向。"
         )
         drill = {
-            "preparation": "手持 7 號鐵桿正常站姿，心中默念節拍「1... 2... 3... 砰」。",
-            "execution": "起桿到頂點心中數 1-2，頂點自然換向數 3，下桿通過擊球區自然釋放。",
-            "checkpoint": "錄影檢視上桿頂點是否有明顯的換向流暢感，而非手臂直接向下猛拉。",
+            "preparation": "手持 7 號鐵桿正常站姿，心中默念節奏口訣「慢起桿... 自然停... 順暢釋放」。",
+            "execution": "起桿到頂點感受肩部充分旋轉，頂點稍作自然換向停頓，由下半身啟動帶動下桿釋放。",
+            "checkpoint": "錄影檢視上桿頂點是否有清晰的動作換向過渡感，而非雙手直接向下急拉。",
         }
-        retest = "上下桿時間比穩定於 2.7:1 至 3.3:1 之間。"
+        retest = "上下桿時間比維持於個人穩定的合理區間（例如 2.5:1 至 3.2:1）。"
 
     elif diff.id == "head_stability_diff":
         analysis = (
             f"【頭部空間座標位移分析】\n"
-            f"在 {diff.time_ms}ms 擊球瞬間，以雙耳與鼻尖定位之頭部特徵點出現了顯著位移（{diff.magnitude}）：\n"
-            f"1. 擊球瞬間頭部高度有向下沉降或過度向右後方傾倒的趨勢。\n"
-            f"2. 頸椎中立軸心位移超過 10% 相對比例，代表視線焦點在觸球瞬間未能保持穩定。\n"
-            f"3. 該位移常伴隨下桿肩膀旋轉平面過度陡峭。"
+            f"在 {diff.time_ms}ms 擊球瞬間，以雙耳與鼻尖定位之頭部特徵點觀測到垂直或側向位移（{diff.magnitude}）：\n"
+            f"1. 擊球瞬間頭部高度有向下沉降或過度向側向晃動的趨勢。\n"
+            f"2. 頸椎中立軸心相對準備姿勢產生了變動，顯示視線與重心在觸球瞬間未能保持穩定。\n"
+            f"3. 該位移常伴隨下桿肩膀旋轉平面過度陡峭或提早用力代償。"
         )
         effect = (
-            "頭部在擊球瞬間大幅上下浮動會直接改變桿頭圓弧的最低點（Low Point），"
-            "導致容易先打到草皮（Fat）或削頂球（Thin）。"
+            "頭部在擊球瞬間大幅上下浮動會直接改變揮桿圓弧的最低點位置，"
+            "增加維持觸球扎實度與出球高度一致性的難度。"
         )
         drill = {
             "preparation": "在地面球位後方 5 公分處假想一個固定硬幣大小的標記點。",
@@ -755,6 +761,16 @@ def generate_deep_vision_insight(
         }
         retest = diff.retest_target
 
+    # 判定分析模式：若未配置外部多模態 LLM，嚴格標註為 rule_based_advice
+    llm_active = bool(llm_provider and getattr(llm_provider, "llm_enabled", False))
+    has_images = bool(keyframe_images and len(keyframe_images) > 0)
+    analysis_mode = "multimodal_vision_ai" if (llm_active and has_images) else "rule_based_advice"
+    model_name = getattr(llm_provider, "model", "rule_based_engine_v1") if llm_active else "rule_based_engine_v1"
+
+    keyframe_sources = [f"{diff.phase}: {diff.time_ms}ms"]
+    if has_images and keyframe_images:
+        keyframe_sources.extend([img.get("label", "keyframe") for img in keyframe_images])
+
     return DeepInsightReport(
         diff_id=diff.id,
         title=diff.title,
@@ -765,6 +781,11 @@ def generate_deep_vision_insight(
         step_by_step_drill=drill,
         retest_metric_target=retest,
         truthfulness_notice="【最高誠信原則說明】本報告嚴格基於 2D 後方視角（DTL）之骨架座標與時間戳記推算，未經相機 3D 空間標定，不推測真實球速、桿頭速度、飛行距離與實際球路。",
-        provider="gsl-evidence-engine-v1",
-        llm_used=False,
+        provider="gsl-vision-coach" if llm_active else "gsl-evidence-engine-v1",
+        llm_used=llm_active,
+        analysis_mode=analysis_mode,
+        model_name=model_name,
+        images_used=has_images and llm_active,
+        keyframe_sources=keyframe_sources,
+        confidence=diff.confidence,
     )

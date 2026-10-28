@@ -51,18 +51,22 @@ def test_reference_swings_catalog_17_clubs():
     for c in expected_clubs:
         assert c in club_types, f"缺少球桿分類: {c}"
 
-    # 驗證 7I 有標準示範影片
+    # 驗證 7I 為技術測試基準 (test_fixture，非職業標準，verified_club=False)
     club_7i = next(c for c in data["clubs"] if c["club_type"] == "7I")
     assert club_7i["status"] == "available"
     assert club_7i["reference_count"] >= 1
-    assert club_7i["default_reference"]["verified_club"] is True
+    assert club_7i["default_reference"]["reference_category"] == "test_fixture"
+    assert club_7i["default_reference"]["verified_club"] is False
+    assert club_7i["default_reference"]["is_verified_standard"] is False
     assert club_7i["default_reference"]["camera_angle"].lower() == "dtl"
 
-    # 驗證 Driver 為 close_up 特寫，verified_camera_angle 為 False
+    # 驗證 Driver 為普通參考素材 (ordinary_reference)，close_up 特寫，verified_camera_angle 為 False
     club_driver = next(c for c in data["clubs"] if c["club_type"] == "Driver")
     if club_driver["status"] == "available":
+        assert club_driver["default_reference"]["reference_category"] == "ordinary_reference"
         assert club_driver["default_reference"]["camera_angle"] == "close_up"
         assert club_driver["default_reference"]["verified_camera_angle"] is False
+        assert club_driver["default_reference"]["verified_club"] is False
 
     # 驗證尚無合法素材之球桿如 3W 狀態為 missing_reference
     club_3w = next(c for c in data["clubs"] if c["club_type"] == "3W")

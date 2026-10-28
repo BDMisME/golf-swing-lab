@@ -146,6 +146,10 @@ export interface DeepInsightReportItem {
   truthfulness_notice: string;
   provider: string;
   llm_used: boolean;
+  analysis_mode?: "multimodal_vision_ai" | "rule_based_advice";
+  model_name?: string;
+  images_used?: boolean;
+  keyframe_sources?: string[];
 }
 
 export function getAuthToken(): string | null {

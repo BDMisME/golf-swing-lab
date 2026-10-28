@@ -1,6 +1,45 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 10: Swing Comparison & Evidence-Based Coaching R2）
+## 最新修復狀態（Round 11: PR #2 Independent Audit Remediation — 解除 NO-GO 判定）
+1. **P0-A 立即處理驗收 Token 洩漏與金鑰輪替**：`PASS`
+   - **全面金鑰輪替**：產生全新 256-bit 密鑰並以 0600 存入 `~/.golfswinglab/session_secret`。
+   - **已知洩漏金鑰黑名單**：在 `apps/api/config.py` 中將洩漏密鑰 `c0600f9929e95b8562048f41bc87df58d184681b9de0a304cb131b3d705b2707` 加入 `KNOWN_LEAKED_SECRETS` 黑名單，若偵測到立即拋出 `RuntimeError` 拒絕啟動。
+   - **即時撤銷驗證**：實測以舊 Token 請求立即被拒絕並回傳 `401 AUTH_INVALID_SIGNATURE`。
+   - **全面敏感字串脫敏**：新增 `sanitize_url` 與 `sanitize_data`，將報告中所有 `?token=...` 自動替換為 `token=[REDACTED]`。
+   - **專項回歸測試**：新建 `tests/test_token_leak_prevention.py` 4 項測試（脫敏處理、文檔掃描不含 JWT、黑名單金鑰阻擋、舊 Token 401 拒絕）100% 通過。
+2. **P0-B 修正不實的 7I / Driver 職業標準素材**：`PASS`
+   - **移除虛假來源與宣稱**：徹底清除所有捏造的 "GSL Reference Player"、"WAX Golf 來源"、"GSL Benchmark License"。
+   - **誠實降級標記**：
+     - 將 7I 明確標記為 `reference_category="test_fixture"`、`verified_club=False`、`is_verified_standard=False`，僅作為工程測試基準。
+     - 將 Driver 標記為 `reference_category="ordinary_reference"`、`camera_angle="close_up"`、`verified_club=False`、`verified_camera_angle=False`，為一般公開打擊特寫。
+     - 其餘 15 種球桿誠實維持 `missing_reference`。
+3. **P0-C 雙影片流暢時鐘同步播放器**：`PASS`
+   - **雙影片同時播放**：徹底移除先前在 `timeupdate` 中每幀強制 `currentTime` seek 的黑屏與卡頓根因，實作真正的雙視訊同時起播。
+   - **時鐘同步控制器 (`PlaybackDriftController`)**：
+     - 漂移 `<= 60ms`：視為無感同步，保持播放速度。
+     - 漂移 `60ms ~ 250ms`：以 `playbackRate = 1.0 ± 0.08` 平滑微調追趕，杜絕 seek 解碼器重置黑畫面。
+     - 漂移 `> 250ms`：才執行關鍵幀 hard seek。
+   - **階段同步保護**：嚴格驗證事件完整性與時序單調性，缺失或時序反轉時安全降級並標記「時間正規化比較」。
+4. **P1-A 真實骨架自適應 Auto-Framing**：`PASS`
+   - **真實 2D 關鍵點驅動**：依據 MediaPipe 肩膀中點到骨盆中點的歐幾里得距離計算正規化軀幹長度，換算等比例縮放比（限制於 `[0.65, 1.65]`）。
+   - **角度不相容誠實降級**：當骨架關鍵點不足或視角為 `close_up` 特寫時，自動降級為「手動校準」，絕不宣稱自動對齊。
+5. **P1-B 參考庫治理與安全匯入**：`PASS`
+   - **資料庫遷移**：新增 Alembic 遷移檔 `0002_reference_swings_and_verification.py`，新增 `reference_category`, `is_verified_standard`, `verification_notes`, `source_type` 欄位。
+   - **安全匯入防護**：`/import-local` 限制白名單目錄、副檔名、檔案大小 `<= 500MB`、分塊計算 SHA256；無 events 時標記 `needs_calibration`，嚴禁百分比捏造時間碼。
+   - **Multipart 上傳**：新增 `POST /api/reference-swings/upload` 端點。
+6. **P1-C 動作差異分析與誠信修正**：`PASS`
+   - **幾何提示標籤**：無外部多模態模型時明確標記 `rule_based_advice`，按鈕顯示「📋 深入動作解析 (幾何提示)」，面板頂部揭露未調用多模態 AI 影像模型。
+   - **杜絕因果臆測**：移除薄擊、削頂、甜蜜點失準等強烈因果臆測；節奏比移除 3:1 為唯一標準之說法。
+7. **P1-D 17 種球桿參考庫管理規範**：`PASS`
+   - 更新 `docs/REFERENCE_CLUB_LIBRARY.md`，詳實記錄 17 球桿素材狀態與規範。
+8. **全鏈路驗收證據**：`PASS`
+   - 後端測試套件：**61/61 PASSED (100%)**。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
+   - WebKit 原生 GUI 驗收：`scripts/verify_webkit_comparison_and_coach.py` 6 大步驟全數 PASS，雙影片播放 currentTime 同步前進，產出安全脫敏報告 `docs/reports/swing_comparison_r2_report.json`。
+- **最後更新時間**：2026-10-29T00:43:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+
+## 前期重大里程碑狀態（Round 10: Swing Comparison & Evidence-Based Coaching R2）
 1. **P0 單球播放器修復與體驗升級**：`PASS`
    - **自然結束重播機制**：影片自然結束或進度條拖曳至末端後，點擊 Play 自動重設回 `start_ms / 1000` 並從頭流暢起播，解決舊版畫面卡死問題。
    - **顯著重播與循環控制**：新增顯著「↺ 重新播放 (Replay)」與「⟲ 循環播放 (Loop)」Toggle 按鈕（預設關閉，開啟時呈翡翠綠發光標記）。

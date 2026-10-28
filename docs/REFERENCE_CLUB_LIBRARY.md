@@ -12,25 +12,25 @@
 
 ## 一、17 種球桿支援分類與現行狀態總表
 
-| 球桿代碼 | 球桿名稱 | 類別 | 現行狀態 | 示範影片檔案 / 來源 | 視角與驗證狀態 | 授權狀態 | 揮桿時間同步支援 |
+| 球桿代碼 | 球桿名稱 | 類別 | 現行狀態 | 示範影片檔案 / 來源 | 視角與驗證狀態 | 示範類別與說明 | 揮桿時間同步支援 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Driver** | 1號木桿 | 木桿 | `available` (特寫) | `ref_driver_closeup.mp4` (Pexels 6541451) | Close-up (打擊特寫，非全身 DTL，`verified=false`) | Pexels License (免費商用) | 支援 Mode A 擊球對齊 (附視角警示) |
-| **3W** | 3號球道木桿 | 木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **5W** | 5號球道木桿 | 木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **3H** | 3號鐵木桿 / 混血桿 | 鐵木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **4H** | 4號鐵木桿 / 混血桿 | 鐵木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **5H** | 5號鐵木桿 / 混血桿 | 鐵木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **4I** | 4號長鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **5I** | 5號長鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **6I** | 6號中鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **7I** | 7號中鐵桿 | 鐵桿 | `available` (標準基準) | `ref_7i_dtl_standard.mp4` (GSL Benchmark) | DTL 全身 (1080x1920 60fps，`verified=true`) | GSL Benchmark License | 完整支援 Mode A 自然節奏與 Mode B 階段同步 |
-| **8I** | 8號中鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **9I** | 9號短鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **PW** | 劈起挖起桿 (Pitching Wedge) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **GW/AW** | 間隙/接近挖起桿 (Gap/Approach) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **SW** | 沙坑挖起桿 (Sand Wedge) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **LW** | 高拋挖起桿 (Lob Wedge) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
-| **Putter** | 推桿 | 推桿 | `missing_reference` | 待合法推桿 DTL 素材匯入 | 無 | 待授權 | 支援手動匯入與自訂時間碼 |
+| **Driver** | 1號木桿 | 木桿 | `available` (特寫) | `ref_driver_closeup.mp4` (Pexels 6541451) | Close-up (打擊特寫，非全身 DTL，`verified=false`) | `ordinary_reference` (一般公開特寫素材，非職業標準) | 支援自然節奏對齊 (附視角與未驗證警示) |
+| **3W** | 3號球道木桿 | 木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **5W** | 5號球道木桿 | 木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **3H** | 3號鐵木桿 / 混血桿 | 鐵木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **4H** | 4號鐵木桿 / 混血桿 | 鐵木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **5H** | 5號鐵木桿 / 混血桿 | 鐵木桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **4I** | 4號長鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **5I** | 5號長鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **6I** | 6號中鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **7I** | 7號中鐵桿 | 鐵桿 | `available` (技術測試基準) | `ref_7i_dtl_standard.mp4` (內部測試錄影) | DTL 全身 (1080x1920 60fps，`verified_club=false`, `is_verified_standard=false`) | `test_fixture` (僅供管線技術測試，非職業標準) | 支援 Mode A 自然節奏與 Mode B 階段同步 |
+| **8I** | 8號中鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **9I** | 9號短鐵桿 | 鐵桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **PW** | 劈起挖起桿 (Pitching Wedge) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **GW/AW** | 間隙/接近挖起桿 (Gap/Approach) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **SW** | 沙坑挖起桿 (Sand Wedge) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **LW** | 高拋挖起桿 (Lob Wedge) | 挖起桿 | `missing_reference` | 待合法 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
+| **Putter** | 推桿 | 推桿 | `missing_reference` | 待合法推桿 DTL 素材匯入 | 無 | 待授權匯入 (`needs_calibration`) | 支援手動匯入與自訂時間碼 |
 
 ---
 
@@ -68,9 +68,10 @@
 
 ---
 
-## 三、標準 7I DTL 示範基準素材規格
+## 三、7I 技術測試基準素材規格 (Test Fixture)
 
-已正式打包並內建於專案庫存：
+已正式打包並內建於專案庫存（僅作為工程管線技術測試與雙影片播放對齊之 baseline fixture，非職業教練標準）：
+- **素材類別**：`test_fixture`（`is_verified_standard=false`，`verified_club=false`）
 - **實體路徑**：`assets/reference_videos/ref_7i_dtl_standard.mp4`
 - **儲存物件鍵**：`reference_swings/7i/ref_7i_dtl_standard.mp4`
 - **SHA-256**：`080c98f98ec5172283a21644e5ce6c9b33a04a0e38685e1975e533036881938b`

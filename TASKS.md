@@ -4,6 +4,39 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 11: PR #2 Independent Audit Remediation (2026-10-29) — 解除 NO-GO 判定
+- [x] **P0-A：立即處理驗收 Token 洩漏與金鑰輪替**：
+  - 全新 256-bit 密鑰持久化存入 `~/.golfswinglab/session_secret` (0600)。
+  - 在 `apps/api/config.py` 的 `KNOWN_LEAKED_SECRETS` 加入洩漏密鑰 `c0600f9929e95b8562048f41bc87df58d184681b9de0a304cb131b3d705b2707`，啟動時主動阻擋防護。
+  - 驗證舊 Token 請求 `/api/reference-swings` 立即回傳 `401 AUTH_INVALID_SIGNATURE`。
+  - 新增 `sanitize_url` 與 `sanitize_data`，對所有驗收輸出與報告徹底脫敏（`token=[REDACTED]`）。
+  - 新增 `tests/test_token_leak_prevention.py` 4 項回歸防護測試，100% PASSED。
+- [x] **P0-B：修正不實的 7I / Driver 職業標準素材**：
+  - 徹底移除捏造的 "GSL Reference Player"、"WAX Golf 來源"、"GSL Benchmark License"。
+  - 將 7I 明確標記為 `reference_category="test_fixture"`、`verified_club=False`、`is_verified_standard=False`，作為管線技術測試基準。
+  - 將 Driver 標記為 `reference_category="ordinary_reference"`、`camera_angle="close_up"`、`verified_club=False`、`verified_camera_angle=False`。
+  - 其餘 15 種球桿誠實維持 `missing_reference`。
+- [x] **P0-C：真正修復雙影片同步播放**：
+  - 移除 `timeupdate` 中的硬 seek，改由雙影片同時起播與時鐘同步控制器 `PlaybackDriftController`。
+  - 漂移 `<= 60ms` 無感保持；`60ms ~ 250ms` 以 `playbackRate = 1.0 ± 0.08` 平滑微調追趕；`> 250ms` 才執行 hard seek。
+  - 階段同步模式嚴格驗證事件單調性與完整性，不符時安全降級並標示「時間正規化比較」。
+- [x] **P1-A：真正完成 Auto-Framing**：
+  - 依 MediaPipe 肩膀中點到骨盆中點之真實歐幾里得距離計算身體軀幹長度與縮放比（限制於 `[0.65, 1.65]`）。
+  - 關鍵點不足或特寫鏡頭時明確降級為「手動校準」，不宣稱自動對齊。
+- [x] **P1-B：修正 Reference Import 假完成狀態**：
+  - 資料庫遷移 `0002_reference_swings_and_verification.py` 擴充驗證欄位。
+  - `/import-local` 限制白名單目錄、副檔名、檔案大小 `<= 500MB`、分塊計算 SHA256；無 events 時標記 `needs_calibration`，嚴禁捏造時間碼。
+  - 新增 `POST /api/reference-swings/upload` Multipart 上傳端點。
+- [x] **P1-C：動作差異分析與誠信修正**：
+  - 幾何提示模式明確標記 `rule_based_advice`，UI 按鈕顯示「📋 深入動作解析 (幾何提示)」，面板頂部揭露未調用多模態 AI 影像模型。
+  - 杜絕薄擊、削頂、甜蜜點失準等因果臆測；節奏比移除 3:1 為唯一標準之說法。
+- [x] **P1-D：完成全部 17 種球桿示範素材管理**：
+  - 更新 `docs/REFERENCE_CLUB_LIBRARY.md`，詳實記錄 17 球桿素材狀態與規範。
+- [x] **全鏈路驗收與品質保證**：
+  - 後端測試：**61/61 PASSED (100%)**。
+  - 前端打包：Next.js 15.5.28 **9/9 靜態路由 build 0 錯誤**。
+  - WebKit 原生 GUI 驗收：`scripts/verify_webkit_comparison_and_coach.py` 6 步驟全數 PASS，雙影片播放 currentTime 同步前進，產出安全脫敏報告 `docs/reports/swing_comparison_r2_report.json`。
+
 ## Round 10: Swing Comparison & Evidence-Based Coaching R2 (2026-10-28)
 - [x] **P0：單球播放器修復與體驗升級**：
   - 實作自然結束或拖曳至尾端後點擊 Play 自動從起點 `start_ms / 1000` 重播，解決畫面卡住無法重播問題。

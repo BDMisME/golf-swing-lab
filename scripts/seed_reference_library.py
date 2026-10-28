@@ -156,60 +156,68 @@ def seed():
     storage = get_storage_service()
 
     with SessionLocal() as db:
-        # 1. 匯入 7I 示範影片
+        # 1. 匯入 7I 示範影片（真實來源：內部開發測試影片 11秒.mov 裁切素材）
         ref_7i_path = Path("assets/reference_videos/ref_7i_dtl_standard.mp4")
         if ref_7i_path.exists():
             raw_7i = ref_7i_path.read_bytes()
             sha_7i = hashlib.sha256(raw_7i).hexdigest()
             fps_7i, dur_7i, w_7i, h_7i = probe_file(ref_7i_path)
-            key_7i = "references/7i/standard_dtl_7iron.mp4"
+            key_7i = "references/7i/dev_fixture_dtl_7iron.mp4"
             storage.put_bytes(key_7i, raw_7i, "video/mp4")
 
-            # 檢查是否已存在
+            item_7i_data = {
+                "club_type": "7I",
+                "handedness": "right",
+                "camera_angle": "DTL",
+                "shot_type": "full_swing",
+                "title": "7號鐵桿技術測試素材 (7-Iron Dev Test Fixture)",
+                "reference_author": "內部開發測試員 (Dev Test Fixture)",
+                "source_url": "file://tests/fixtures/11秒.mov",
+                "content_license": "Internal Development Test Only",
+                "storage_key": key_7i,
+                "verified_club": False,  # 未經外部認證球桿
+                "verified_camera_angle": False,  # 未經專業標定視角
+                "analysis_status": "completed",
+                "reference_category": "test_fixture",
+                "is_verified_standard": False,
+                "verification_notes": "⚠️ 技術測試素材 (Test Fixture)：本素材由開發環境測試影片 11秒.mov 裁切而來，未經第三方專業教練標定與認證，僅供系統端到端同步比對與幾何計算功能測試，非職業教練標準揮桿示範。",
+                "source_type": "local_fixture",
+                "fps": fps_7i,
+                "duration_ms": dur_7i,
+                "sha256": sha_7i,
+                "event_timestamps": {
+                    "address": 433,
+                    "takeaway": 900,
+                    "top": 1533,
+                    "downswing": 1716,
+                    "impact": 1900,
+                    "follow_through": 2300,
+                    "finish": 4633,
+                },
+                "pose_artifact": {},
+                "calibration_params": {
+                    "scale": 1.0,
+                    "zoom": 1.0,
+                    "offset_x": 0,
+                    "offset_y": 0,
+                    "video_width": w_7i,
+                    "video_height": h_7i,
+                    "torso_length": 115.0,
+                },
+                "is_default": True,
+                "notes": "開發用技術測試素材，包含完整全身入鏡與 9 階段時間標記，僅供系統同步功能研發測試",
+            }
+
             existing_7i = db.query(ReferenceSwing).filter(ReferenceSwing.club_type == "7I").first()
             if not existing_7i:
-                item_7i = ReferenceSwing(
-                    club_type="7I",
-                    handedness="right",
-                    camera_angle="DTL",
-                    shot_type="full_swing",
-                    title="7號鐵桿標準後方視角示範 (7-Iron DTL Reference)",
-                    reference_author="GSL Reference Player (DTL 7-Iron)",
-                    source_url="https://waxgolf.com/2023/08/22/the-vertical-swing-the-setup-7-iron-dtl/",
-                    content_license="GSL Benchmark License (Verified DTL)",
-                    storage_key=key_7i,
-                    verified_club=True,
-                    verified_camera_angle=True,
-                    analysis_status="completed",
-                    fps=fps_7i,
-                    duration_ms=dur_7i,
-                    sha256=sha_7i,
-                    event_timestamps={
-                        "address": 433,
-                        "takeaway": 900,
-                        "top": 1533,
-                        "downswing": 1716,
-                        "impact": 1900,
-                        "follow_through": 2300,
-                        "finish": 4633,
-                    },
-                    pose_artifact={},
-                    calibration_params={
-                        "scale": 1.0,
-                        "zoom": 1.0,
-                        "offset_x": 0,
-                        "offset_y": 0,
-                        "video_width": w_7i,
-                        "video_height": h_7i,
-                        "torso_length": 115.0,
-                    },
-                    is_default=True,
-                    notes="官方基準示範：完整全身入鏡，包含清晰脊柱前傾、轉肩上桿與收桿平衡",
-                )
-                db.add(item_7i)
-                logger.info("已新增 7I 示範影片")
+                db.add(ReferenceSwing(**item_7i_data))
+                logger.info("已新增 7I 技術測試素材")
+            else:
+                for k, v in item_7i_data.items():
+                    setattr(existing_7i, k, v)
+                logger.info("已更新 7I 技術測試素材真實標註")
 
-        # 2. 匯入 Driver 桿頭特寫示範影片 (標註非 DTL 視角限制)
+        # 2. 匯入 Driver 桿頭特寫示範影片（真實來源：Pexels 6541451，標註非 DTL 視角限制）
         ref_driver_path = Path("assets/reference_videos/ref_driver_closeup.mp4")
         if ref_driver_path.exists():
             raw_drv = ref_driver_path.read_bytes()
@@ -218,48 +226,57 @@ def seed():
             key_drv = "references/driver/pexels_driver_6541451.mp4"
             storage.put_bytes(key_drv, raw_drv, "video/mp4")
 
+            item_drv_data = {
+                "club_type": "Driver",
+                "handedness": "right",
+                "camera_angle": "close_up",
+                "shot_type": "full_swing",
+                "title": "開球木桿打擊區特寫 (Driver Strike Close-up)",
+                "reference_author": "Pexels 創作者 (ID: 6541451)",
+                "source_url": "https://www.pexels.com/video/person-hitting-golf-ball-with-driver-6541451/",
+                "content_license": "Pexels Free License",
+                "storage_key": key_drv,
+                "verified_club": False,  # 未經客觀查證球桿號數
+                "verified_camera_angle": False,  # 非 DTL 視角
+                "analysis_status": "completed",
+                "reference_category": "ordinary_reference",
+                "is_verified_standard": False,
+                "verification_notes": "⚠️ 局部打擊區特寫 (Close-up)：本影片僅含打擊區與桿面擊球特寫，缺乏全身 DTL 鏡頭，不可用於身體 2D 關節角度比較，僅供擊球區視覺測試。",
+                "source_type": "external_licensed",
+                "fps": fps_drv,
+                "duration_ms": dur_drv,
+                "sha256": sha_drv,
+                "event_timestamps": {
+                    "address": 500,
+                    "takeaway": 1200,
+                    "top": 2100,
+                    "downswing": 2350,
+                    "impact": 2500,
+                    "follow_through": 3100,
+                    "finish": 4200,
+                },
+                "pose_artifact": {},
+                "calibration_params": {
+                    "scale": 1.0,
+                    "zoom": 1.0,
+                    "offset_x": 0,
+                    "offset_y": 0,
+                    "video_width": w_drv,
+                    "video_height": h_drv,
+                    "torso_length": 80.0,
+                },
+                "is_default": True,
+                "notes": "注意：本影片為打擊區擊球特寫，非全身 DTL 鏡頭，不可用於身體 2D 關節角度比較",
+            }
+
             existing_drv = db.query(ReferenceSwing).filter(ReferenceSwing.club_type == "Driver").first()
             if not existing_drv:
-                item_drv = ReferenceSwing(
-                    club_type="Driver",
-                    handedness="right",
-                    camera_angle="close_up",
-                    shot_type="full_swing",
-                    title="開球木桿桿面擊球特寫示範 (Driver Strike Close-up)",
-                    reference_author="Pexels Sports Video Collection",
-                    source_url="https://www.pexels.com/video/person-hitting-golf-ball-with-driver-6541451/",
-                    content_license="Pexels License (Free to use, Commercial & Personal)",
-                    storage_key=key_drv,
-                    verified_club=True,
-                    verified_camera_angle=False,  # 非 DTL 視角，發出角度警示
-                    analysis_status="completed",
-                    fps=fps_drv,
-                    duration_ms=dur_drv,
-                    sha256=sha_drv,
-                    event_timestamps={
-                        "address": 500,
-                        "takeaway": 1200,
-                        "top": 2100,
-                        "downswing": 2350,
-                        "impact": 2500,
-                        "follow_through": 3100,
-                        "finish": 4200,
-                    },
-                    pose_artifact={},
-                    calibration_params={
-                        "scale": 1.0,
-                        "zoom": 1.0,
-                        "offset_x": 0,
-                        "offset_y": 0,
-                        "video_width": w_drv,
-                        "video_height": h_drv,
-                        "torso_length": 80.0,
-                    },
-                    is_default=True,
-                    notes="注意：本影片為擊球打擊區與桿頭特寫，非全身 DTL 鏡頭，不可用於身體 2D 關節角度比較",
-                )
-                db.add(item_drv)
-                logger.info("已新增 Driver 示範影片 (標記視角限制)")
+                db.add(ReferenceSwing(**item_drv_data))
+                logger.info("已新增 Driver 擊球特寫素材")
+            else:
+                for k, v in item_drv_data.items():
+                    setattr(existing_drv, k, v)
+                logger.info("已更新 Driver 擊球特寫素材真實標註")
 
         db.commit()
         logger.info("示範揮桿資料庫種子完成！")

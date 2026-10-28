@@ -833,11 +833,15 @@ export default function SwingDetailPage() {
                         {isAnalyzing ? (
                           <>
                             <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-300 border-t-transparent" />
-                            <span>Vision AI 解讀中...</span>
+                            <span>運動學解析中...</span>
                           </>
                         ) : (
                           <>
-                            <span>🔍 深入分析此差異 (Vision AI)</span>
+                            <span>
+                              {deepInsight?.diff_id === diff.id && deepInsight.analysis_mode === "multimodal_vision_ai"
+                                ? "🔍 深入分析此差異 (Vision AI)"
+                                : "📋 深入動作解析 (幾何提示)"}
+                            </span>
                           </>
                         )}
                       </button>
@@ -847,9 +851,20 @@ export default function SwingDetailPage() {
                     {isDeepOpen && deepInsight && (
                       <div className="mt-3 space-y-2.5 rounded-xl border border-indigo-800/60 bg-gradient-to-b from-[#101426] to-[#0a0d18] p-3.5 text-xs text-gray-200 animate-fadeIn">
                         <div className="flex items-center justify-between border-b border-indigo-900/40 pb-2">
-                          <strong className="text-indigo-300 text-sm flex items-center gap-1.5">
-                            <span>🔬 運動學深度解析報告</span>
-                          </strong>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <strong className="text-indigo-300 text-sm flex items-center gap-1.5">
+                              <span>🔬 運動學深度解析報告</span>
+                            </strong>
+                            {deepInsight.analysis_mode === "multimodal_vision_ai" ? (
+                              <span className="rounded bg-emerald-950/70 border border-emerald-700/60 px-2 py-0.5 text-[10px] text-emerald-300 font-semibold">
+                                ● 多模態 Vision AI 檢測 ({deepInsight.model_name})
+                              </span>
+                            ) : (
+                              <span className="rounded bg-cyan-950/70 border border-cyan-800/60 px-2 py-0.5 text-[10px] text-cyan-300 font-semibold">
+                                ℹ️ 規則式幾何運動學引擎生成 (未調用多模態 AI 影像模型)
+                              </span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => setDeepInsight(null)}

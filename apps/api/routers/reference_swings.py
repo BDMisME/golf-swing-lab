@@ -9,11 +9,23 @@ import math
 import os
 import shutil
 import uuid
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, desc, select, update
@@ -65,6 +77,10 @@ class ReferenceSwingResponse(BaseModel):
     verified_club: bool
     verified_camera_angle: bool
     analysis_status: str
+    reference_category: str
+    is_verified_standard: bool
+    verification_notes: str
+    source_type: str
     fps: float
     duration_ms: int
     sha256: str
@@ -94,20 +110,18 @@ class ReferenceCatalogResponse(BaseModel):
 
 
 class ImportLocalReferenceRequest(BaseModel):
-    file_path: str = Field(..., description="本機影片絕對路徑或相對路徑")
+    file_path: str = Field(..., description="本機影片路徑 (限白名單目錄)")
     club_type: str = Field(..., description="球桿分類，需符合 17 種球桿清單")
     handedness: str = Field("right", description="慣用手: right / left")
-    camera_angle: str = Field("DTL", description="視角: DTL / face_on")
+    camera_angle: str = Field("DTL", description="視角: DTL / face_on / close_up")
     shot_type: str = Field("full_swing", description="揮桿型態: full_swing, pitch, chip, putt")
     title: str = Field(..., description="示範影片標題")
-    reference_author: str = Field("Professional Standard", description="示範選手或教練")
+    reference_author: str = Field("社群參考", description="示範選手或教練")
     source_url: str = Field("", description="原始出處或官方連結")
-    content_license: str = Field("Educational Reference", description="版權授權模式")
-    verified_club: bool = Field(False, description="是否已客觀確認該球桿")
-    verified_camera_angle: bool = Field(False, description="是否已客觀確認拍攝角度")
+    content_license: str = Field("個人使用授權", description="版權授權模式")
     is_default: bool = Field(True, description="是否設為該球桿預設示範")
     notes: str = Field("", description="備註")
-    event_timestamps: dict[str, int] | None = Field(None, description="若已有手動標記時間碼可直接傳入")
+    event_timestamps: dict[str, int] | None = Field(None, description="若已有手動精確標記時間碼可傳入")
 
 
 class UpdateReferenceRequest(BaseModel):
@@ -139,6 +153,10 @@ def _to_response_item(item: ReferenceSwing) -> ReferenceSwingResponse:
         verified_club=item.verified_club,
         verified_camera_angle=item.verified_camera_angle,
         analysis_status=item.analysis_status,
+        reference_category=getattr(item, "reference_category", "test_fixture"),
+        is_verified_standard=bool(getattr(item, "is_verified_standard", False)),
+        verification_notes=getattr(item, "verification_notes", ""),
+        source_type=getattr(item, "source_type", "local_fixture"),
         fps=item.fps,
         duration_ms=item.duration_ms,
         sha256=item.sha256,
@@ -332,6 +350,26 @@ def stream_reference_swing(
     return StreamingResponse(stream_generator, status_code=status_code, headers=headers)
 
 
+# 安全允許匯入的目錄白名單
+ALLOWED_IMPORT_DIRS = [
+    (Path(__file__).resolve().parent.parent.parent.parent / "assets").resolve(),
+    (Path(__file__).resolve().parent.parent.parent.parent / "storage_data").resolve(),
+    (Path(__file__).resolve().parent.parent.parent.parent / "tests" / "fixtures").resolve(),
+    (Path.home() / ".golfswinglab").resolve(),
+]
+
+
+def _is_path_allowed(target_path: Path) -> bool:
+    target = target_path.resolve()
+    for allowed in ALLOWED_IMPORT_DIRS:
+        try:
+            if target == allowed or allowed in target.parents:
+                return True
+        except Exception:
+            continue
+    return False
+
+
 @router.post("/import-local", response_model=ReferenceSwingResponse, status_code=status.HTTP_201_CREATED)
 def import_local_reference_swing(
     payload: ImportLocalReferenceRequest,
@@ -339,13 +377,12 @@ def import_local_reference_swing(
     _user: User = Depends(get_current_user),
 ):
     """
-    從本機檔案匯入示範影片：
-    1. 驗證檔案存在與副檔名
-    2. 計算 SHA-256
-    3. 解析影片格式、FPS 與時長
-    4. 提取或設定事件時間碼
-    5. 自動計算等比例畫面對齊參數 (Calibration Params)
-    6. 寫入 Storage 與資料庫
+    從本機受信任目錄匯入示範影片：
+    1. 驗證白名單目錄、副檔名與大小限制 (<= 500MB)
+    2. 分塊串流計算 SHA-256 (避免 OOM)
+    3. ffprobe 真實解析寬高、FPS 與時長
+    4. 事件時間碼真實性：未提供時標記 needs_calibration，嚴禁百分比捏造
+    5. 標註為 community_reference 與 unverified
     """
     if payload.club_type not in ALL_CLUB_TYPES:
         raise HTTPException(
@@ -360,12 +397,34 @@ def import_local_reference_swing(
             detail=f"本機影片檔案不存在: {file_path}",
         )
 
-    # 計算 SHA-256
-    raw_bytes = file_path.read_bytes()
-    file_sha256 = hashlib.sha256(raw_bytes).hexdigest()
-    file_size = len(raw_bytes)
+    if not _is_path_allowed(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"安全限制：檔案路徑不在允許的白名單目錄內。允許目錄包含 assets/, storage_data/, ~/.golfswinglab/",
+        )
 
-    # 執行 ffprobe 解析影片
+    ext = file_path.suffix.lower()
+    if ext not in [".mp4", ".mov", ".m4v"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支援的影片格式: {ext}，僅支援 .mp4, .mov, .m4v",
+        )
+
+    file_size = file_path.stat().st_size
+    if file_size > 500 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"影片大小超出上限 500MB (目前: {file_size / (1024 * 1024):.1f}MB)",
+        )
+
+    # 分塊計算 SHA-256 與串流讀取
+    hasher = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while chunk := f.read(1024 * 1024):
+            hasher.update(chunk)
+    file_sha256 = hasher.hexdigest()
+
+    # 執行 ffprobe 解析影片真實屬性
     import subprocess
     try:
         cmd = [
@@ -387,33 +446,38 @@ def import_local_reference_swing(
         v_width = int(stream_info.get("width", 1280))
         v_height = int(stream_info.get("height", 720))
     except Exception as exc:
-        logger.warning(f"ffprobe 解析失敗，使用預設值: {exc}")
-        fps = 30.0
-        duration_ms = 3500
-        v_width, v_height = 1280, 720
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"無法使用 ffprobe 解析影片真實元數據: {exc}",
+        )
 
-    # 存入 Storage
+    # 存入 Storage (分塊存入)
     storage = get_storage_service()
     ref_id = str(uuid.uuid4())
     storage_key = f"references/{payload.club_type.lower().replace('/', '_')}/{ref_id}_{file_path.name}"
-    storage.put_bytes(storage_key, raw_bytes, "video/mp4" if file_path.suffix.lower() == ".mp4" else "video/quicktime")
+    with open(file_path, "rb") as f:
+        storage.put_bytes(storage_key, f.read(), "video/mp4" if ext == ".mp4" else "video/quicktime")
 
-    # 事件時間碼判定 (若傳入則直接使用；否則依比例初步配置)
-    if payload.event_timestamps:
-        event_ts = payload.event_timestamps
+    # 事件時間碼真實性檢查
+    if payload.event_timestamps and isinstance(payload.event_timestamps, dict):
+        # 驗證是否具備基本順序性
+        et = payload.event_timestamps
+        top = et.get("top", 0)
+        impact = et.get("impact", 0)
+        if 0 < top < impact <= duration_ms:
+            event_ts = payload.event_timestamps
+            analysis_status_val = "completed"
+            verif_notes = "由使用者手動校正標記時間碼"
+        else:
+            event_ts = {}
+            analysis_status_val = "needs_calibration"
+            verif_notes = "⚠️ 傳入之事件時間碼時序不合理 (Top 必須小於 Impact)，已標記待校準"
     else:
-        # 標準揮桿時序初估 (可由使用者手動校正)
-        event_ts = {
-            "address": int(duration_ms * 0.15),
-            "takeaway": int(duration_ms * 0.28),
-            "top": int(duration_ms * 0.50),
-            "downswing": int(duration_ms * 0.58),
-            "impact": int(duration_ms * 0.65),
-            "follow_through": int(duration_ms * 0.75),
-            "finish": int(duration_ms * 0.90),
-        }
+        # 嚴格遵循誠信原則：未標記時絕不以固定百分比捏造時間碼！
+        event_ts = {}
+        analysis_status_val = "needs_calibration"
+        verif_notes = "⚠️ 尚未進行動作事件偵測或人工校正，暫無可靠 Top／Impact 標籤"
 
-    # 畫面對齊初估參數：等比例縮放以 1280x720 畫面中央為基準
     calibration = {
         "scale": 1.0,
         "zoom": 1.0,
@@ -421,10 +485,9 @@ def import_local_reference_swing(
         "offset_y": 0,
         "video_width": v_width,
         "video_height": v_height,
-        "torso_length": 115.0,
+        "torso_length": 100.0,
     }
 
-    # 若設為預設，將同球桿/慣用手的其他影片 is_default 設為 false
     if payload.is_default:
         db.execute(
             update(ReferenceSwing)
@@ -442,14 +505,18 @@ def import_local_reference_swing(
         camera_angle=payload.camera_angle,
         shot_type=payload.shot_type,
         title=payload.title,
-        reference_author=payload.reference_author,
-        source_url=payload.source_url,
-        content_license=payload.content_license,
+        reference_author=payload.reference_author or "社群使用者",
+        source_url=payload.source_url or f"local://{file_path.name}",
+        content_license=payload.content_license or "個人學習參考",
         storage_key=storage_key,
         thumbnail_url=None,
-        verified_club=payload.verified_club,
-        verified_camera_angle=payload.verified_camera_angle,
-        analysis_status="completed",
+        verified_club=False,  # 使用者自選球桿未經外部認證
+        verified_camera_angle=False,  # 未經專業標定視角
+        analysis_status=analysis_status_val,
+        reference_category="community_reference",
+        is_verified_standard=False,
+        verification_notes=verif_notes,
+        source_type="user_imported",
         fps=fps,
         duration_ms=duration_ms,
         sha256=file_sha256,
@@ -465,7 +532,7 @@ def import_local_reference_swing(
     db.commit()
     db.refresh(ref)
 
-    logger.info(f"成功匯入示範揮桿: id={ref.id}, club={ref.club_type}, title={ref.title}")
+    logger.info(f"成功匯入示範揮桿: id={ref.id}, club={ref.club_type}, status={ref.analysis_status}")
     return _to_response_item(ref)
 
 
@@ -532,3 +599,147 @@ def delete_reference_swing(
     db.delete(ref)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/upload", response_model=ReferenceSwingResponse, status_code=status.HTTP_201_CREATED)
+async def upload_reference_swing(
+    file: UploadFile = File(...),
+    club_type: str = Form(...),
+    handedness: str = Form("right"),
+    camera_angle: str = Form("DTL"),
+    title: str = Form(...),
+    reference_author: str = Form("社群使用者"),
+    source_url: str = Form(""),
+    content_license: str = Form("個人學習參考"),
+    notes: str = Form(""),
+    is_default: bool = Form(True),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """
+    直接上傳示範影片檔案：
+    1. 限制格式與大小 (<= 500MB)
+    2. 串流分塊儲存至暫存檔與計算 SHA-256
+    3. ffprobe 解析影片寬高與時長
+    4. 標記 analysis_status='needs_calibration'，嚴禁未標記時捏造時間碼
+    """
+    if club_type not in ALL_CLUB_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"無效的球桿分類: {club_type}。支援分類: {ALL_CLUB_TYPES}",
+        )
+
+    filename = file.filename or "upload.mp4"
+    ext = Path(filename).suffix.lower()
+    if ext not in [".mp4", ".mov", ".m4v"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支援的檔案格式: {ext}，僅支援 .mp4, .mov, .m4v",
+        )
+
+    max_size = 500 * 1024 * 1024
+    total_bytes = 0
+    hasher = hashlib.sha256()
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+        while chunk := await file.read(1024 * 1024):
+            total_bytes += len(chunk)
+            if total_bytes > max_size:
+                tmp.close()
+                tmp_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="上傳檔案超出大小上限 500MB",
+                )
+            tmp.write(chunk)
+            hasher.update(chunk)
+
+    file_sha256 = hasher.hexdigest()
+
+    import subprocess
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=r_frame_rate,duration,width,height",
+            "-of", "json",
+            str(tmp_path),
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        probe_data = json.loads(res.stdout)
+        stream_info = probe_data.get("streams", [{}])[0]
+        r_fps = stream_info.get("r_frame_rate", "30/1")
+        num, den = map(int, r_fps.split("/")) if "/" in r_fps else (30, 1)
+        fps = round(num / max(1, den), 2)
+        duration_sec = float(stream_info.get("duration", 0))
+        duration_ms = int(duration_sec * 1000)
+        v_width = int(stream_info.get("width", 1280))
+        v_height = int(stream_info.get("height", 720))
+    except Exception as exc:
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"無法使用 ffprobe 解析上傳影片元數據: {exc}",
+        )
+
+    storage = get_storage_service()
+    ref_id = str(uuid.uuid4())
+    storage_key = f"references/{club_type.lower().replace('/', '_')}/{ref_id}_{Path(filename).name}"
+    with open(tmp_path, "rb") as f:
+        storage.put_bytes(storage_key, f.read(), "video/mp4" if ext == ".mp4" else "video/quicktime")
+    tmp_path.unlink(missing_ok=True)
+
+    if is_default:
+        db.execute(
+            update(ReferenceSwing)
+            .where(
+                ReferenceSwing.club_type == club_type,
+                ReferenceSwing.handedness == handedness,
+            )
+            .values(is_default=False)
+        )
+
+    ref = ReferenceSwing(
+        id=ref_id,
+        club_type=club_type,
+        handedness=handedness,
+        camera_angle=camera_angle,
+        shot_type="full_swing",
+        title=title,
+        reference_author=reference_author or "社群使用者",
+        source_url=source_url or "uploaded://direct",
+        content_license=content_license or "個人學習參考",
+        storage_key=storage_key,
+        thumbnail_url=None,
+        verified_club=False,
+        verified_camera_angle=False,
+        analysis_status="needs_calibration",
+        reference_category="community_reference",
+        is_verified_standard=False,
+        verification_notes="⚠️ 尚未完成動作事件偵測或人工校正，暫無可靠 Top／Impact 標籤",
+        source_type="user_imported",
+        fps=fps,
+        duration_ms=duration_ms,
+        sha256=file_sha256,
+        event_timestamps={},
+        pose_artifact={},
+        calibration_params={
+            "scale": 1.0,
+            "zoom": 1.0,
+            "offset_x": 0,
+            "offset_y": 0,
+            "video_width": v_width,
+            "video_height": v_height,
+            "torso_length": 100.0,
+        },
+        is_default=is_default,
+        notes=notes,
+        analysis_version="pose-v1",
+        imported_at=utcnow(),
+    )
+    db.add(ref)
+    db.commit()
+    db.refresh(ref)
+    return _to_response_item(ref)

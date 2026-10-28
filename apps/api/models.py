@@ -470,7 +470,11 @@ class ReferenceSwing(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     verified_club: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     verified_camera_angle: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    analysis_status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)  # completed, missing_reference, pending, failed
+    analysis_status: Mapped[str] = mapped_column(String(32), default="pending_analysis", nullable=False)  # completed, missing_reference, pending_analysis, needs_calibration, failed
+    reference_category: Mapped[str] = mapped_column(String(32), default="test_fixture", nullable=False)  # professional_standard, community_reference, test_fixture
+    is_verified_standard: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    verification_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), default="local_fixture", nullable=False)  # local_fixture, external_licensed, user_imported
     fps: Mapped[float] = mapped_column(Float, default=30.0, nullable=False)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, default="")

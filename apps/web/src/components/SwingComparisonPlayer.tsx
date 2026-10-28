@@ -9,8 +9,11 @@ import {
   SwingSegmentItem,
 } from "@/lib/api";
 import {
+  AutoFramingResult,
   ComparisonLayout,
   FramingCalibration,
+  PlaybackDriftController,
+  PoseLandmarks,
   SwingSynchronizationEngine,
   SwingTimingTimeline,
   SyncAnchor,
@@ -32,6 +35,10 @@ export interface ReferenceSwingData {
   verified_club: boolean;
   verified_camera_angle: boolean;
   analysis_status: string;
+  reference_category: "professional_standard" | "community_reference" | "test_fixture";
+  is_verified_standard: boolean;
+  verification_notes: string;
+  source_type: string;
   fps: number;
   duration_ms: number;
   sha256: string;
@@ -69,81 +76,111 @@ export function SwingComparisonPlayer({
   defaultClub = "7I",
   onClose,
 }: SwingComparisonPlayerProps) {
-  // 影片 refs
-  const userVideoRef = useRef<HTMLVideoElement | null>(null);
-  const refVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  // 狀態
+  // 1. 目錄與球桿選擇狀態
+  const [clubsCatalog, setClubsCatalog] = useState<ClubCatalogItem[]>([]);
   const [selectedClub, setSelectedClub] = useState<string>(defaultClub);
-  const [catalog, setCatalog] = useState<ClubCatalogItem[]>([]);
   const [refSwing, setRefSwing] = useState<ReferenceSwingData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  // 2. 佈局與播放控制狀態
+  const [layout, setLayout] = useState<ComparisonLayout>("side_by_side");
   const [syncMode, setSyncMode] = useState<SyncMode>("real_time");
   const [syncAnchor, setSyncAnchor] = useState<SyncAnchor>("impact");
-  const [layout, setLayout] = useState<ComparisonLayout>("side_by_side");
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [manualOffsetMs, setManualOffsetMs] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isLooping, setIsLooping] = useState<boolean>(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [ghostOpacity, setGhostOpacity] = useState<number>(0.5);
 
-  // 時間追蹤
+  // 3. 畫面對齊 (Auto-Framing & Manual Calibration)
+  const [calibration, setCalibration] = useState<FramingCalibration>({
+    scale: 1.0,
+    zoom: 1.0,
+    offsetX: 0,
+    offsetY: 0,
+  });
+  const [autoFramingStatus, setAutoFramingStatus] = useState<AutoFramingResult | null>(null);
+
+  // 4. 當前播放時間 (ms)
   const [userCurrentMs, setUserCurrentMs] = useState<number>(userSwing.start_ms);
   const [refCurrentMs, setRefCurrentMs] = useState<number>(0);
 
-  // 畫面校正
-  const [refZoom, setRefZoom] = useState<number>(1.0);
-  const [refOffsetX, setRefOffsetX] = useState<number>(0);
-  const [refOffsetY, setRefOffsetY] = useState<number>(0);
+  // 5. 影片 Element 參照
+  const userVideoRef = useRef<HTMLVideoElement | null>(null);
+  const refVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 手動匯入 Modal
+  // 6. 手動匯入 / 上傳 Modal 狀態
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
+  const [importMode, setImportMode] = useState<"path" | "file">("file");
   const [importFilePath, setImportFilePath] = useState<string>("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [importTitle, setImportTitle] = useState<string>("");
-  const [importAuthor, setImportAuthor] = useState<string>("Professional Standard");
+  const [importAuthor, setImportAuthor] = useState<string>("社群使用者");
+  const [importLicense, setImportLicense] = useState<string>("個人學習參考");
   const [importSourceUrl, setImportSourceUrl] = useState<string>("");
-  const [importLicense, setImportLicense] = useState<string>("Educational Reference");
-  const [importNotes, setImportNotes] = useState<string>("");
   const [importing, setImporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  // 1. 載入示範揮桿目錄與指定球桿影片
-  const loadCatalogAndReference = useCallback(async (club: string) => {
-    setLoading(true);
+  // 7. 載入 17 種球桿目錄與當前球桿示範影片
+  const fetchCatalog = useCallback(async () => {
     try {
-      const catRes = await apiFetch<{
-        clubs: ClubCatalogItem[];
-        references: ReferenceSwingData[];
-      }>("/api/reference-swings");
-      setCatalog(catRes.clubs);
+      setLoading(true);
+      setCatalogError(null);
+      const res = await apiFetch<{ clubs: ClubCatalogItem[]; references: ReferenceSwingData[] }>(
+        "/api/reference-swings"
+      );
+      setClubsCatalog(res.clubs || []);
 
-      // 取得該球桿示範影片
-      const clubInfo = catRes.clubs.find((c) => c.club_type === club);
-      if (clubInfo && clubInfo.default_reference) {
-        const cal = clubInfo.default_reference.calibration_params;
-        setRefSwing(clubInfo.default_reference);
-        setRefZoom(cal?.zoom ?? 1.0);
-        setRefOffsetX(cal?.offsetX ?? cal?.offset_x ?? 0);
-        setRefOffsetY(cal?.offsetY ?? cal?.offset_y ?? 0);
+      const currentItem = res.clubs.find((c) => c.club_type === selectedClub);
+      if (currentItem && currentItem.default_reference) {
+        setRefSwing(currentItem.default_reference);
+        const cal = currentItem.default_reference.calibration_params;
+        setCalibration({
+          scale: cal?.scale ?? 1.0,
+          zoom: cal?.zoom ?? 1.0,
+          offsetX: cal?.offsetX ?? cal?.offset_x ?? 0,
+          offsetY: cal?.offsetY ?? cal?.offset_y ?? 0,
+        });
       } else {
         setRefSwing(null);
       }
-    } catch (err) {
-      console.error("載入示範揮桿資料庫失敗:", err);
+    } catch (err: any) {
+      setCatalogError(err.message || "載入示範揮桿目錄失敗");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedClub]);
 
   useEffect(() => {
-    loadCatalogAndReference(selectedClub);
-  }, [selectedClub, loadCatalogAndReference]);
+    fetchCatalog();
+  }, [fetchCatalog]);
 
-  // 2. 構建時間軸 Timelines
+  // 切換球桿
+  const handleSelectClub = (club: string) => {
+    setSelectedClub(club);
+    const item = clubsCatalog.find((c) => c.club_type === club);
+    if (item && item.default_reference) {
+      setRefSwing(item.default_reference);
+      const cal = item.default_reference.calibration_params;
+      setCalibration({
+        scale: cal?.scale ?? 1.0,
+        zoom: cal?.zoom ?? 1.0,
+        offsetX: cal?.offsetX ?? cal?.offset_x ?? 0,
+        offsetY: cal?.offsetY ?? cal?.offset_y ?? 0,
+      });
+    } else {
+      setRefSwing(null);
+    }
+  };
+
+  // 建立兩方時間軸對照模型
   const userTimeline = useMemo<SwingTimingTimeline>(() => {
     const evMap: Record<string, number> = {};
-    for (const ev of userSwing.events || []) {
-      evMap[ev.event_name] = ev.time_ms;
-    }
+    (userSwing.events || []).forEach((e) => {
+      evMap[e.event_name] = e.time_ms;
+    });
+
     const startMs = userSwing.start_ms;
     const endMs = userSwing.end_ms;
     const addr = evMap["address"] || startMs;
@@ -186,17 +223,24 @@ export function SwingComparisonPlayer({
     return {
       startMs: 0,
       endMs: dur,
-      addressMs: ts["address"] || Math.round(dur * 0.15),
-      takeawayMs: ts["takeaway"] || Math.round(dur * 0.28),
-      topMs: ts["top"] || Math.round(dur * 0.5),
-      downswingMs: ts["downswing"] || Math.round(dur * 0.58),
-      impactMs: ts["impact"] || Math.round(dur * 0.65),
-      followThroughMs: ts["follow_through"] || Math.round(dur * 0.75),
-      finishMs: ts["finish"] || Math.round(dur * 0.9),
+      addressMs: ts["address"] || 0,
+      takeawayMs: ts["takeaway"] || 0,
+      topMs: ts["top"] || 0,
+      downswingMs: ts["downswing"] || 0,
+      impactMs: ts["impact"] || 0,
+      followThroughMs: ts["follow_through"] || 0,
+      finishMs: ts["finish"] || 0,
     };
   }, [refSwing]);
 
-  // 3. 視角相容性檢核
+  // 檢核 Phase Sync 是否合法（若示範片無事件標籤，強制降級為 real_time）
+  const phaseValidation = useMemo(() => {
+    return SwingSynchronizationEngine.validatePhaseTimeline(refTimeline);
+  }, [refTimeline]);
+
+  const isPhaseSyncValid = phaseValidation.valid;
+
+  // 視角相容性檢核
   const angleCheck = useMemo(() => {
     if (!refSwing) return { compatible: true };
     return SwingSynchronizationEngine.checkAngleCompatibility(
@@ -205,109 +249,149 @@ export function SwingComparisonPlayer({
     );
   }, [refSwing]);
 
-  // 4. 同步時間映射核心邏輯
-  const syncRefToUser = useCallback(
+  // 2D 姿態驅動 Auto-Framing
+  useEffect(() => {
+    if (!refSwing) {
+      setAutoFramingStatus(null);
+      return;
+    }
+
+    const userPose = (userSwing.keyframes?.[0]?.landmarks as PoseLandmarks) || null;
+    const refPose = (refSwing.pose_artifact?.landmarks as PoseLandmarks) || null;
+
+    const result = SwingSynchronizationEngine.computeAutoFramingFromPose(
+      userPose,
+      refPose,
+      "DTL",
+      refSwing.camera_angle
+    );
+    setAutoFramingStatus(result);
+
+    if (result.status === "auto_computed") {
+      setCalibration((prev) => ({
+        ...prev,
+        scale: result.scale,
+        offsetX: result.offsetX,
+        offsetY: result.offsetY,
+      }));
+    }
+  }, [refSwing, userSwing]);
+
+  // 計算參考影片理論目標時間 (ms)
+  const computeExpectedRefMs = useCallback(
     (uMs: number) => {
-      if (!refVideoRef.current || !refSwing) return;
-      let targetRefMs: number;
-      if (syncMode === "real_time") {
-        targetRefMs = SwingSynchronizationEngine.computeRealTimeRefMs(
-          uMs,
-          userTimeline,
-          refTimeline,
-          syncAnchor,
-          manualOffsetMs
-        );
-      } else {
-        targetRefMs = SwingSynchronizationEngine.computePhaseSyncRefMs(
+      if (!refSwing) return 0;
+      if (syncMode === "phase_sync" && isPhaseSyncValid) {
+        return SwingSynchronizationEngine.computePhaseSyncRefMs(
           uMs,
           userTimeline,
           refTimeline,
           manualOffsetMs
         );
       }
-      refVideoRef.current.currentTime = targetRefMs / 1000;
-      setRefCurrentMs(Math.round(targetRefMs));
+      return SwingSynchronizationEngine.computeRealTimeRefMs(
+        uMs,
+        userTimeline,
+        refTimeline,
+        syncAnchor,
+        manualOffsetMs
+      );
     },
-    [refSwing, syncMode, syncAnchor, userTimeline, refTimeline, manualOffsetMs]
+    [refSwing, syncMode, isPhaseSyncValid, userTimeline, refTimeline, syncAnchor, manualOffsetMs]
   );
 
-  // 監聽使用者影片播放進行同步驅動
-  useEffect(() => {
+  // 同步播放生命週期控制：同時發動 play()
+  const handlePlay = useCallback(async () => {
     const uVid = userVideoRef.current;
+    const rVid = refVideoRef.current;
     if (!uVid) return;
 
-    const onTimeUpdate = () => {
-      const cur = uVid.currentTime;
-      const ms = Math.round(cur * 1000);
-      setUserCurrentMs(ms);
-      syncRefToUser(ms);
+    if (uVid.currentTime >= userTimeline.endMs / 1000 - 0.05) {
+      uVid.currentTime = userTimeline.startMs / 1000;
+    }
 
-      // 單球播放循環或結束判定
-      if (cur >= userTimeline.endMs / 1000) {
-        uVid.pause();
-        uVid.currentTime = userTimeline.startMs / 1000;
-        setIsPlaying(false);
+    const curUMs = Math.round(uVid.currentTime * 1000);
+    setUserCurrentMs(curUMs);
+
+    if (rVid && refSwing) {
+      const targetRefMs = computeExpectedRefMs(curUMs);
+      rVid.currentTime = targetRefMs / 1000;
+      setRefCurrentMs(targetRefMs);
+      rVid.playbackRate = playbackSpeed;
+    }
+
+    uVid.playbackRate = playbackSpeed;
+
+    try {
+      if (rVid && refSwing) {
+        await Promise.all([uVid.play(), rVid.play()]);
+      } else {
+        await uVid.play();
       }
-    };
+      setIsPlaying(true);
+    } catch (err) {
+      console.warn("同步播放發動:", err);
+    }
+  }, [userTimeline, refSwing, computeExpectedRefMs, playbackSpeed]);
 
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+  // 同步暫停：同時 pause()
+  const handlePause = useCallback(() => {
+    userVideoRef.current?.pause();
+    refVideoRef.current?.pause();
+    setIsPlaying(false);
+  }, []);
 
-    uVid.addEventListener("timeupdate", onTimeUpdate);
-    uVid.addEventListener("play", onPlay);
-    uVid.addEventListener("pause", onPause);
-
-    return () => {
-      uVid.removeEventListener("timeupdate", onTimeUpdate);
-      uVid.removeEventListener("play", onPlay);
-      uVid.removeEventListener("pause", onPause);
-    };
-  }, [syncRefToUser, userTimeline]);
-
-  // 控制：同步播放/暫停
   const toggleSyncPlay = () => {
-    const uVid = userVideoRef.current;
-    if (!uVid) return;
-
-    if (uVid.paused || uVid.ended) {
-      if (uVid.currentTime >= userTimeline.endMs / 1000 - 0.05) {
-        uVid.currentTime = userTimeline.startMs / 1000;
-      }
-      uVid.playbackRate = playbackSpeed;
-      uVid.play().catch(() => {});
+    if (isPlaying) {
+      handlePause();
     } else {
-      uVid.pause();
+      handlePlay();
     }
   };
 
-  // 控制：同步重播
+  // 同步重播
   const handleSyncReplay = () => {
+    handlePause();
     const uVid = userVideoRef.current;
+    const rVid = refVideoRef.current;
     if (!uVid) return;
-    uVid.pause();
+
     uVid.currentTime = userTimeline.startMs / 1000;
-    syncRefToUser(userTimeline.startMs);
-    uVid.playbackRate = playbackSpeed;
-    uVid.play().catch(() => {});
+    setUserCurrentMs(userTimeline.startMs);
+
+    if (rVid && refSwing) {
+      const targetRefMs = computeExpectedRefMs(userTimeline.startMs);
+      rVid.currentTime = targetRefMs / 1000;
+      setRefCurrentMs(targetRefMs);
+    }
+    handlePlay();
   };
 
-  // 控制：同步跳轉至指定關鍵錨點
+  // 同步跳轉至指定關鍵事件錨點
   const jumpSyncAnchor = (anchor: SyncAnchor) => {
+    handlePause();
     const uVid = userVideoRef.current;
+    const rVid = refVideoRef.current;
     if (!uVid) return;
-    uVid.pause();
+
     const targetUserMs = SwingSynchronizationEngine.getAnchorTimeMs(userTimeline, anchor);
     uVid.currentTime = targetUserMs / 1000;
     setUserCurrentMs(targetUserMs);
-    syncRefToUser(targetUserMs);
+
+    if (rVid && refSwing) {
+      const targetRefMs = computeExpectedRefMs(targetUserMs);
+      rVid.currentTime = targetRefMs / 1000;
+      setRefCurrentMs(targetRefMs);
+    }
   };
 
-  // 控制：同步逐格步進
+  // 同步逐格步進
   const stepSyncFrame = (deltaFrames: number) => {
+    handlePause();
     const uVid = userVideoRef.current;
+    const rVid = refVideoRef.current;
     if (!uVid) return;
-    uVid.pause();
+
     const frameMs = 33.333;
     const curSec = uVid.currentTime;
     const nextSec = Math.max(
@@ -315,163 +399,213 @@ export function SwingComparisonPlayer({
       Math.min(userTimeline.endMs / 1000, curSec + (deltaFrames * frameMs) / 1000)
     );
     uVid.currentTime = nextSec;
-    const ms = Math.round(nextSec * 1000);
-    setUserCurrentMs(ms);
-    syncRefToUser(ms);
+    const uMs = Math.round(nextSec * 1000);
+    setUserCurrentMs(uMs);
+
+    if (rVid && refSwing) {
+      const targetRefMs = computeExpectedRefMs(uMs);
+      rVid.currentTime = targetRefMs / 1000;
+      setRefCurrentMs(Math.round(targetRefMs));
+    }
   };
 
-  // 控制：示範影片單獨前後一幀
-  const stepRefFrame = (deltaFrames: number) => {
-    const rVid = refVideoRef.current;
-    if (!rVid || !refSwing) return;
-    rVid.pause();
-    const frameMs = 1000 / (refSwing.fps || 30);
-    const nextSec = Math.max(0, Math.min(refSwing.duration_ms / 1000, rVid.currentTime + (deltaFrames * frameMs) / 1000));
-    rVid.currentTime = nextSec;
-    setRefCurrentMs(Math.round(nextSec * 1000));
-  };
+  // 核心時鐘監聽與平滑漂移校正循環 (Drift Monitor Loop via requestAnimationFrame)
+  useEffect(() => {
+    if (!isPlaying) return;
+    let animId: number;
 
-  // 變更播放速度
-  const handleSpeedChange = (speed: number) => {
-    setPlaybackSpeed(speed);
-    if (userVideoRef.current) userVideoRef.current.playbackRate = speed;
-  };
+    const syncTick = () => {
+      const uVid = userVideoRef.current;
+      const rVid = refVideoRef.current;
+      if (!uVid) return;
 
-  // 自動畫面對齊 (Auto-Framing)
-  const handleAutoFraming = () => {
-    if (!refSwing) return;
-    const res = SwingSynchronizationEngine.computeAutoFraming(115, refSwing.calibration_params?.torso_length || 115);
-    setRefZoom(res.scale);
-    setRefOffsetX(0);
-    setRefOffsetY(0);
-  };
+      const uCurSec = uVid.currentTime;
+      const uMs = Math.round(uCurSec * 1000);
+      setUserCurrentMs(uMs);
 
-  // 匯入新示範影片
+      // 單球播放循環或結束判定
+      if (uCurSec >= userTimeline.endMs / 1000) {
+        if (isLooping) {
+          uVid.currentTime = userTimeline.startMs / 1000;
+          if (rVid && refSwing) {
+            const targetRefMs = computeExpectedRefMs(userTimeline.startMs);
+            rVid.currentTime = targetRefMs / 1000;
+          }
+          uVid.play().catch(() => {});
+          rVid?.play().catch(() => {});
+        } else {
+          uVid.pause();
+          rVid?.pause();
+          setIsPlaying(false);
+          return;
+        }
+      }
+
+      // 若有參考影片，進行平滑漂移校正（拒絕無條件 seek，以調速平滑修正）
+      if (rVid && refSwing && !rVid.paused) {
+        const expectedRefSec = computeExpectedRefMs(uMs) / 1000;
+        setRefCurrentMs(Math.round(rVid.currentTime * 1000));
+
+        const driftRes = PlaybackDriftController.evaluateDrift(
+          rVid.currentTime,
+          expectedRefSec,
+          uVid.playbackRate
+        );
+
+        if (driftRes.action === "adjust_rate") {
+          rVid.playbackRate = driftRes.recommendedPlaybackRate;
+        } else if (driftRes.action === "hard_seek") {
+          rVid.currentTime = driftRes.targetRefTimeSec;
+          rVid.playbackRate = uVid.playbackRate;
+        } else {
+          if (Math.abs(rVid.playbackRate - uVid.playbackRate) > 0.01) {
+            rVid.playbackRate = uVid.playbackRate;
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(syncTick);
+    };
+
+    animId = requestAnimationFrame(syncTick);
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying, isLooping, userTimeline, refSwing, computeExpectedRefMs]);
+
+  // 手動匯入 / 上傳示範影片表單送出
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!importFilePath || !importTitle) {
-      setImportError("請輸入檔案路徑與標題");
-      return;
-    }
     setImporting(true);
     setImportError(null);
+
     try {
-      await apiFetch("/api/reference-swings/import-local", {
-        method: "POST",
-        body: JSON.stringify({
-          file_path: importFilePath,
-          club_type: selectedClub,
-          handedness: "right",
-          camera_angle: "DTL",
-          shot_type: "full_swing",
-          title: importTitle,
-          reference_author: importAuthor,
-          source_url: importSourceUrl,
-          content_license: importLicense,
-          verified_club: true,
-          verified_camera_angle: true,
-          is_default: true,
-          notes: importNotes,
-        }),
-      });
+      if (importMode === "file" && uploadFile) {
+        const formData = new FormData();
+        formData.append("file", uploadFile);
+        formData.append("club_type", selectedClub);
+        formData.append("handedness", "right");
+        formData.append("camera_angle", "DTL");
+        formData.append("title", importTitle || `標準 ${selectedClub} 示範揮桿`);
+        formData.append("reference_author", importAuthor);
+        formData.append("content_license", importLicense);
+        formData.append("source_url", importSourceUrl);
+        formData.append("is_default", "true");
+
+        const token = getAuthToken();
+        const res = await fetch(`${API_BASE_URL}/api/reference-swings/upload`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `上傳失敗 (${res.status})`);
+        }
+      } else {
+        if (!importFilePath) throw new Error("請輸入合法的本機影片檔案路徑");
+        await apiFetch("/api/reference-swings/import-local", {
+          method: "POST",
+          body: JSON.stringify({
+            file_path: importFilePath,
+            club_type: selectedClub,
+            handedness: "right",
+            camera_angle: "DTL",
+            shot_type: "full_swing",
+            title: importTitle || `標準 ${selectedClub} 示範揮桿`,
+            reference_author: importAuthor,
+            content_license: importLicense,
+            source_url: importSourceUrl,
+            is_default: true,
+          }),
+        });
+      }
+
       setShowImportModal(false);
+      setUploadFile(null);
       setImportFilePath("");
-      setImportTitle("");
-      await loadCatalogAndReference(selectedClub);
+      await fetchCatalog();
     } catch (err: any) {
-      setImportError(err.message || "匯入失敗");
+      setImportError(err.message || "匯入示範影片失敗");
     } finally {
       setImporting(false);
     }
   };
 
+  const userVideoSrc = `${API_BASE_URL}/api/videos/${userSwing.video_id}/stream${
+    getAuthToken() ? `?token=${getAuthToken()}` : ""
+  }`;
+
+  const refVideoSrc = refSwing
+    ? `${API_BASE_URL}${refSwing.stream_url}${getAuthToken() ? `?token=${getAuthToken()}` : ""}`
+    : "";
+
   return (
-    <div className="rounded-2xl border border-cyan-800/80 bg-[#0a1219] p-5 shadow-2xl space-y-4">
-      {/* 頂部標頭與佈局切換 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
-            <h2 className="text-lg font-bold text-white">
-              與示範揮桿比較 (Professional Swing Comparison)
-            </h2>
-          </div>
-          <p className="text-xs text-gray-400 mt-0.5">
-            左側：我的揮桿（第 #{userSwing.sequence_no} 球） · 右側：{selectedClub} 示範標準
-          </p>
+    <div className="rounded-2xl border border-sky-800/80 bg-gradient-to-b from-[#0a141f] to-[#070d14] p-4 text-white shadow-xl space-y-4">
+      {/* 頂部標題與關閉列 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
+          <h2 className="text-base font-bold text-white tracking-wide">
+            示範揮桿對照模式 (Professional Swing Comparison)
+          </h2>
+          <span className="rounded bg-sky-950 px-2 py-0.5 text-xs text-sky-300 font-mono border border-sky-800/50">
+            Mode: {syncMode === "real_time" ? "自然時間同步" : "階段線性同步"}
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 佈局切換 */}
-          <div className="flex rounded-lg border border-gray-800 bg-black/60 p-0.5 text-xs">
-            {[
-              { id: "side_by_side", label: "左右並列" },
-              { id: "stacked", label: "上下堆疊" },
-              { id: "ghost_overlay", label: "半透明疊影" },
-            ].map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setLayout(m.id as ComparisonLayout)}
-                className={`rounded-md px-2.5 py-1 font-semibold transition ${
-                  layout === m.id
-                    ? "bg-cyan-500 text-black shadow-sm"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-
+        <div className="flex items-center gap-2">
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-gray-700 bg-black/40 px-3 py-1 text-xs text-gray-300 hover:border-gray-500"
+              className="rounded-lg border border-gray-700 bg-gray-900/80 px-2.5 py-1 text-xs text-gray-300 hover:bg-gray-800 hover:text-white transition"
+              title="關閉比較對照模式"
             >
-              ✕ 收合比較
+              ✕ 返回單球播放
             </button>
           )}
         </div>
       </div>
 
-      {/* 球桿選擇器列 (完整 17 種球桿分類) */}
+      {/* 17 種球桿選擇器 */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-gray-400">
-          <span className="font-semibold text-gray-300">選擇示範球桿 (17 種分類支援)：</span>
-          {refSwing ? (
-            <span className="text-[11px] text-emerald-400">
-              ● 已載入示範：{refSwing.reference_author} ({refSwing.content_license})
-            </span>
-          ) : (
-            <span className="text-[11px] text-amber-400">
-              ⚠ 目前尚無該球桿示範 (missing_reference)
-            </span>
-          )}
+          <span className="font-semibold text-gray-300">選擇球桿參考 (17 Club Types)：</span>
+          <span className="text-[11px]">
+            已收錄:{" "}
+            <strong className="text-emerald-400">
+              {clubsCatalog.filter((c) => c.status === "available").length}
+            </strong>{" "}
+            / 17 種球桿
+          </span>
         </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+        <div className="flex flex-wrap gap-1.5 p-1 bg-black/40 rounded-xl border border-gray-800/80">
           {ALL_CLUBS.map((club) => {
-            const item = catalog.find((c) => c.club_type === club);
-            const isAvail = item && item.status === "available";
-            const isSel = selectedClub === club;
+            const catalogItem = clubsCatalog.find((c) => c.club_type === club);
+            const isAvailable = catalogItem?.status === "available";
+            const isSelected = selectedClub === club;
+
             return (
               <button
                 key={club}
                 type="button"
-                onClick={() => setSelectedClub(club)}
-                className={`flex items-center gap-1 shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition border ${
-                  isSel
-                    ? "border-cyan-400 bg-cyan-950/80 text-cyan-200 ring-1 ring-cyan-400"
-                    : isAvail
-                    ? "border-emerald-800/60 bg-emerald-950/30 text-emerald-300 hover:border-emerald-500"
-                    : "border-gray-800 bg-black/40 text-gray-500 hover:border-gray-700"
+                onClick={() => handleSelectClub(club)}
+                className={`relative px-2.5 py-1 rounded-lg text-xs font-semibold transition border ${
+                  isSelected
+                    ? "bg-cyan-500 text-black border-cyan-400 font-bold shadow-[0_0_8px_rgba(6,182,212,0.4)]"
+                    : isAvailable
+                    ? "bg-gray-900/90 text-cyan-200 border-cyan-900/60 hover:border-cyan-700"
+                    : "bg-gray-950/60 text-gray-500 border-gray-900 hover:border-gray-800"
                 }`}
+                title={
+                  isAvailable
+                    ? `${club} (已收錄示範影片)`
+                    : `${club} (尚無示範素材，點擊可手動匯入)`
+                }
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${isAvail ? "bg-emerald-400" : "bg-gray-600"}`} />
                 <span>{club}</span>
-                {item && item.reference_count > 0 && (
-                  <span className="text-[9px] text-emerald-400/80">({item.reference_count})</span>
+                {isAvailable && !isSelected && (
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-400" />
                 )}
               </button>
             );
@@ -479,404 +613,476 @@ export function SwingComparisonPlayer({
         </div>
       </div>
 
-      {/* 視角不匹配警告 */}
+      {/* 視角與素材限制警示 */}
       {!angleCheck.compatible && angleCheck.warning && (
-        <div className="rounded-xl border border-amber-500/50 bg-amber-950/40 p-3 text-xs text-amber-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span>⚠</span>
-            <span>{angleCheck.warning}</span>
-          </div>
-          <span className="text-[10px] text-amber-300 bg-amber-900/60 px-2 py-0.5 rounded">
-            誠信原則：禁止 2D 角度混淆
-          </span>
+        <div className="flex items-center gap-2 rounded-xl bg-amber-950/70 border border-amber-700/60 p-2.5 text-xs text-amber-200">
+          <span className="text-base">⚠️</span>
+          <span>{angleCheck.warning}</span>
         </div>
       )}
 
-      {/* 同步模式與錨點選擇 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-800 bg-black/40 p-3 text-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-400">同步演算法:</span>
-            <button
-              type="button"
-              onClick={() => setSyncMode("real_time")}
-              className={`rounded-lg px-2.5 py-1 font-semibold transition ${
-                syncMode === "real_time"
-                  ? "bg-cyan-500 text-black shadow-sm"
-                  : "border border-gray-700 text-gray-400 hover:text-white"
-              }`}
-              title="保留兩人原始揮桿節奏，依指定錨點時間同步"
-            >
-              A. 真實時間 (自然節奏)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSyncMode("phase_sync")}
-              className={`rounded-lg px-2.5 py-1 font-semibold transition ${
-                syncMode === "phase_sync"
-                  ? "bg-emerald-500 text-black shadow-sm"
-                  : "border border-gray-700 text-gray-400 hover:text-white"
-              }`}
-              title="將各階段進度正規化線性對齊，使對應動作同時呈現 (非真實節奏)"
-            >
-              B. 動作階段同步 (分段對應)
-            </button>
-          </div>
-
-          {syncMode === "real_time" && (
-            <div className="flex items-center gap-1 pl-2 border-l border-gray-800">
-              <span className="text-gray-400 text-[11px]">對齊錨點:</span>
-              {[
-                { id: "impact", label: "Impact" },
-                { id: "top", label: "Top" },
-                { id: "address", label: "Address" },
-                { id: "finish", label: "Finish" },
-              ].map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => setSyncAnchor(a.id as SyncAnchor)}
-                  className={`rounded px-2 py-0.5 text-[11px] font-semibold transition ${
-                    syncAnchor === a.id
-                      ? "bg-cyan-900/80 text-cyan-200 border border-cyan-400"
-                      : "text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 手動微調時間偏移 */}
-        <div className="flex items-center gap-1.5 text-[11px]">
-          <span className="text-gray-400">手動時間偏移:</span>
-          <button
-            type="button"
-            onClick={() => setManualOffsetMs((prev) => prev - 100)}
-            className="rounded border border-gray-800 bg-black/60 px-1.5 py-0.5 text-gray-300 hover:border-gray-600"
-          >
-            -100ms
-          </button>
-          <button
-            type="button"
-            onClick={() => setManualOffsetMs((prev) => prev - 33)}
-            className="rounded border border-gray-800 bg-black/60 px-1.5 py-0.5 text-gray-300 hover:border-gray-600"
-          >
-            -33ms
-          </button>
-          <span className="font-mono text-cyan-300 w-12 text-center">
-            {manualOffsetMs >= 0 ? `+${manualOffsetMs}` : manualOffsetMs}ms
-          </span>
-          <button
-            type="button"
-            onClick={() => setManualOffsetMs((prev) => prev + 33)}
-            className="rounded border border-gray-800 bg-black/60 px-1.5 py-0.5 text-gray-300 hover:border-gray-600"
-          >
-            +33ms
-          </button>
-          <button
-            type="button"
-            onClick={() => setManualOffsetMs((prev) => prev + 100)}
-            className="rounded border border-gray-800 bg-black/60 px-1.5 py-0.5 text-gray-300 hover:border-gray-600"
-          >
-            +100ms
-          </button>
-          {manualOffsetMs !== 0 && (
-            <button
-              type="button"
-              onClick={() => setManualOffsetMs(0)}
-              className="text-gray-500 hover:text-gray-300 text-[10px] underline ml-1"
-            >
-              歸零
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 雙影片主播放區 */}
+      {/* 示範影片資訊列與真偽標記 */}
       {refSwing ? (
-        <div
-          className={`grid gap-4 ${
-            layout === "stacked"
-              ? "grid-cols-1"
-              : layout === "ghost_overlay"
-              ? "grid-cols-1"
-              : "grid-cols-1 lg:grid-cols-2"
-          }`}
-        >
-          {/* 左側/上方：我的影片 */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-cyan-300">
-                👤 我的揮桿 (第 #{userSwing.sequence_no} 球)
-              </span>
-              <span className="font-mono text-gray-400">
-                {formatMsToTimestamp(userCurrentMs)}
-              </span>
-            </div>
-            <div className="relative overflow-hidden rounded-xl border border-gray-800 bg-black aspect-video">
-              <video
-                ref={userVideoRef}
-                playsInline
-                muted
-                preload="auto"
-                crossOrigin="anonymous"
-                src={`${API_BASE_URL}/api/videos/${userSwing.video_id}/stream?token=${encodeURIComponent(
-                  getAuthToken() || ""
-                )}#t=${(userSwing.start_ms / 1000).toFixed(2)},${(userSwing.end_ms / 1000).toFixed(2)}`}
-                className="w-full h-full object-contain"
-              />
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-black/40 border border-gray-800/80 px-3 py-2 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-cyan-300">示範素材：{refSwing.title}</span>
+            <span className="text-gray-400">作者：{refSwing.reference_author}</span>
 
-          {/* 右側/下方：示範影片 */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-emerald-300">
-                  🏌️‍♂️ {refSwing.title}
-                </span>
-                <span className="rounded bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.2 text-[10px] text-emerald-400">
-                  {refSwing.camera_angle}
-                </span>
-              </div>
-              <span className="font-mono text-gray-400">
-                {formatMsToTimestamp(refCurrentMs)}
+            {/* 素材分類標籤 (恪守最高誠信原則) */}
+            {refSwing.reference_category === "test_fixture" && (
+              <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-700/60 flex items-center gap-1">
+                ⚠️ 技術測試素材 (Test Fixture)
               </span>
-            </div>
-            <div className="relative overflow-hidden rounded-xl border border-gray-800 bg-black aspect-video">
-              <video
-                ref={refVideoRef}
-                playsInline
-                muted
-                preload="auto"
-                crossOrigin="anonymous"
-                src={`${API_BASE_URL}${refSwing.stream_url}?token=${encodeURIComponent(
-                  getAuthToken() || ""
-                )}`}
-                style={{
-                  transform: `scale(${refZoom}) translate(${refOffsetX}px, ${refOffsetY}px)`,
-                  transition: "transform 100ms ease-out",
-                }}
-                className="w-full h-full object-contain"
-              />
-            </div>
+            )}
+            {refSwing.camera_angle.toLowerCase() === "close_up" && (
+              <span className="rounded bg-rose-950/80 px-2 py-0.5 text-[10px] font-bold text-rose-300 border border-rose-700/60 flex items-center gap-1">
+                ⚠️ 打擊區特寫 (非完整 DTL)
+              </span>
+            )}
+            {!refSwing.is_verified_standard && (
+              <span className="rounded bg-gray-900 px-1.5 py-0.5 text-[10px] text-gray-400 border border-gray-800">
+                未經認證參考
+              </span>
+            )}
           </div>
-        </div>
-      ) : (
-        /* 當前球桿暫無示範影片 (missing_reference) 狀態提示卡片 */
-        <div className="rounded-xl border border-dashed border-gray-800 bg-black/30 p-8 text-center space-y-3">
-          <div className="text-3xl">🏌️</div>
-          <h3 className="text-base font-bold text-white">
-            {selectedClub} 目前尚無已確認的示範揮桿影片 (missing_reference)
-          </h3>
-          <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
-            系統依最高誠信原則，絕不拿其他鐵桿或休閒揮桿冒充該球桿之職業標準。您可以自行匯入有權使用的本機 DTL 影片，或參考外部合法教學來源。
-          </p>
-          <div className="pt-2 flex items-center justify-center gap-3">
+          <div className="flex items-center gap-2 text-[11px] text-gray-400">
+            <span>授權：{refSwing.content_license}</span>
+            <span>FPS: {refSwing.fps}</span>
             <button
               type="button"
               onClick={() => setShowImportModal(true)}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 transition shadow"
+              className="text-cyan-400 hover:underline"
             >
-              ＋ 匯入此球桿的示範影片
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedClub("7I")}
-              className="rounded-lg border border-gray-700 bg-black/50 px-4 py-2 text-xs font-semibold text-gray-300 hover:border-gray-500"
-            >
-              切換至已有示範的 7I 鐵桿
+              更換示範影片
             </button>
           </div>
         </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-gray-900/60 border border-dashed border-gray-700 p-3 text-xs text-gray-400">
+          <div className="flex items-center gap-2">
+            <span>ℹ️ 目前球桿 ({selectedClub}) 尚未收錄標準示範影片 (missing_reference)</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="rounded-lg bg-cyan-700/80 hover:bg-cyan-600 px-3 py-1 font-semibold text-white transition text-xs"
+          >
+            ＋ 匯入此球桿的示範影片
+          </button>
+        </div>
       )}
 
-      {/* 雙影片同步播放控制器 */}
-      {refSwing && (
-        <div className="space-y-3 pt-2">
-          {/* 同步控制列 */}
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-800 bg-[#0d141a] p-3 text-xs">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleSyncPlay}
-                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-1.5 font-bold text-white hover:bg-emerald-500 transition shadow-sm"
-              >
-                <span>{isPlaying ? "❚❚ 同步暫停" : "▶ 同步播放"}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleSyncReplay}
-                className="flex items-center gap-1 rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-3 py-1.5 font-semibold text-cyan-300 hover:bg-cyan-900/60 transition"
-              >
-                <span>↺ 同步重播</span>
-              </button>
-
-              {/* 一鍵跳轉關鍵同步點 */}
-              <div className="flex items-center gap-1 pl-2 border-l border-gray-800">
-                <span className="text-gray-400 text-[11px]">一鍵同步:</span>
-                {[
-                  { id: "address", label: "Address" },
-                  { id: "top", label: "Top" },
-                  { id: "impact", label: "Impact" },
-                  { id: "finish", label: "Finish" },
-                ].map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => jumpSyncAnchor(a.id as SyncAnchor)}
-                    className="rounded border border-gray-700 bg-black/60 px-2 py-1 text-[11px] font-semibold text-gray-200 hover:border-cyan-400 hover:text-cyan-300 transition"
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 同步逐幀步進與速度 */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1">
-                <span className="text-gray-400 text-[11px]">同步逐幀:</span>
-                <button
-                  type="button"
-                  onClick={() => stepSyncFrame(-1)}
-                  className="rounded border border-gray-700 bg-black/60 px-2 py-1 text-gray-200 hover:border-cyan-400"
-                >
-                  &larr; -1f
-                </button>
-                <button
-                  type="button"
-                  onClick={() => stepSyncFrame(1)}
-                  className="rounded border border-gray-700 bg-black/60 px-2 py-1 text-gray-200 hover:border-cyan-400"
-                >
-                  +1f &rarr;
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1">
-                {[
-                  { label: "1.0x", val: 1.0 },
-                  { label: "0.5x", val: 0.5 },
-                  { label: "0.25x", val: 0.25 },
-                ].map((sp) => (
-                  <button
-                    key={sp.val}
-                    type="button"
-                    onClick={() => handleSpeedChange(sp.val)}
-                    className={`rounded px-2 py-0.5 font-semibold transition ${
-                      playbackSpeed === sp.val
-                        ? "bg-cyan-500 text-black shadow-sm"
-                        : "border border-gray-700 text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    {sp.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* 畫面縮放與等比例校正控制列 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-800/80 bg-black/30 p-2.5 text-xs text-gray-400">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-300 font-semibold">示範畫面對齊:</span>
-              <button
-                type="button"
-                onClick={handleAutoFraming}
-                className="rounded bg-sky-950/60 border border-sky-800 px-2.5 py-1 text-sky-300 hover:bg-sky-900 transition"
-                title="以人體軀幹等比例自動縮放"
-              >
-                自動等比例縮放
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5">
-                <span>縮放:</span>
-                <input
-                  type="range"
-                  min="0.7"
-                  max="1.5"
-                  step="0.05"
-                  value={refZoom}
-                  onChange={(e) => setRefZoom(Number(e.target.value))}
-                  className="w-20"
-                />
-                <span className="font-mono text-[11px] text-gray-200">{refZoom.toFixed(2)}x</span>
-              </label>
-
-              <label className="flex items-center gap-1.5">
-                <span>X 軸:</span>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  step="5"
-                  value={refOffsetX}
-                  onChange={(e) => setRefOffsetX(Number(e.target.value))}
-                  className="w-16"
-                />
-              </label>
-
-              <label className="flex items-center gap-1.5">
-                <span>Y 軸:</span>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  step="5"
-                  value={refOffsetY}
-                  onChange={(e) => setRefOffsetY(Number(e.target.value))}
-                  className="w-16"
-                />
-              </label>
-
-              {(refZoom !== 1.0 || refOffsetX !== 0 || refOffsetY !== 0) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRefZoom(1.0);
-                    setRefOffsetX(0);
-                    setRefOffsetY(0);
+      {/* 影片播放區域 (支援 side_by_side / stacked / ghost_overlay) */}
+      <div className="relative rounded-xl overflow-hidden bg-black border border-gray-800">
+        {layout === "side_by_side" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1 bg-gray-950">
+            {/* 左側：示範影片 */}
+            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-cyan-300 border border-cyan-800/40">
+                標準參考 ({selectedClub})
+              </span>
+              {refSwing ? (
+                <video
+                  ref={refVideoRef}
+                  src={refVideoSrc}
+                  playsInline
+                  muted
+                  preload="auto"
+                  className="w-full h-full object-contain"
+                  style={{
+                    transform: `scale(${calibration.scale * calibration.zoom}) translate(${
+                      calibration.offsetX
+                    }px, ${calibration.offsetY}px)`,
                   }}
-                  className="text-gray-500 hover:text-gray-300 text-[10px] underline"
-                >
-                  重設
-                </button>
+                />
+              ) : (
+                <div className="text-gray-500 text-xs text-center p-4">
+                  尚無此球桿示範影片
+                </div>
               )}
             </div>
 
-            {/* 示範單獨微調按鈕 */}
-            <div className="flex items-center gap-1 text-[11px]">
-              <span>示範單獨:</span>
+            {/* 右側：使用者揮桿 */}
+            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-emerald-300 border border-emerald-800/40">
+                個人揮桿 (Swing #{userSwing.sequence_no})
+              </span>
+              <video
+                ref={userVideoRef}
+                src={userVideoSrc}
+                playsInline
+                muted
+                preload="auto"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          </div>
+        )}
+
+        {layout === "stacked" && (
+          <div className="flex flex-col gap-1 bg-gray-950">
+            {/* 上：示範影片 */}
+            <div className="relative aspect-[21/9] md:aspect-video bg-black flex items-center justify-center overflow-hidden">
+              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-cyan-300 border border-cyan-800/40">
+                標準參考 ({selectedClub})
+              </span>
+              {refSwing ? (
+                <video
+                  ref={refVideoRef}
+                  src={refVideoSrc}
+                  playsInline
+                  muted
+                  preload="auto"
+                  className="w-full h-full object-contain"
+                  style={{
+                    transform: `scale(${calibration.scale * calibration.zoom}) translate(${
+                      calibration.offsetX
+                    }px, ${calibration.offsetY}px)`,
+                  }}
+                />
+              ) : (
+                <div className="text-gray-500 text-xs">尚無此球桿示範影片</div>
+              )}
+            </div>
+
+            {/* 下：使用者揮桿 */}
+            <div className="relative aspect-[21/9] md:aspect-video bg-black flex items-center justify-center overflow-hidden">
+              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-emerald-300 border border-emerald-800/40">
+                個人揮桿 (Swing #{userSwing.sequence_no})
+              </span>
+              <video
+                ref={userVideoRef}
+                src={userVideoSrc}
+                playsInline
+                muted
+                preload="auto"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          </div>
+        )}
+
+        {layout === "ghost_overlay" && (
+          <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+            <span className="absolute top-2 left-2 z-20 rounded bg-black/75 px-2.5 py-1 text-xs font-bold text-cyan-300 border border-cyan-700/60">
+              疊影對照 (Ghost Overlay) · 透明度 {Math.round(ghostOpacity * 100)}%
+            </span>
+
+            {/* 底層：使用者揮桿 */}
+            <video
+              ref={userVideoRef}
+              src={userVideoSrc}
+              playsInline
+              muted
+              preload="auto"
+              className="absolute inset-0 w-full h-full object-contain z-0"
+            />
+
+            {/* 上層：參考示範 (半透明疊印) */}
+            {refSwing && (
+              <video
+                ref={refVideoRef}
+                src={refVideoSrc}
+                playsInline
+                muted
+                preload="auto"
+                className="absolute inset-0 w-full h-full object-contain z-10 pointer-events-none mix-blend-screen"
+                style={{
+                  opacity: ghostOpacity,
+                  transform: `scale(${calibration.scale * calibration.zoom}) translate(${
+                    calibration.offsetX
+                  }px, ${calibration.offsetY}px)`,
+                }}
+              />
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 播放控制與時間軸 */}
+      <div className="space-y-3 bg-black/50 p-3 rounded-xl border border-gray-800/80">
+        {/* 進度顯示列 */}
+        <div className="flex flex-wrap items-center justify-between text-xs text-gray-300 gap-2 font-mono">
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400 font-bold">
+              你：{formatMsToTimestamp(userCurrentMs)}
+            </span>
+            <span className="text-gray-500">|</span>
+            <span className="text-cyan-400 font-bold">
+              示範：{formatMsToTimestamp(refCurrentMs)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* 階段線性同步警告或資訊 */}
+            {syncMode === "phase_sync" && (
+              <span className="text-[11px] text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40 font-sans">
+                ⚡ 時間正規化比較中（各動作階段強制同步，非真實揮桿速度）
+              </span>
+            )}
+            <span className="text-gray-400 text-[11px]">
+              偏移: {manualOffsetMs > 0 ? `+${manualOffsetMs}` : manualOffsetMs}ms
+            </span>
+          </div>
+        </div>
+
+        {/* 控制按鈕群 */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={toggleSyncPlay}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 font-bold text-white hover:bg-emerald-500 transition shadow-sm text-xs"
+              title={isPlaying ? "暫停同步播放" : "啟動雙影片同步播放"}
+            >
+              <span>{isPlaying ? "❚❚ 暫停" : "▶ 同步播放"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSyncReplay}
+              className="flex items-center gap-1 rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-2.5 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/60 transition"
+              title="兩段影片同步由對齊起點重新播放"
+            >
+              <span>↺ 重新播放</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsLooping(!isLooping)}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition border ${
+                isLooping
+                  ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                  : "border-gray-800 bg-black/40 text-gray-400 hover:border-gray-700"
+              }`}
+              title="開啟/關閉同步循環播放"
+            >
+              {isLooping ? "⟲ 循環開啟" : "⟲ 循環關閉"}
+            </button>
+          </div>
+
+          {/* 逐幀步進 (±1f, ±5f) */}
+          <div className="flex items-center gap-1 text-xs">
+            <button
+              type="button"
+              onClick={() => stepSyncFrame(-5)}
+              className="rounded-lg border border-gray-800 bg-black/60 px-2 py-1 text-gray-300 hover:border-gray-600"
+              title="後退 5 幀 (~167ms)"
+            >
+              &larr; -5f
+            </button>
+            <button
+              type="button"
+              onClick={() => stepSyncFrame(-1)}
+              className="rounded-lg border border-gray-700 bg-black/50 px-2 py-1 font-semibold text-white hover:border-cyan-500"
+              title="後退 1 幀 (~33ms)"
+            >
+              &larr; -1f
+            </button>
+            <button
+              type="button"
+              onClick={() => stepSyncFrame(1)}
+              className="rounded-lg border border-gray-700 bg-black/50 px-2 py-1 font-semibold text-white hover:border-cyan-500"
+              title="前進 1 幀 (~33ms)"
+            >
+              +1f &rarr;
+            </button>
+            <button
+              type="button"
+              onClick={() => stepSyncFrame(5)}
+              className="rounded-lg border border-gray-800 bg-black/60 px-2 py-1 text-gray-300 hover:border-gray-600"
+              title="前進 5 幀 (~167ms)"
+            >
+              +5f &rarr;
+            </button>
+          </div>
+
+          {/* 佈局切換 */}
+          <div className="flex items-center gap-1 bg-black/60 p-0.5 rounded-lg border border-gray-800 text-xs">
+            <button
+              type="button"
+              onClick={() => setLayout("side_by_side")}
+              className={`px-2 py-1 rounded ${
+                layout === "side_by_side" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              左右並列
+            </button>
+            <button
+              type="button"
+              onClick={() => setLayout("stacked")}
+              className={`px-2 py-1 rounded ${
+                layout === "stacked" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              上下堆疊
+            </button>
+            <button
+              type="button"
+              onClick={() => setLayout("ghost_overlay")}
+              className={`px-2 py-1 rounded ${
+                layout === "ghost_overlay" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              疊影透視
+            </button>
+          </div>
+        </div>
+
+        {/* 關鍵事件錨點跳轉與同步模式切換 */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-800/60 text-xs">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-gray-400">對齊錨點：</span>
+            {(["address", "top", "impact", "finish"] as SyncAnchor[]).map((anc) => (
+              <button
+                key={anc}
+                type="button"
+                onClick={() => {
+                  setSyncAnchor(anc);
+                  jumpSyncAnchor(anc);
+                }}
+                className={`px-2 py-0.5 rounded border text-[11px] font-semibold transition ${
+                  syncAnchor === anc
+                    ? "border-cyan-500 bg-cyan-950/80 text-cyan-300 font-bold"
+                    : "border-gray-800 bg-black/40 text-gray-400 hover:border-gray-700"
+                }`}
+              >
+                {anc.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">同步模式：</span>
+            <div className="flex rounded-lg border border-gray-800 bg-black/60 p-0.5 text-[11px]">
               <button
                 type="button"
-                onClick={() => stepRefFrame(-1)}
-                className="rounded border border-gray-800 bg-black/60 px-1.5 py-0.5 text-gray-300 hover:border-gray-600"
+                onClick={() => setSyncMode("real_time")}
+                className={`px-2 py-0.5 rounded transition ${
+                  syncMode === "real_time"
+                    ? "bg-sky-600 text-white font-bold"
+                    : "text-gray-400 hover:text-white"
+                }`}
               >
-                -1f
+                自然節奏 (Mode A)
               </button>
               <button
                 type="button"
-                onClick={() => stepRefFrame(1)}
-                className="rounded border border-gray-800 bg-black/60 px-1.5 py-0.5 text-gray-300 hover:border-gray-600"
+                onClick={() => {
+                  if (!isPhaseSyncValid) {
+                    alert(`無法切換至階段同步：${phaseValidation.reason || "示範影片缺少完整事件標記"}`);
+                    return;
+                  }
+                  setSyncMode("phase_sync");
+                }}
+                className={`px-2 py-0.5 rounded transition ${
+                  syncMode === "phase_sync"
+                    ? "bg-purple-600 text-white font-bold"
+                    : !isPhaseSyncValid
+                    ? "text-gray-600 cursor-not-allowed"
+                    : "text-gray-400 hover:text-white"
+                }`}
+                title={
+                  !isPhaseSyncValid
+                    ? `示範影片缺少事件標記，暫時無法啟用階段同步`
+                    : "強制將雙方各動作階段進度對齊（非真實速度比較）"
+                }
               >
-                +1f
+                階段同步 (Mode B)
               </button>
             </div>
           </div>
         </div>
-      )}
 
-      {/* 匯入示範影片彈窗 (Modal) */}
+        {/* 疊影模式透明度滑桿 */}
+        {layout === "ghost_overlay" && (
+          <div className="flex items-center gap-3 pt-2 border-t border-gray-800/60 text-xs">
+            <span className="text-gray-400">疊影透光度：</span>
+            <input
+              type="range"
+              min="0.1"
+              max="0.9"
+              step="0.05"
+              value={ghostOpacity}
+              onChange={(e) => setGhostOpacity(parseFloat(e.target.value))}
+              className="w-48 accent-cyan-400"
+            />
+            <span className="text-cyan-300 font-mono">{Math.round(ghostOpacity * 100)}%</span>
+          </div>
+        )}
+
+        {/* 等比例畫面對齊 (Auto-Framing) 與手動微調控制項 */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-800/60 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">畫面對齊狀態：</span>
+            {autoFramingStatus?.status === "auto_computed" ? (
+              <span className="rounded bg-emerald-950 px-2 py-0.5 text-[11px] font-bold text-emerald-300 border border-emerald-800/50">
+                📐 2D Pose 自動對齊 ({autoFramingStatus.scale}x)
+              </span>
+            ) : autoFramingStatus?.status === "incompatible_angle" ? (
+              <span className="rounded bg-rose-950 px-2 py-0.5 text-[11px] font-bold text-rose-300 border border-rose-800/50">
+                ⚠️ 視角不相容
+              </span>
+            ) : (
+              <span className="rounded bg-amber-950 px-2 py-0.5 text-[11px] font-bold text-amber-300 border border-amber-800/50">
+                🖐️ 手動微調模式
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px]">
+            <span>縮放: {calibration.scale.toFixed(2)}x</span>
+            <button
+              type="button"
+              onClick={() =>
+                setCalibration((prev) => ({ ...prev, scale: Math.max(0.6, prev.scale - 0.05) }))
+              }
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setCalibration((prev) => ({ ...prev, scale: Math.min(1.8, prev.scale + 0.05) }))
+              }
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
+            >
+              +
+            </button>
+
+            <span className="ml-2">手動時間偏移:</span>
+            <button
+              type="button"
+              onClick={() => setManualOffsetMs((prev) => prev - 50)}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
+            >
+              -50ms
+            </button>
+            <button
+              type="button"
+              onClick={() => setManualOffsetMs(0)}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600 text-gray-400"
+            >
+              歸零
+            </button>
+            <button
+              type="button"
+              onClick={() => setManualOffsetMs((prev) => prev + 50)}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
+            >
+              +50ms
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 手動匯入 / 上傳示範影片 Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="max-w-md w-full rounded-2xl border border-gray-800 bg-[#0d141a] p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="w-full max-w-md rounded-2xl border border-sky-800/80 bg-gradient-to-b from-[#0b1724] to-[#070e17] p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <h3 className="font-bold text-white text-sm">
                 匯入 {selectedClub} 示範揮桿影片
               </h3>
               <button
@@ -888,6 +1094,28 @@ export function SwingComparisonPlayer({
               </button>
             </div>
 
+            {/* 匯入方式 Toggle */}
+            <div className="flex rounded-lg border border-gray-800 bg-black/40 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setImportMode("file")}
+                className={`flex-1 py-1 rounded text-center transition ${
+                  importMode === "file" ? "bg-cyan-600 text-white font-bold" : "text-gray-400"
+                }`}
+              >
+                選擇影片檔案直傳
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportMode("path")}
+                className={`flex-1 py-1 rounded text-center transition ${
+                  importMode === "path" ? "bg-cyan-600 text-white font-bold" : "text-gray-400"
+                }`}
+              >
+                本機安全目錄路徑
+              </button>
+            </div>
+
             {importError && (
               <div className="rounded-lg bg-red-950/80 border border-red-800 p-2.5 text-xs text-red-200">
                 {importError}
@@ -895,19 +1123,34 @@ export function SwingComparisonPlayer({
             )}
 
             <form onSubmit={handleImportSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-gray-300 mb-1">
-                  本機影片檔案絕對路徑 (*.mp4 / *.mov) <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="/Users/username/Desktop/my_7i_dtl.mp4"
-                  value={importFilePath}
-                  onChange={(e) => setImportFilePath(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-black/50 px-3 py-2 text-white placeholder-gray-600"
-                  required
-                />
-              </div>
+              {importMode === "file" ? (
+                <div>
+                  <label className="block text-gray-300 mb-1">
+                    選擇影片檔案 (*.mp4 / *.mov，上限 500MB) <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/x-m4v"
+                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                    className="w-full rounded-lg border border-gray-700 bg-black/50 px-3 py-2 text-white file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-cyan-900 file:text-cyan-200 hover:file:bg-cyan-800"
+                    required
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-gray-300 mb-1">
+                    本機白名單路徑 (assets/ / storage_data/ 等) <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="assets/reference_videos/my_swing.mp4"
+                    value={importFilePath}
+                    onChange={(e) => setImportFilePath(e.target.value)}
+                    className="w-full rounded-lg border border-gray-700 bg-black/50 px-3 py-2 text-white placeholder-gray-600"
+                    required
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-gray-300 mb-1">
@@ -934,7 +1177,7 @@ export function SwingComparisonPlayer({
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-300 mb-1">版權授權說明</label>
+                  <label className="block text-gray-300 mb-1">授權模式說明</label>
                   <input
                     type="text"
                     value={importLicense}
@@ -945,7 +1188,7 @@ export function SwingComparisonPlayer({
               </div>
 
               <div>
-                <label className="block text-gray-300 mb-1">原始出處 / 參考連結 (選填)</label>
+                <label className="block text-gray-300 mb-1">原始出處或連結 (選填)</label>
                 <input
                   type="text"
                   placeholder="https://..."
@@ -953,6 +1196,10 @@ export function SwingComparisonPlayer({
                   onChange={(e) => setImportSourceUrl(e.target.value)}
                   className="w-full rounded-lg border border-gray-700 bg-black/50 px-3 py-2 text-white"
                 />
+              </div>
+
+              <div className="p-2 rounded bg-amber-950/40 border border-amber-900/40 text-[11px] text-amber-200">
+                ℹ️ 匯入後影片狀態將設為「待校準 (needs_calibration)」，未經人工校正前不會生成捏造的時間碼。
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
@@ -968,7 +1215,7 @@ export function SwingComparisonPlayer({
                   disabled={importing}
                   className="rounded-lg bg-emerald-600 px-5 py-2 font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
                 >
-                  {importing ? "分析並匯入中..." : "確認匯入"}
+                  {importing ? "上傳並分析中..." : "確認匯入"}
                 </button>
               </div>
             </form>
@@ -978,3 +1225,5 @@ export function SwingComparisonPlayer({
     </div>
   );
 }
+
+export default SwingComparisonPlayer;
