@@ -1,0 +1,3745 @@
+{
+  "git_sha": "8b56c222e2dfff34c5f3383df8d06a4f4213b166-DIRTY",
+  "video": "測試影片/2分鐘.mov",
+  "analyzed_target": "original",
+  "video_meta": {
+    "duration_ms": 139053,
+    "fps": 59.991370217662286,
+    "width": 1080,
+    "height": 1920
+  },
+  "timing_s": {
+    "proxy": 0.0,
+    "analyze": 152.4,
+    "total": 152.4
+  },
+  "peak_rss_mb": 784.9,
+  "quality_summary": {
+    "mean_brightness": 111.66,
+    "mean_sharpness": 117.91,
+    "max_camera_motion": 0.0499,
+    "low_light": false,
+    "camera_unstable": false,
+    "multi_person_detected": false,
+    "flags": [],
+    "audio_status": "ok",
+    "audio_error": null,
+    "audio_transients_count": 343
+  },
+  "swing_count": 12,
+  "swings": [
+    {
+      "id": "seq-1",
+      "sequence_no": 1,
+      "start_ms": 9005,
+      "end_ms": 16305,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 9405,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 9938,
+          "confidence": 0.998,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 10138,
+          "confidence": 0.997,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 10472,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 10605,
+          "confidence": 0.996,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 10738,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 10872,
+          "confidence": 0.998,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 10872,
+          "confidence": 0.998,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=10405ms, Imp=10805ms, 得分=10.0) 顯著優於次佳候選 (得分=6.0)。關鍵優勢: physiologically_valid_downswing (400ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=-0.022)。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 10405,
+          "impact_ms": 10805,
+          "addr_ms": 9405,
+          "downswing_ms": 400,
+          "backswing_ms": 1000,
+          "stroke_amplitude": 0.1081,
+          "downswing_speed_peak": 0.001174,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0472,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 11.7412,
+          "audio_transient_ms": 10900,
+          "audio_diff_ms": 95,
+          "total_score": 10.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (400ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0012)",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "weak_follow_through_waggle_like (amp=-0.047)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 12873,
+          "impact_ms": 13407,
+          "addr_ms": 10938,
+          "downswing_ms": 534,
+          "backswing_ms": 1935,
+          "stroke_amplitude": 0.0538,
+          "downswing_speed_peak": 0.000439,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0221,
+          "finish_hold_ms": 134,
+          "readdress_calm_ratio": 0.5955,
+          "audio_transient_ms": 13380,
+          "audio_diff_ms": 27,
+          "total_score": 6.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (534ms)",
+            "audio_aligned_with_strike (diff=27ms)"
+          ],
+          "opposing_evidence": [
+            "shallow_stroke_amplitude",
+            "weak_follow_through_waggle_like (amp=-0.022)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 12873,
+          "impact_ms": 13740,
+          "addr_ms": 10938,
+          "downswing_ms": 867,
+          "backswing_ms": 1935,
+          "stroke_amplitude": 0.1099,
+          "downswing_speed_peak": 0.000624,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 0.8477,
+          "audio_transient_ms": 13680,
+          "audio_diff_ms": 60,
+          "total_score": -1.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude"
+          ],
+          "opposing_evidence": [
+            "extreme_downswing_duration (867ms)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 4,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 10472,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 67
+        },
+        "impact": {
+          "refined_ms": 10738,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -67
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 29,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 6.42,
+          "confidence": 0.999,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.1451,
+          "confidence": 0.999,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0568,
+          "confidence": 0.993,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 534.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 9938,
+            "event_top_ms": 10472,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 266.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 10472,
+            "event_impact_ms": 10738,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 2.01,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 534.0,
+            "downswing_ms": 266.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 5735.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.1646,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.4019,
+          "confidence": 0.998,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 68.5,
+      "ig_visual_score": 80.3,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 74.9,
+          "raw": 6.42
+        },
+        "head_stability": {
+          "score": 69.1,
+          "raw": 0.1451
+        },
+        "path_repeatability": {
+          "score": 70.5,
+          "raw": 0.0568
+        },
+        "tempo_consistency": {
+          "score": 61.8,
+          "raw": 2.01
+        },
+        "finish_balance": {
+          "score": 65.0,
+          "raw": 0.1646
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-2",
+      "sequence_no": 2,
+      "start_ms": 23808,
+      "end_ms": 29810,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 23808,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 24742,
+          "confidence": 0.999,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 24942,
+          "confidence": 0.996,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 25260,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 25343,
+          "confidence": 0.995,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 25577,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 25543,
+          "confidence": 0.999,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 25543,
+          "confidence": 0.999,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=25210ms, Imp=25543ms, 得分=16.5) 顯著優於次佳候選 (得分=5.0)。關鍵優勢: physiologically_valid_downswing (333ms), adequate_stroke_amplitude。次佳候選反對理由: slow_downswing_duration (733ms), weak_follow_through_waggle_like (amp=-0.028)。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 25210,
+          "impact_ms": 25543,
+          "addr_ms": 23808,
+          "downswing_ms": 333,
+          "backswing_ms": 1402,
+          "stroke_amplitude": 0.1293,
+          "downswing_speed_peak": 0.001186,
+          "decel_at_impact": 0.000144,
+          "follow_amplitude": 0.0,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 11.8567,
+          "audio_transient_ms": 25520,
+          "audio_diff_ms": 23,
+          "total_score": 16.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (333ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0012)",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=23ms)"
+          ],
+          "opposing_evidence": [
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 26277,
+          "impact_ms": 27010,
+          "addr_ms": 24408,
+          "downswing_ms": 733,
+          "backswing_ms": 1869,
+          "stroke_amplitude": 0.0953,
+          "downswing_speed_peak": 0.000782,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0281,
+          "finish_hold_ms": 400,
+          "readdress_calm_ratio": 7.82,
+          "audio_transient_ms": 28220,
+          "audio_diff_ms": 1210,
+          "total_score": 5.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "finish_balance_hold (400ms)",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (733ms)",
+            "weak_follow_through_waggle_like (amp=-0.028)",
+            "isolated_background_audio (diff=1210ms)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 25943,
+          "impact_ms": 26677,
+          "addr_ms": 23808,
+          "downswing_ms": 734,
+          "backswing_ms": 2135,
+          "stroke_amplitude": 0.1255,
+          "downswing_speed_peak": 0.000782,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0186,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 7.82,
+          "audio_transient_ms": 25600,
+          "audio_diff_ms": 1077,
+          "total_score": 2.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (734ms)",
+            "weak_follow_through_waggle_like (amp=-0.019)",
+            "abrupt_cutoff_no_finish_hold",
+            "isolated_background_audio (diff=1077ms)"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 4,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 25260,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 50
+        },
+        "impact": {
+          "refined_ms": 25577,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 34
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 39,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 2.74,
+          "confidence": 1.0,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.1322,
+          "confidence": 0.999,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0672,
+          "confidence": 0.992,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 518.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 24742,
+            "event_top_ms": 25260,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 317.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 25260,
+            "event_impact_ms": 25577,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 1.63,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 518.0,
+            "downswing_ms": 317.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 4400.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.1082,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.3011,
+          "confidence": 0.998,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 73.9,
+      "ig_visual_score": 80.6,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 98.5,
+          "raw": 2.74
+        },
+        "head_stability": {
+          "score": 73.7,
+          "raw": 0.1322
+        },
+        "path_repeatability": {
+          "score": 68.1,
+          "raw": 0.0672
+        },
+        "tempo_consistency": {
+          "score": 42.2,
+          "raw": 1.63
+        },
+        "finish_balance": {
+          "score": 80.8,
+          "raw": 0.1082
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-3",
+      "sequence_no": 3,
+      "start_ms": 36745,
+      "end_ms": 43912,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 37145,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 37612,
+          "confidence": 0.998,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 37812,
+          "confidence": 0.996,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 38095,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 38145,
+          "confidence": 0.994,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 38495,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 38345,
+          "confidence": 0.999,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 38345,
+          "confidence": 0.999,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=38012ms, Imp=38345ms, 得分=14.0) 顯著優於次佳候選 (得分=6.0)。關鍵優勢: physiologically_valid_downswing (333ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, weak_follow_through_waggle_like (amp=-0.025)。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 38012,
+          "impact_ms": 38345,
+          "addr_ms": 37145,
+          "downswing_ms": 333,
+          "backswing_ms": 867,
+          "stroke_amplitude": 0.1103,
+          "downswing_speed_peak": 0.001376,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 13.7596,
+          "audio_transient_ms": 38420,
+          "audio_diff_ms": 75,
+          "total_score": 14.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (333ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0014)",
+            "settled_readdress_before_takeaway",
+            "audio_near_strike (diff=75ms)"
+          ],
+          "opposing_evidence": [
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 39947,
+          "impact_ms": 40480,
+          "addr_ms": 38412,
+          "downswing_ms": 533,
+          "backswing_ms": 1535,
+          "stroke_amplitude": 0.0637,
+          "downswing_speed_peak": 0.000696,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0251,
+          "finish_hold_ms": 133,
+          "readdress_calm_ratio": 0.8095,
+          "audio_transient_ms": 40480,
+          "audio_diff_ms": 0,
+          "total_score": 6.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (533ms)",
+            "audio_aligned_with_strike (diff=0ms)"
+          ],
+          "opposing_evidence": [
+            "shallow_stroke_amplitude",
+            "weak_follow_through_waggle_like (amp=-0.025)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 40147,
+          "impact_ms": 41013,
+          "addr_ms": 38412,
+          "downswing_ms": 866,
+          "backswing_ms": 1735,
+          "stroke_amplitude": 0.1123,
+          "downswing_speed_peak": 0.000696,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0137,
+          "finish_hold_ms": 200,
+          "readdress_calm_ratio": 0.8095,
+          "audio_transient_ms": 40980,
+          "audio_diff_ms": 33,
+          "total_score": -2.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude"
+          ],
+          "opposing_evidence": [
+            "extreme_downswing_duration (866ms)",
+            "weak_follow_through_waggle_like (amp=-0.014)"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 4,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 38095,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 83
+        },
+        "impact": {
+          "refined_ms": 38495,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 150
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 29,
+        "launch_state": "unclear_motion"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 3.24,
+          "confidence": 0.999,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.206,
+          "confidence": 0.998,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0491,
+          "confidence": 0.988,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 483.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 37612,
+            "event_top_ms": 38095,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 400.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 38095,
+            "event_impact_ms": 38495,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 1.21,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 483.0,
+            "downswing_ms": 400.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 5535.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.1538,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.2014,
+          "confidence": 0.998,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 63.0,
+      "ig_visual_score": 72.3,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 95.3,
+          "raw": 3.24
+        },
+        "head_stability": {
+          "score": 46.9,
+          "raw": 0.206
+        },
+        "path_repeatability": {
+          "score": 72.0,
+          "raw": 0.0491
+        },
+        "tempo_consistency": {
+          "score": 20.5,
+          "raw": 1.21
+        },
+        "finish_balance": {
+          "score": 68.0,
+          "raw": 0.1538
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-4",
+      "sequence_no": 4,
+      "start_ms": 50215,
+      "end_ms": 57417,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 50415,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 51082,
+          "confidence": 0.998,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 51282,
+          "confidence": 0.996,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 51515,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 51682,
+          "confidence": 0.994,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 51748,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 51882,
+          "confidence": 0.999,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 51882,
+          "confidence": 0.999,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=51548ms, Imp=51815ms, 得分=14.5) 顯著優於次佳候選 (得分=11.5)。關鍵優勢: physiologically_valid_downswing (267ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=-0.016), abrupt_cutoff_no_finish_hold。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 51548,
+          "impact_ms": 51815,
+          "addr_ms": 50415,
+          "downswing_ms": 267,
+          "backswing_ms": 1133,
+          "stroke_amplitude": 0.0967,
+          "downswing_speed_peak": 0.001016,
+          "decel_at_impact": 1.3e-05,
+          "follow_amplitude": -0.0594,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 10.1566,
+          "audio_transient_ms": 51820,
+          "audio_diff_ms": 5,
+          "total_score": 14.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (267ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0010)",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=5ms)"
+          ],
+          "opposing_evidence": [
+            "weak_follow_through_waggle_like (amp=-0.059)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-4",
+          "top_ms": 52748,
+          "impact_ms": 53350,
+          "addr_ms": 50548,
+          "downswing_ms": 602,
+          "backswing_ms": 2200,
+          "stroke_amplitude": 0.0912,
+          "downswing_speed_peak": 0.000613,
+          "decel_at_impact": 1.8e-05,
+          "follow_amplitude": -0.0164,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 6.1327,
+          "audio_transient_ms": 53340,
+          "audio_diff_ms": 10,
+          "total_score": 11.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (602ms)",
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=10ms)"
+          ],
+          "opposing_evidence": [
+            "weak_follow_through_waggle_like (amp=-0.016)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 52215,
+          "impact_ms": 52615,
+          "addr_ms": 50415,
+          "downswing_ms": 400,
+          "backswing_ms": 1800,
+          "stroke_amplitude": 0.0503,
+          "downswing_speed_peak": 0.000248,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0014,
+          "finish_hold_ms": 68,
+          "readdress_calm_ratio": 2.4788,
+          "audio_transient_ms": 52580,
+          "audio_diff_ms": 35,
+          "total_score": 4.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (400ms)",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "shallow_stroke_amplitude",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 6,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 51515,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -33
+        },
+        "impact": {
+          "refined_ms": 51748,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -67
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 39,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 3.39,
+          "confidence": 1.0,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.131,
+          "confidence": 0.999,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0238,
+          "confidence": 0.989,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 433.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 51082,
+            "event_top_ms": 51515,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 233.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 51515,
+            "event_impact_ms": 51748,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 1.86,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 433.0,
+            "downswing_ms": 233.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 5869.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.1721,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.3741,
+          "confidence": 0.998,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 72.5,
+      "ig_visual_score": 78.3,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 94.3,
+          "raw": 3.39
+        },
+        "head_stability": {
+          "score": 74.2,
+          "raw": 0.131
+        },
+        "path_repeatability": {
+          "score": 72.0,
+          "raw": 0.0238
+        },
+        "tempo_consistency": {
+          "score": 54.1,
+          "raw": 1.86
+        },
+        "finish_balance": {
+          "score": 62.8,
+          "raw": 0.1721
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-5",
+      "sequence_no": 5,
+      "start_ms": 65018,
+      "end_ms": 71420,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 65352,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 65818,
+          "confidence": 0.998,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 66018,
+          "confidence": 0.996,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 66252,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 66418,
+          "confidence": 0.995,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 66785,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 66618,
+          "confidence": 0.996,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 66618,
+          "confidence": 0.996,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=66218ms, Imp=66618ms, 得分=14.0) 顯著優於次佳候選 (得分=2.5)。關鍵優勢: physiologically_valid_downswing (400ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, abrupt_cutoff_no_finish_hold。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 66218,
+          "impact_ms": 66618,
+          "addr_ms": 65352,
+          "downswing_ms": 400,
+          "backswing_ms": 866,
+          "stroke_amplitude": 0.1295,
+          "downswing_speed_peak": 0.001183,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 11.8293,
+          "audio_transient_ms": 66680,
+          "audio_diff_ms": 62,
+          "total_score": 14.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (400ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0012)",
+            "settled_readdress_before_takeaway",
+            "audio_near_strike (diff=62ms)"
+          ],
+          "opposing_evidence": [
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 67953,
+          "impact_ms": 68553,
+          "addr_ms": 66685,
+          "downswing_ms": 600,
+          "backswing_ms": 1268,
+          "stroke_amplitude": 0.0824,
+          "downswing_speed_peak": 0.000509,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 0.6141,
+          "audio_transient_ms": 68760,
+          "audio_diff_ms": 207,
+          "total_score": 2.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (600ms)"
+          ],
+          "opposing_evidence": [
+            "shallow_stroke_amplitude",
+            "abrupt_cutoff_no_finish_hold",
+            "isolated_background_audio (diff=207ms)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 67953,
+          "impact_ms": 68887,
+          "addr_ms": 66685,
+          "downswing_ms": 934,
+          "backswing_ms": 1268,
+          "stroke_amplitude": 0.0916,
+          "downswing_speed_peak": 0.000509,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0289,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 0.6141,
+          "audio_transient_ms": 68880,
+          "audio_diff_ms": 7,
+          "total_score": 1.5,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "audio_aligned_with_strike (diff=7ms)"
+          ],
+          "opposing_evidence": [
+            "extreme_downswing_duration (934ms)",
+            "weak_follow_through_waggle_like (amp=-0.029)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 4,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 66252,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 34
+        },
+        "impact": {
+          "refined_ms": 66785,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 167
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 42,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 7.69,
+          "confidence": 1.0,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.26,
+          "confidence": 0.998,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0441,
+          "confidence": 0.989,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 434.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 65818,
+            "event_top_ms": 66252,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 533.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 66252,
+            "event_impact_ms": 66785,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 0.81,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 434.0,
+            "downswing_ms": 533.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 4800.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.159,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.3561,
+          "confidence": 0.998,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 52.5,
+      "ig_visual_score": 71.4,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 66.8,
+          "raw": 7.69
+        },
+        "head_stability": {
+          "score": 27.3,
+          "raw": 0.26
+        },
+        "path_repeatability": {
+          "score": 72.0,
+          "raw": 0.0441
+        },
+        "tempo_consistency": {
+          "score": 20.0,
+          "raw": 0.81
+        },
+        "finish_balance": {
+          "score": 66.5,
+          "raw": 0.159
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-6",
+      "sequence_no": 6,
+      "start_ms": 83023,
+      "end_ms": 89625,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 83357,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 83823,
+          "confidence": 0.999,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 84023,
+          "confidence": 0.997,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 84273,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 84423,
+          "confidence": 0.996,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 84623,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 84623,
+          "confidence": 0.998,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 84623,
+          "confidence": 0.998,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=84290ms, Imp=84623ms, 得分=16.5) 顯著優於次佳候選 (得分=11.5)。關鍵優勢: physiologically_valid_downswing (333ms), adequate_stroke_amplitude。次佳候選反對理由: abrupt_cutoff_no_finish_hold。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 84290,
+          "impact_ms": 84623,
+          "addr_ms": 83357,
+          "downswing_ms": 333,
+          "backswing_ms": 933,
+          "stroke_amplitude": 0.1302,
+          "downswing_speed_peak": 0.001113,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 11.1343,
+          "audio_transient_ms": 84680,
+          "audio_diff_ms": 57,
+          "total_score": 16.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (333ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0011)",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=57ms)"
+          ],
+          "opposing_evidence": [
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 86090,
+          "impact_ms": 86690,
+          "addr_ms": 84690,
+          "downswing_ms": 600,
+          "backswing_ms": 1400,
+          "stroke_amplitude": 0.1021,
+          "downswing_speed_peak": 0.00068,
+          "decel_at_impact": 0.000206,
+          "follow_amplitude": 0.0028,
+          "finish_hold_ms": 66,
+          "readdress_calm_ratio": 0.9336,
+          "audio_transient_ms": 86740,
+          "audio_diff_ms": 50,
+          "total_score": 11.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (600ms)",
+            "adequate_stroke_amplitude",
+            "audio_aligned_with_strike (diff=50ms)"
+          ],
+          "opposing_evidence": [
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-4",
+          "top_ms": 87090,
+          "impact_ms": 87423,
+          "addr_ms": 86823,
+          "downswing_ms": 333,
+          "backswing_ms": 267,
+          "stroke_amplitude": 0.0654,
+          "downswing_speed_peak": 0.000494,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0006,
+          "finish_hold_ms": 201,
+          "readdress_calm_ratio": 2.3141,
+          "audio_transient_ms": 87420,
+          "audio_diff_ms": 3,
+          "total_score": 5.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (333ms)",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "shallow_stroke_amplitude"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 5,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 84273,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -17
+        },
+        "impact": {
+          "refined_ms": 84623,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 0
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 41,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 9.43,
+          "confidence": 1.0,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.1678,
+          "confidence": 0.998,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0523,
+          "confidence": 0.993,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 450.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 83823,
+            "event_top_ms": 84273,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 350.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 84273,
+            "event_impact_ms": 84623,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 1.29,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 450.0,
+            "downswing_ms": 350.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 5202.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.171,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.3196,
+          "confidence": 0.998,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 54.9,
+      "ig_visual_score": 71.7,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 55.6,
+          "raw": 9.43
+        },
+        "head_stability": {
+          "score": 60.8,
+          "raw": 0.1678
+        },
+        "path_repeatability": {
+          "score": 71.5,
+          "raw": 0.0523
+        },
+        "tempo_consistency": {
+          "score": 24.6,
+          "raw": 1.29
+        },
+        "finish_balance": {
+          "score": 63.2,
+          "raw": 0.171
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-7",
+      "sequence_no": 7,
+      "start_ms": 103828,
+      "end_ms": 107628,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.998,
+      "events": {
+        "address": {
+          "time_ms": 104228,
+          "confidence": 0.998,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 104495,
+          "confidence": 0.999,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 104695,
+          "confidence": 0.997,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 105028,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 105095,
+          "confidence": 0.996,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 105278,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 105362,
+          "confidence": 0.999,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 105362,
+          "confidence": 0.999,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=104962ms, Imp=105295ms, 得分=12.0) 顯著優於次佳候選 (得分=6.5)。關鍵優勢: physiologically_valid_downswing (333ms), adequate_stroke_amplitude。次佳候選反對理由: slow_downswing_duration (800ms), weak_follow_through_waggle_like (amp=-0.029)。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 104962,
+          "impact_ms": 105295,
+          "addr_ms": 104228,
+          "downswing_ms": 333,
+          "backswing_ms": 734,
+          "stroke_amplitude": 0.1027,
+          "downswing_speed_peak": 0.001175,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0631,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 11.7496,
+          "audio_transient_ms": 105380,
+          "audio_diff_ms": 85,
+          "total_score": 12.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (333ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0012)",
+            "settled_readdress_before_takeaway",
+            "audio_near_strike (diff=85ms)"
+          ],
+          "opposing_evidence": [
+            "weak_follow_through_waggle_like (amp=-0.063)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 105695,
+          "impact_ms": 106495,
+          "addr_ms": 104228,
+          "downswing_ms": 800,
+          "backswing_ms": 1467,
+          "stroke_amplitude": 0.1097,
+          "downswing_speed_peak": 0.000782,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0294,
+          "finish_hold_ms": 66,
+          "readdress_calm_ratio": 7.8173,
+          "audio_transient_ms": 106480,
+          "audio_diff_ms": 15,
+          "total_score": 6.5,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=15ms)"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (800ms)",
+            "weak_follow_through_waggle_like (amp=-0.029)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 106162,
+          "impact_ms": 106828,
+          "addr_ms": 104228,
+          "downswing_ms": 666,
+          "backswing_ms": 1934,
+          "stroke_amplitude": 0.1375,
+          "downswing_speed_peak": 0.000782,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0078,
+          "finish_hold_ms": 133,
+          "readdress_calm_ratio": 7.8173,
+          "audio_transient_ms": 107160,
+          "audio_diff_ms": 332,
+          "total_score": 3.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (666ms)",
+            "weak_follow_through_waggle_like (amp=-0.008)",
+            "isolated_background_audio (diff=332ms)"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 4,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 105028,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 66
+        },
+        "impact": {
+          "refined_ms": 105278,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -17
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 30,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 4.74,
+          "confidence": 0.999,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.2305,
+          "confidence": 0.998,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0627,
+          "confidence": 0.993,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 533.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 104495,
+            "event_top_ms": 105028,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 250.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 105028,
+            "event_impact_ms": 105278,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 2.13,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 533.0,
+            "downswing_ms": 250.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 2533.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.0825,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.4888,
+          "confidence": 0.997,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 72.1,
+      "ig_visual_score": 88.5,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 85.7,
+          "raw": 4.74
+        },
+        "head_stability": {
+          "score": 38.0,
+          "raw": 0.2305
+        },
+        "path_repeatability": {
+          "score": 69.1,
+          "raw": 0.0627
+        },
+        "tempo_consistency": {
+          "score": 68.0,
+          "raw": 2.13
+        },
+        "finish_balance": {
+          "score": 88.0,
+          "raw": 0.0825
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-8",
+      "sequence_no": 8,
+      "start_ms": 109630,
+      "end_ms": 113413,
+      "label": "valid_swing",
+      "ball_strike_status": "confirmed_strike",
+      "review_status": "needs_review",
+      "review_flags": [
+        "timing_anomaly"
+      ],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 111163,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 111297,
+          "confidence": 0.999,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 111497,
+          "confidence": 0.999,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 111563,
+          "confidence": 0.5,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement",
+            "timing_anomaly_detected"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 112097,
+          "confidence": 0.999,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 112613,
+          "confidence": 0.5,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "ball_flight_observed_launch",
+            "timing_anomaly_detected"
+          ],
+          "uncertainty_ms": 16,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 112563,
+          "confidence": 0.999,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 112963,
+          "confidence": 0.999,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=111697ms, Imp=112497ms, 得分=5.0) 顯著優於次佳候選 (得分=3.0)。關鍵優勢: adequate_stroke_amplitude, finish_balance_hold (400ms)。次佳候選反對理由: slow_downswing_duration (666ms), weak_follow_through_waggle_like (amp=-0.024)。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": true,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 111697,
+          "impact_ms": 112497,
+          "addr_ms": 111163,
+          "downswing_ms": 800,
+          "backswing_ms": 534,
+          "stroke_amplitude": 0.1683,
+          "downswing_speed_peak": 0.000843,
+          "decel_at_impact": 9.6e-05,
+          "follow_amplitude": 0.0009,
+          "finish_hold_ms": 400,
+          "readdress_calm_ratio": 1.4316,
+          "audio_transient_ms": 112460,
+          "audio_diff_ms": 37,
+          "total_score": 5.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "finish_balance_hold (400ms)"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (800ms)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 111497,
+          "impact_ms": 112163,
+          "addr_ms": 111163,
+          "downswing_ms": 666,
+          "backswing_ms": 334,
+          "stroke_amplitude": 0.1079,
+          "downswing_speed_peak": 0.000843,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0237,
+          "finish_hold_ms": 133,
+          "readdress_calm_ratio": 1.4316,
+          "audio_transient_ms": 112240,
+          "audio_diff_ms": 77,
+          "total_score": 3.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "audio_near_strike (diff=77ms)"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (666ms)",
+            "weak_follow_through_waggle_like (amp=-0.024)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 112363,
+          "impact_ms": 113230,
+          "addr_ms": 111163,
+          "downswing_ms": 867,
+          "backswing_ms": 1200,
+          "stroke_amplitude": 0.0736,
+          "downswing_speed_peak": 0.00041,
+          "decel_at_impact": 2e-06,
+          "follow_amplitude": 0.005,
+          "finish_hold_ms": 133,
+          "readdress_calm_ratio": 0.696,
+          "audio_transient_ms": 113240,
+          "audio_diff_ms": 10,
+          "total_score": -4.5,
+          "supporting_evidence": [],
+          "opposing_evidence": [
+            "extreme_downswing_duration (867ms)",
+            "shallow_stroke_amplitude"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 3,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 111563,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -134
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": true,
+        "observed_count": 48,
+        "launch_state": "airborne",
+        "original_impact_ms": 112497,
+        "refined_impact_ms": 112613,
+        "delta_ms": 116
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 4.92,
+          "confidence": 1.0,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.6796,
+          "confidence": 1.0,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0393,
+          "confidence": 0.999,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": null,
+          "confidence": 0.0,
+          "details": {
+            "reason": "揮桿時序異常或不可靠，依誠信原則不予評分",
+            "unreliable": true
+          }
+        },
+        "downswing_ms": {
+          "value": null,
+          "confidence": 0.0,
+          "details": {
+            "reason": "揮桿時序異常或不可靠，依誠信原則不予評分",
+            "unreliable": true
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": null,
+          "confidence": 0.0,
+          "details": {
+            "reason": "揮桿時序異常或不可靠，依誠信原則不予評分",
+            "unreliable": true
+          }
+        },
+        "finish_hold_ms": {
+          "value": 800.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.0404,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.5687,
+          "confidence": 0.997,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 66.3,
+      "ig_visual_score": 88.6,
+      "coverage": 0.8,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 84.5,
+          "raw": 4.92
+        },
+        "head_stability": {
+          "score": 20.0,
+          "raw": 0.6796
+        },
+        "path_repeatability": {
+          "score": 72.0,
+          "raw": 0.0393
+        },
+        "tempo_consistency": {
+          "score": null,
+          "raw": null
+        },
+        "finish_balance": {
+          "score": 72.6,
+          "raw": 0.0404
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": true,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-9",
+      "sequence_no": 9,
+      "start_ms": 113230,
+      "end_ms": 116632,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 113430,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 114230,
+          "confidence": 0.998,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 114763,
+          "confidence": 0.999,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 115447,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 115630,
+          "confidence": 0.999,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 115915,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 115965,
+          "confidence": 1.0,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 115965,
+          "confidence": 1.0,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=115363ms, Imp=115898ms, 得分=11.5) 顯著優於次佳候選 (得分=7.0)。關鍵優勢: physiologically_valid_downswing (535ms), adequate_stroke_amplitude。次佳候選反對理由: weak_follow_through_waggle_like (amp=-0.034), abrupt_cutoff_no_finish_hold。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 115363,
+          "impact_ms": 115898,
+          "addr_ms": 113430,
+          "downswing_ms": 535,
+          "backswing_ms": 1933,
+          "stroke_amplitude": 0.0963,
+          "downswing_speed_peak": 0.000858,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.024,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 8.5837,
+          "audio_transient_ms": 115860,
+          "audio_diff_ms": 38,
+          "total_score": 11.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (535ms)",
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=38ms)"
+          ],
+          "opposing_evidence": [
+            "weak_follow_through_waggle_like (amp=-0.024)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 114497,
+          "impact_ms": 114897,
+          "addr_ms": 113430,
+          "downswing_ms": 400,
+          "backswing_ms": 1067,
+          "stroke_amplitude": 0.1057,
+          "downswing_speed_peak": 0.000755,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0345,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 7.5477,
+          "audio_transient_ms": 114460,
+          "audio_diff_ms": 437,
+          "total_score": 7.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (400ms)",
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "weak_follow_through_waggle_like (amp=-0.034)",
+            "abrupt_cutoff_no_finish_hold",
+            "isolated_background_audio (diff=437ms)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 115363,
+          "impact_ms": 116232,
+          "addr_ms": 113430,
+          "downswing_ms": 869,
+          "backswing_ms": 1933,
+          "stroke_amplitude": 0.1564,
+          "downswing_speed_peak": 0.000858,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0152,
+          "finish_hold_ms": 534,
+          "readdress_calm_ratio": 8.5837,
+          "audio_transient_ms": 116120,
+          "audio_diff_ms": 112,
+          "total_score": 2.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "finish_balance_hold (534ms)",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "extreme_downswing_duration (869ms)",
+            "weak_follow_through_waggle_like (amp=-0.015)"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 3,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 115447,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 84
+        },
+        "impact": {
+          "refined_ms": 115915,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 17
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 33,
+        "launch_state": "unclear_motion"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 23.69,
+          "confidence": 1.0,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.3416,
+          "confidence": 0.999,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0568,
+          "confidence": 0.999,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 1217.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 114230,
+            "event_top_ms": 115447,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 468.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 115447,
+            "event_impact_ms": 115915,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 2.6,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 1217.0,
+            "downswing_ms": 468.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 867.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.0557,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.5685,
+          "confidence": 0.997,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 55.4,
+      "ig_visual_score": 89.9,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 20.0,
+          "raw": 23.69
+        },
+        "head_stability": {
+          "score": 20.0,
+          "raw": 0.3416
+        },
+        "path_repeatability": {
+          "score": 70.5,
+          "raw": 0.0568
+        },
+        "tempo_consistency": {
+          "score": 92.3,
+          "raw": 2.6
+        },
+        "finish_balance": {
+          "score": 74.4,
+          "raw": 0.0557
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-10",
+      "sequence_no": 10,
+      "start_ms": 119032,
+      "end_ms": 122632,
+      "label": "practice_swing",
+      "ball_strike_status": "no_ball",
+      "review_status": "needs_review",
+      "review_flags": [
+        "candidate_ambiguous",
+        "timing_anomaly"
+      ],
+      "confidence": 0.998,
+      "events": {
+        "address": {
+          "time_ms": 119165,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 119765,
+          "confidence": 0.999,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 120098,
+          "confidence": 0.997,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 120415,
+          "confidence": 0.5,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement",
+            "timing_anomaly_detected"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 120765,
+          "confidence": 0.999,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 121098,
+          "confidence": 0.5,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "timing_anomaly_detected"
+          ],
+          "uncertainty_ms": 40,
+          "sampling_resolution_ms": 67
+        },
+        "follow_through": {
+          "time_ms": 121232,
+          "confidence": 0.999,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 121765,
+          "confidence": 0.999,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "雙峰爭議：候選1 (120432/121098ms, 分數=12.0) 與候選2 (121232/121898ms, 分數=11.5) 得分接近且皆具備揮桿特徵，證據未達絕對優勢，標記爭議保留審核。",
+      "is_ambiguous": true,
+      "unreliable_for_ranking": true,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 120432,
+          "impact_ms": 121098,
+          "addr_ms": 119165,
+          "downswing_ms": 666,
+          "backswing_ms": 1267,
+          "stroke_amplitude": 0.0509,
+          "downswing_speed_peak": 0.001009,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0823,
+          "finish_hold_ms": 533,
+          "readdress_calm_ratio": 10.0901,
+          "audio_transient_ms": 121060,
+          "audio_diff_ms": 38,
+          "total_score": 12.0,
+          "supporting_evidence": [
+            "high_impact_speed_peak (0.0010)",
+            "moderate_follow_through (amp=0.082)",
+            "finish_balance_hold (533ms)",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=38ms)"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (666ms)",
+            "shallow_stroke_amplitude"
+          ],
+          "is_ambiguous": true
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 121232,
+          "impact_ms": 121898,
+          "addr_ms": 119165,
+          "downswing_ms": 666,
+          "backswing_ms": 2067,
+          "stroke_amplitude": 0.1427,
+          "downswing_speed_peak": 0.00087,
+          "decel_at_impact": 0.000304,
+          "follow_amplitude": -0.0071,
+          "finish_hold_ms": 669,
+          "readdress_calm_ratio": 8.6957,
+          "audio_transient_ms": 121900,
+          "audio_diff_ms": 2,
+          "total_score": 11.5,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "impact_deceleration_brake (0.0003)",
+            "finish_balance_hold (669ms)",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=2ms)"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (666ms)",
+            "weak_follow_through_waggle_like (amp=-0.007)"
+          ],
+          "is_ambiguous": true
+        },
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 120365,
+          "impact_ms": 120698,
+          "addr_ms": 119165,
+          "downswing_ms": 333,
+          "backswing_ms": 1200,
+          "stroke_amplitude": 0.0524,
+          "downswing_speed_peak": 0.001009,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0451,
+          "finish_hold_ms": 67,
+          "readdress_calm_ratio": 10.0901,
+          "audio_transient_ms": 120680,
+          "audio_diff_ms": 18,
+          "total_score": 10.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (333ms)",
+            "high_impact_speed_peak (0.0010)",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=18ms)"
+          ],
+          "opposing_evidence": [
+            "shallow_stroke_amplitude",
+            "weak_follow_through_waggle_like (amp=-0.045)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 3,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 120415,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -17
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 0
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 2.13,
+          "confidence": 0.998,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.1471,
+          "confidence": 0.999,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.1222,
+          "confidence": 0.994,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": null,
+          "confidence": 0.0,
+          "details": {
+            "reason": "揮桿時序異常或不可靠，依誠信原則不予評分",
+            "unreliable": true
+          }
+        },
+        "downswing_ms": {
+          "value": null,
+          "confidence": 0.0,
+          "details": {
+            "reason": "揮桿時序異常或不可靠，依誠信原則不予評分",
+            "unreliable": true
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": null,
+          "confidence": 0.0,
+          "details": {
+            "reason": "揮桿時序異常或不可靠，依誠信原則不予評分",
+            "unreliable": true
+          }
+        },
+        "finish_hold_ms": {
+          "value": 1669.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.0654,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": null,
+          "confidence": 0.0,
+          "details": {
+            "reason": "此揮桿為空揮或信心度不足，不計入多球重複性比較"
+          }
+        }
+      },
+      "overall_score": 85.5,
+      "ig_visual_score": 96.0,
+      "coverage": 0.8,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 100.0,
+          "raw": 2.13
+        },
+        "head_stability": {
+          "score": 68.3,
+          "raw": 0.1471
+        },
+        "path_repeatability": {
+          "score": 72.9,
+          "raw": 0.1222
+        },
+        "tempo_consistency": {
+          "score": null,
+          "raw": null
+        },
+        "finish_balance": {
+          "score": 92.9,
+          "raw": 0.0654
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": true,
+        "is_ambiguous": true
+      }
+    },
+    {
+      "id": "seq-11",
+      "sequence_no": 11,
+      "start_ms": 123767,
+      "end_ms": 129433,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.999,
+      "events": {
+        "address": {
+          "time_ms": 124167,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 124500,
+          "confidence": 0.999,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 124700,
+          "confidence": 0.998,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 124900,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 125167,
+          "confidence": 0.998,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 125367,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "audio_transient_consensus",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 125433,
+          "confidence": 1.0,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 125433,
+          "confidence": 1.0,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=124967ms, Imp=125367ms, 得分=11.5) 顯著優於次佳候選 (得分=3.5)。關鍵優勢: physiologically_valid_downswing (400ms), adequate_stroke_amplitude。次佳候選反對理由: shallow_stroke_amplitude, isolated_background_audio (diff=380ms)。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 124967,
+          "impact_ms": 125367,
+          "addr_ms": 124167,
+          "downswing_ms": 400,
+          "backswing_ms": 800,
+          "stroke_amplitude": 0.1148,
+          "downswing_speed_peak": 0.000812,
+          "decel_at_impact": 3.3e-05,
+          "follow_amplitude": -0.0375,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 8.1185,
+          "audio_transient_ms": 125420,
+          "audio_diff_ms": 53,
+          "total_score": 11.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (400ms)",
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway",
+            "audio_aligned_with_strike (diff=53ms)"
+          ],
+          "opposing_evidence": [
+            "weak_follow_through_waggle_like (amp=-0.037)",
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-4",
+          "top_ms": 126700,
+          "impact_ms": 127300,
+          "addr_ms": 125500,
+          "downswing_ms": 600,
+          "backswing_ms": 1200,
+          "stroke_amplitude": 0.0534,
+          "downswing_speed_peak": 0.000449,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0005,
+          "finish_hold_ms": 133,
+          "readdress_calm_ratio": 0.6367,
+          "audio_transient_ms": 127680,
+          "audio_diff_ms": 380,
+          "total_score": 3.5,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (600ms)"
+          ],
+          "opposing_evidence": [
+            "shallow_stroke_amplitude",
+            "isolated_background_audio (diff=380ms)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 125833,
+          "impact_ms": 126500,
+          "addr_ms": 124167,
+          "downswing_ms": 667,
+          "backswing_ms": 1666,
+          "stroke_amplitude": 0.1065,
+          "downswing_speed_peak": 0.000833,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0129,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 8.3271,
+          "audio_transient_ms": 126160,
+          "audio_diff_ms": 340,
+          "total_score": 2.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (667ms)",
+            "weak_follow_through_waggle_like (amp=-0.013)",
+            "abrupt_cutoff_no_finish_hold",
+            "isolated_background_audio (diff=340ms)"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 5,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 124900,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -67
+        },
+        "impact": {
+          "refined_ms": 125367,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 0
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 50,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 0.98,
+          "confidence": 1.0,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.0993,
+          "confidence": 0.999,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0522,
+          "confidence": 0.997,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 400.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 124500,
+            "event_top_ms": 124900,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 467.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 124900,
+            "event_impact_ms": 125367,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 0.86,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 400.0,
+            "downswing_ms": 467.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 4201.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.0978,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.2616,
+          "confidence": 0.998,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 72.9,
+      "ig_visual_score": 76.6,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 100.0,
+          "raw": 0.98
+        },
+        "head_stability": {
+          "score": 85.7,
+          "raw": 0.0993
+        },
+        "path_repeatability": {
+          "score": 71.5,
+          "raw": 0.0522
+        },
+        "tempo_consistency": {
+          "score": 20.0,
+          "raw": 0.86
+        },
+        "finish_balance": {
+          "score": 83.7,
+          "raw": 0.0978
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    },
+    {
+      "id": "seq-12",
+      "sequence_no": 12,
+      "start_ms": 134835,
+      "end_ms": 138853,
+      "label": "valid_swing",
+      "ball_strike_status": "estimated_strike",
+      "review_status": "auto_accepted",
+      "review_flags": [],
+      "confidence": 0.998,
+      "events": {
+        "address": {
+          "time_ms": 135102,
+          "confidence": 0.999,
+          "sources": [
+            "settled_address_stability",
+            "wrist_low_velocity"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "takeaway": {
+          "time_ms": 135835,
+          "confidence": 0.999,
+          "sources": [
+            "vertical_displacement_threshold"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "backswing": {
+          "time_ms": 136035,
+          "confidence": 0.995,
+          "sources": [
+            "backswing_mid_interpolation"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "top": {
+          "time_ms": 136335,
+          "confidence": 0.96,
+          "sources": [
+            "multi_signal_hypothesis_consensus",
+            "wrist_vertical_amplitude",
+            "kinematic_downswing_timing",
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "downswing": {
+          "time_ms": 136435,
+          "confidence": 0.996,
+          "sources": [
+            "downswing_acceleration_segment"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "impact_estimated": {
+          "time_ms": 136553,
+          "confidence": 0.95,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16
+        },
+        "follow_through": {
+          "time_ms": 136637,
+          "confidence": 0.999,
+          "sources": [
+            "follow_through_extension"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        },
+        "finish": {
+          "time_ms": 136637,
+          "confidence": 0.999,
+          "sources": [
+            "finish_posture_settlement"
+          ],
+          "uncertainty_ms": 67,
+          "sampling_resolution_ms": 67
+        }
+      },
+      "selection_rationale": "優勢裁決：候選1 (Top=136302ms, Imp=136637ms, 得分=14.0) 顯著優於次佳候選 (得分=2.0)。關鍵優勢: physiologically_valid_downswing (335ms), adequate_stroke_amplitude。次佳候選反對理由: extreme_downswing_duration (933ms)。",
+      "is_ambiguous": false,
+      "unreliable_for_ranking": false,
+      "hypotheses_top3": [
+        {
+          "hypothesis_id": "cand-1",
+          "top_ms": 136302,
+          "impact_ms": 136637,
+          "addr_ms": 135102,
+          "downswing_ms": 335,
+          "backswing_ms": 1200,
+          "stroke_amplitude": 0.1013,
+          "downswing_speed_peak": 0.001123,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0,
+          "finish_hold_ms": 0,
+          "readdress_calm_ratio": 11.2326,
+          "audio_transient_ms": 136720,
+          "audio_diff_ms": 83,
+          "total_score": 14.0,
+          "supporting_evidence": [
+            "physiologically_valid_downswing (335ms)",
+            "adequate_stroke_amplitude",
+            "high_impact_speed_peak (0.0011)",
+            "settled_readdress_before_takeaway",
+            "audio_near_strike (diff=83ms)"
+          ],
+          "opposing_evidence": [
+            "abrupt_cutoff_no_finish_hold"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-3",
+          "top_ms": 137437,
+          "impact_ms": 138370,
+          "addr_ms": 135435,
+          "downswing_ms": 933,
+          "backswing_ms": 2002,
+          "stroke_amplitude": 0.1305,
+          "downswing_speed_peak": 0.000664,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": 0.0114,
+          "finish_hold_ms": 134,
+          "readdress_calm_ratio": 6.6393,
+          "audio_transient_ms": 138360,
+          "audio_diff_ms": 10,
+          "total_score": 2.0,
+          "supporting_evidence": [
+            "adequate_stroke_amplitude",
+            "settled_readdress_before_takeaway"
+          ],
+          "opposing_evidence": [
+            "extreme_downswing_duration (933ms)"
+          ],
+          "is_ambiguous": false
+        },
+        {
+          "hypothesis_id": "cand-2",
+          "top_ms": 137103,
+          "impact_ms": 137903,
+          "addr_ms": 135102,
+          "downswing_ms": 800,
+          "backswing_ms": 2001,
+          "stroke_amplitude": 0.063,
+          "downswing_speed_peak": 0.000568,
+          "decel_at_impact": 0.0,
+          "follow_amplitude": -0.0416,
+          "finish_hold_ms": 267,
+          "readdress_calm_ratio": 5.6828,
+          "audio_transient_ms": 137840,
+          "audio_diff_ms": 63,
+          "total_score": 0.5,
+          "supporting_evidence": [
+            "settled_readdress_before_takeaway",
+            "audio_near_strike (diff=63ms)"
+          ],
+          "opposing_evidence": [
+            "slow_downswing_duration (800ms)",
+            "shallow_stroke_amplitude",
+            "weak_follow_through_waggle_like (amp=-0.042)"
+          ],
+          "is_ambiguous": false
+        }
+      ],
+      "hypothesis_count": 4,
+      "local_refinements": {
+        "top": {
+          "refined_ms": 136335,
+          "confidence": 0.96,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_velocity_zero_crossing",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": 33
+        },
+        "impact": {
+          "refined_ms": 136553,
+          "confidence": 0.95,
+          "uncertainty_ms": 20,
+          "sampling_resolution_ms": 16,
+          "sources": [
+            "wrist_kinematic_deceleration",
+            "local_high_fps_refinement"
+          ],
+          "delta_ms": -84
+        }
+      },
+      "ball_strike_feedback": {
+        "applied": false,
+        "observed_count": 38,
+        "launch_state": "rejected_by_physics"
+      },
+      "event_chain": null,
+      "strike_evidence": null,
+      "metrics": {
+        "spine_tilt_delta_deg": {
+          "value": 1.43,
+          "confidence": 0.999,
+          "details": null
+        },
+        "head_displacement_ratio": {
+          "value": 0.1368,
+          "confidence": 0.996,
+          "details": null
+        },
+        "single_swing_plane_gap_ratio": {
+          "value": 0.0321,
+          "confidence": 0.992,
+          "details": null
+        },
+        "backswing_ms": {
+          "value": 500.0,
+          "confidence": 0.95,
+          "details": {
+            "event_start_ms": 135835,
+            "event_top_ms": 136335,
+            "frame_delta_ms": 0
+          }
+        },
+        "downswing_ms": {
+          "value": 218.0,
+          "confidence": 0.95,
+          "details": {
+            "event_top_ms": 136335,
+            "event_impact_ms": 136553,
+            "frame_delta_ms": 0
+          }
+        },
+        "backswing_downswing_ratio": {
+          "value": 2.29,
+          "confidence": 0.95,
+          "details": {
+            "formula": "backswing_ms / downswing_ms",
+            "backswing_ms": 500.0,
+            "downswing_ms": 218.0
+          }
+        },
+        "finish_hold_ms": {
+          "value": 2467.0,
+          "confidence": 1.0,
+          "details": null
+        },
+        "finish_sway_ratio": {
+          "value": 0.1056,
+          "confidence": 1.0,
+          "details": null
+        },
+        "session_path_repeatability": {
+          "value": 0.6237,
+          "confidence": 0.996,
+          "details": {
+            "normalized_by": "pelvis_and_torso",
+            "valid_session_swings": 11
+          }
+        }
+      },
+      "overall_score": 81.8,
+      "ig_visual_score": 88.1,
+      "coverage": 1.0,
+      "subscores": {
+        "spine_tilt_stability": {
+          "score": 100.0,
+          "raw": 1.43
+        },
+        "head_stability": {
+          "score": 72.1,
+          "raw": 0.1368
+        },
+        "path_repeatability": {
+          "score": 72.0,
+          "raw": 0.0321
+        },
+        "tempo_consistency": {
+          "score": 76.3,
+          "raw": 2.29
+        },
+        "finish_balance": {
+          "score": 81.6,
+          "raw": 0.1056
+        }
+      },
+      "quality_metadata": {
+        "unreliable_for_ranking": false,
+        "is_ambiguous": false
+      }
+    }
+  ],
+  "rankings": {
+    "posture": [
+      {
+        "rank": 1,
+        "seq": 12,
+        "score": 81.8,
+        "pinned": false
+      },
+      {
+        "rank": 2,
+        "seq": 2,
+        "score": 73.9,
+        "pinned": false
+      },
+      {
+        "rank": 3,
+        "seq": 11,
+        "score": 72.9,
+        "pinned": false
+      },
+      {
+        "rank": 4,
+        "seq": 4,
+        "score": 72.5,
+        "pinned": false
+      },
+      {
+        "rank": 5,
+        "seq": 7,
+        "score": 72.1,
+        "pinned": false
+      }
+    ],
+    "tempo": [
+      {
+        "rank": 1,
+        "seq": 9,
+        "score": 92.3,
+        "pinned": false
+      },
+      {
+        "rank": 2,
+        "seq": 12,
+        "score": 76.3,
+        "pinned": false
+      },
+      {
+        "rank": 3,
+        "seq": 7,
+        "score": 68.0,
+        "pinned": false
+      },
+      {
+        "rank": 4,
+        "seq": 1,
+        "score": 61.8,
+        "pinned": false
+      },
+      {
+        "rank": 5,
+        "seq": 4,
+        "score": 54.1,
+        "pinned": false
+      }
+    ],
+    "finish": [
+      {
+        "rank": 1,
+        "seq": 7,
+        "score": 88.0,
+        "pinned": false
+      },
+      {
+        "rank": 2,
+        "seq": 11,
+        "score": 83.7,
+        "pinned": false
+      },
+      {
+        "rank": 3,
+        "seq": 12,
+        "score": 81.6,
+        "pinned": false
+      },
+      {
+        "rank": 4,
+        "seq": 2,
+        "score": 80.8,
+        "pinned": false
+      },
+      {
+        "rank": 5,
+        "seq": 9,
+        "score": 74.4,
+        "pinned": false
+      }
+    ],
+    "ig": [
+      {
+        "rank": 1,
+        "seq": 9,
+        "score": 89.9,
+        "pinned": false
+      },
+      {
+        "rank": 2,
+        "seq": 8,
+        "score": 88.6,
+        "pinned": false
+      },
+      {
+        "rank": 3,
+        "seq": 7,
+        "score": 88.5,
+        "pinned": false
+      },
+      {
+        "rank": 4,
+        "seq": 12,
+        "score": 88.1,
+        "pinned": false
+      },
+      {
+        "rank": 5,
+        "seq": 2,
+        "score": 80.6,
+        "pinned": false
+      }
+    ]
+  }
+}

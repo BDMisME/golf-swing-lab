@@ -1,0 +1,150 @@
+{
+  "dataset_id": "real_2min_developer_assisted_annotation_v1",
+  "dataset_version": "developer_assisted_visual_annotation",
+  "dataset_role": "development_set",
+  "independent_validation_status": "NOT_VALIDATED",
+  "video_filename": "2分鐘.mov",
+  "video_sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
+  "duration_ms": 139053,
+  "total_frames": 8342,
+  "fps": 59.99137,
+  "annotation_author": "Developer-assisted visual analysis (AI Takeover Session)",
+  "annotation_date": "2026-10-23",
+  "annotation_method": "60fps frame-by-frame visual contact-sheet inspection + audio transient impulse cross-validation",
+  "validation_disclaimer": "This dataset is a development reference created via visual contact sheets and audio transients. It is NOT an external double-blind independent ground truth. Accuracy against this file reflects development alignment, while true independent accuracy remains NOT_VALIDATED.",
+  "findings_summary": "All 12 swings are genuine full valid swings (no practice swings). All downswing tempos are physiologically consistent (233ms - 367ms). Top and impact times are anchored to visual transition and strike moments.",
+  "swings": [
+    {
+      "sequence_no": 1,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 10672,
+      "top_frame": 640,
+      "impact_ms": 10938,
+      "impact_frame": 656,
+      "downswing_ms": 266,
+      "visual_evidence": "Top at highest wrist turn (frame 640), rapid downswing with ball launch at frame 656."
+    },
+    {
+      "sequence_no": 2,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 25310,
+      "top_frame": 1518,
+      "impact_ms": 25610,
+      "impact_frame": 1536,
+      "downswing_ms": 300,
+      "visual_evidence": "Smooth backswing, top transition at 1518, clubhead-ball impact clearly visible at 1536."
+    },
+    {
+      "sequence_no": 3,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 38178,
+      "top_frame": 2290,
+      "impact_ms": 38478,
+      "impact_frame": 2308,
+      "downswing_ms": 300,
+      "visual_evidence": "Top turn at 2290, explosive downswing, ball launch onset at 2308."
+    },
+    {
+      "sequence_no": 4,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 51682,
+      "top_frame": 3100,
+      "impact_ms": 51915,
+      "impact_frame": 3114,
+      "downswing_ms": 233,
+      "visual_evidence": "Crisp turn, top at 3100, impact at 3114 (233ms downswing), full high follow-through."
+    },
+    {
+      "sequence_no": 5,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 66435,
+      "top_frame": 3985,
+      "impact_ms": 66702,
+      "impact_frame": 4001,
+      "downswing_ms": 267,
+      "visual_evidence": "Top apex at 3985, downswing release with impact at 4001."
+    },
+    {
+      "sequence_no": 6,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 84340,
+      "top_frame": 5059,
+      "impact_ms": 84673,
+      "impact_frame": 5079,
+      "downswing_ms": 333,
+      "visual_evidence": "Deep turn, top at 5059, solid impact at 5079 with clear acoustic crack."
+    },
+    {
+      "sequence_no": 7,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 105112,
+      "top_frame": 6305,
+      "impact_ms": 105412,
+      "impact_frame": 6323,
+      "downswing_ms": 300,
+      "visual_evidence": "Top transition at 6305, impact at 6323, balanced finish hold."
+    },
+    {
+      "sequence_no": 8,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 110780,
+      "top_frame": 6645,
+      "impact_ms": 111147,
+      "impact_frame": 6667,
+      "downswing_ms": 367,
+      "visual_evidence": "True swing Top at 6645 (wrist y=0.429), strike at 6667 (wrist y=0.608). Club drop gesture occurs later at 111563-112497ms."
+    },
+    {
+      "sequence_no": 9,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 114780,
+      "top_frame": 6885,
+      "impact_ms": 115013,
+      "impact_frame": 6899,
+      "downswing_ms": 233,
+      "visual_evidence": "Rapid compact swing, top at 6885, impact at 6899 (233ms downswing). Subsequent club lowering at 115898ms is not a swing."
+    },
+    {
+      "sequence_no": 10,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 120682,
+      "top_frame": 7239,
+      "impact_ms": 120915,
+      "impact_frame": 7253,
+      "downswing_ms": 233,
+      "visual_evidence": "Top turn at 7239, explosive strike at 7253 with synchronized audio transient (120680ms)."
+    },
+    {
+      "sequence_no": 11,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 125200,
+      "top_frame": 7510,
+      "impact_ms": 125467,
+      "impact_frame": 7526,
+      "downswing_ms": 267,
+      "visual_evidence": "Top at 7510, impact at 7526, long finish hold."
+    },
+    {
+      "sequence_no": 12,
+      "label": "valid_swing",
+      "strike_status": "confirmed_strike",
+      "top_ms": 136502,
+      "top_frame": 8188,
+      "impact_ms": 136737,
+      "impact_frame": 8202,
+      "downswing_ms": 235,
+      "visual_evidence": "Final swing, top apex at 8188, impact at 8202, clean follow-through."
+    }
+  ]
+}

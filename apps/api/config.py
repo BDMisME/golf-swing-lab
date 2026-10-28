@@ -1,6 +1,69 @@
+import os
+import secrets
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+KNOWN_LEAKED_SECRETS: set[str] = {
+    "change-me-in-production-at-least-32-bytes-long-secret-key",
+    "gsl-rotated-session-secret-7578cfc2fc2e5e4964be15b584741a88e550d330",
+}
+
+
+def resolve_session_secret(key_file_path: Path | None = None) -> str:
+    """
+    動態安全解析 JWT 簽章密鑰，嚴禁在原始碼中存放真實密鑰：
+    1. 優先由環境變數 SESSION_SECRET 或 GSL_SESSION_SECRET 載入
+    2. 若未設定，檢查個人 Mac App 專屬本機安全持久化金鑰檔 (~/.golfswinglab/session_secret，權限 0600)
+    3. 若該金鑰檔不存在或內容在已知外洩清單中，自動生成全新 256-bit 隨機密鑰並寫入（權限 0600）
+    4. 嚴格攔截任何歷史外洩金鑰；若無法完成持久化，嚴格安全失敗（Fail-Closed）拋出例外，杜絕靜默回退造成登入態遺失
+    """
+    # 1. 檢查環境變數
+    env_secret = os.environ.get("SESSION_SECRET") or os.environ.get("GSL_SESSION_SECRET")
+    if env_secret and env_secret.strip() and env_secret.strip() not in KNOWN_LEAKED_SECRETS:
+        return env_secret.strip()
+
+    # 2. 個人 Mac App 本機安全金鑰目錄 (~/.golfswinglab/)
+    key_file = key_file_path or (Path.home() / ".golfswinglab" / "session_secret")
+    key_dir = key_file.parent
+
+    try:
+        if key_file.exists():
+            try:
+                stored = key_file.read_text(encoding="utf-8").strip()
+            except OSError as e:
+                raise RuntimeError(f"無法讀取本機 session_secret 金鑰檔案 ({key_file}): {e}，請檢查檔案權限。") from e
+
+            if stored and len(stored) >= 32 and stored not in KNOWN_LEAKED_SECRETS:
+                try:
+                    os.chmod(key_file, 0o600)
+                except OSError:
+                    pass
+                return stored
+    except (PermissionError, OSError) as e:
+        raise RuntimeError(
+            f"無法持久化或存取本機 session_secret 金鑰檔案 ({key_file}): {e}。請檢查目錄或檔案讀寫權限。"
+        ) from e
+
+    # 3. 自動生成本機專屬隨機金鑰並以 0600 權限持久化（Fail-Closed 嚴格安全防護）
+    new_secret = secrets.token_hex(32)
+    try:
+        key_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        old_umask = os.umask(0o077)
+        try:
+            key_file.write_text(new_secret, encoding="utf-8")
+            os.chmod(key_file, 0o600)
+        finally:
+            os.umask(old_umask)
+        return new_secret
+    except Exception as exc:
+        raise RuntimeError(
+            f"無法持久化 session_secret 金鑰檔案至 {key_file}: {exc}。"
+            f"系統拒絕在未持久化狀態下靜默啟動（避免每次重啟 App 登入態全數失效）。"
+            f"請確認該目錄具備寫入權限，或由環境變數 SESSION_SECRET 注入安全金鑰。"
+        ) from exc
 
 
 class Settings(BaseSettings):
@@ -30,7 +93,7 @@ class Settings(BaseSettings):
     s3_force_path_style: bool = True
     presigned_url_ttl_seconds: int = 900
 
-    session_secret: str = "change-me-in-production-at-least-32-bytes-long-secret-key"
+    session_secret: str = Field(default_factory=resolve_session_secret)
     admin_email: str = "golfer@swinglab.local"
     admin_password: str = "GolfSwingLab!2026"
     allowed_origins: str = "http://localhost:23000,http://127.0.0.1:23000,http://localhost:3000,https://golf-swing-lab.zeabur.app"
@@ -64,9 +127,12 @@ class Settings(BaseSettings):
 
     def validate_security_posture(self) -> None:
         """驗證生產環境安全設定，防止預設金鑰洩漏與弱密碼上線。"""
+        if self.session_secret in KNOWN_LEAKED_SECRETS:
+            raise RuntimeError("系統檢測到已知公開外洩之歷史 session_secret，已被安全機制強制阻擋！請使用未外洩之安全隨機金鑰。")
+        if len(self.session_secret) < 32:
+            raise RuntimeError("session_secret 長度過短，至少需具備 32 字元（256-bit）。")
+
         if self.app_env == "production":
-            if self.session_secret == "change-me-in-production-at-least-32-bytes-long-secret-key":
-                raise RuntimeError("生產環境嚴禁使用預設 session_secret，請由環境變數 SESSION_SECRET 注入至少 32 字元密鑰。")
             if self.admin_password == "GolfSwingLab!2026":
                 raise RuntimeError("生產環境嚴禁使用預設 admin_password，請由環境變數 ADMIN_PASSWORD 注入高強度密碼。")
             if self.s3_access_key_id == "minioadmin" or self.s3_secret_access_key == "minioadmin123":

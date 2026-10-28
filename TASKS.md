@@ -2,7 +2,159 @@
 
 > 狀態標記說明：
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
-> - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部真實資料集驗證 (`NOT_VALIDATED`)
+> - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
+
+## Round 8: PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate (2026-10-27)
+- [x] **P0：WebKit 測試必須使用真實分析結果（真正 UI 事件跳轉驗收）**：
+  - 動態取得最新 139 秒（`2分鐘.mov`，SHA-256: `4993a3b6...`）正式分析完成之 Session (`e8e182dd-...`)、Video (`39608133-...`) 與真實球次 ID。
+  - 前端單球頁面增強：點擊事件按鈕時執行 `video.pause()` 定格畫面，杜絕播放漂移。
+  - 透過原生 WebKit DOM `button.click()` 觸發 Top 與 Impact 跳轉，實測 Swing #8、#9、#10 播放解碼誤差均為 **0.0ms (<= 100ms 門檻，PASS)**。
+  - 驗證 Clean Motion Canvas 特徵繪製（Top 轉肩線與手腕光環、Impact 擊球定位點與頭部位移檢核圈）及跨階段切換防殘留保護（`no_residual_artifacts: true`）。
+  - 控制台 0 錯誤，產出 7 張原生快照與 JSON 報告（`GUI_EVENT_VERIFIED: PASS`）。
+- [x] **P1：修正本機密鑰持久化失敗時的靜默回退（Fail-Closed Enforcement）**：
+  - 修正 `resolve_session_secret()`，目錄無法建立或權限不足無法寫入 `~/.golfswinglab/session_secret` 時明確拋出 `RuntimeError`，嚴禁靜默降級使用臨時隨機金鑰。
+  - 單元測試驗證目錄 0700、檔案 0600、唯讀目錄拋出例外防護，5/5 PASSED。
+- [x] **全量測試與構建**：
+  - 後端測試套件：**82 / 82 PASSED (100%)** in 202.73s。
+  - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
+
+## Round 7: PR #1 Final Security & Visual Smoke Gate (2026-10-27)
+- [x] **P0-1：真正移除 Git 中的 JWT 簽章密鑰**：
+  - 徹底移除原始碼與設定中所有寫死金鑰，改由 `resolve_session_secret()` 動態安全加載。
+  - 實作本機專屬安全金鑰持久化機制：`~/.golfswinglab/session_secret`（目錄 `0700`、檔案 `0600`），重啟維持穩定登入態。
+  - 定義 `KNOWN_LEAKED_SECRETS` 黑名單，全面阻絕歷史已外洩金鑰；強化 `validate_security_posture` 與 `ensure_default_admin`。
+  - 實測本機 API 舊 Token 回傳 `401 AUTH_INVALID_SIGNATURE`（徹底失效），新 Token 簽發與驗證 100% 正常。
+- [x] **P0-2：真實 WebKit 播放器與 Clean Motion 驗收**：
+  - 撰寫並執行 `scripts/verify_webkit_gui_playback.py`，調用 macOS 原生 `WebKit.framework` (WKWebView)。
+  - 驗證場次報告頁面與 Top 5 榜單，產出截圖 `01_webkit_session_report.png`。
+  - 實測導航至第 8、9、10 球，精準跳轉 Top 與 Impact 時間碼（播放誤差為 0.0ms <= 100ms 門檻）。
+  - 全畫布像素掃描驗證 Clean Motion Canvas 骨架確實繪製（Top 頂點肩膀線、Impact 擊球定位點與頭部檢核圈），Console 0 錯誤。
+  - 儲存全部 7 張快照截圖至 `docs/screenshots/webkit/`，產出 `docs/reports/takeover/webkit_gui_smoke_report.json`（狀態 `PASS`）。
+- [x] **P1：驗收證據與版本一致性**：
+  - 確保報告資訊真實反映 HEAD 與乾淨工作樹狀態，修復測試中 `time.monotonic()` 計時器，全套 82 個測試 100% 通過。
+  - 前端 Next.js 15.5.28 構建 0 錯誤。
+- [x] **P1：修正不安全的回退說明**：
+  - 徹底移除 PR 說明中的 `git reset --hard`，替換為安全無損的 `git stash`、`git checkout` 與 `git revert -m 1` 指引。
+
+## Round 6: Beta Release & Merge Preparation (2026-10-27)
+- [x] **A. P0 安全修復（憑證輪替與硬編碼移除）**：
+  - 移除 `scripts/capture_webkit_screenshots.py` 中的硬編碼 JWT `DEFAULT_TOKEN`，改由本機環境變數 `GSL_AUTH_TOKEN` / `GSL_SESSION_TOKEN` 或 auth 模組動態簽發短效測試 Token。
+  - 輪替 `apps/api/config.py` 中的 `session_secret`，使舊外洩憑證徹底失效（實測 `decode_session_token` 回傳 `AUTH_INVALID_SIGNATURE`）。
+- [x] **B. 排行榜最後修正（Posture Composite Independence）**：
+  - 移除 `get_posture_composite_score()` 中當缺少姿勢分項時退回使用 `overall_score` 的錯誤回退。
+  - 姿勢分項（`spine_tilt_stability` 60% + `head_stability` 40%）不可得時嚴格回傳 `None`，杜絕用總分冒充姿勢評分。
+- [x] **C. 修正測試版本追溯（Verifiable Provenance）**：
+  - 更新 `scripts/run_production_acceptance.py`：動態記錄 Git SHA (`git rev-parse HEAD`)、工作目錄狀態 (`working_tree_state: clean/dirty`)、修改檔案數、原片 SHA-256、測試時間戳記與分析程式版本 (`2.1.0-beta`)。
+  - Markdown 與 JSON 報告 100% 同步動態生成，杜絕使用提交前之舊 HEAD 冒充最終版本驗證。
+- [x] **D. 實際 Mac App Smoke Test（隔離環境端到端實測）**：
+  - 撰寫並執行 `scripts/smoke_test_mac_app.py`：在完全隔離的臨時環境（臨時 SQLite DB 與 Local Storage）中執行真實 139 秒 iPhone 錄影完整 Pipeline。
+  - 驗證場次報告 API (`/api/sessions/{id}/report`)：確認偵測 12 球、有效 12 球、四大排行榜完整、姿勢榜獨立計分、爭議球嚴格排除。
+  - 驗證單球播放 API (`/api/swings/{id}`) 與 Clean Motion：特別檢驗第 8、9、10 球之 Top/Impact 時間碼（Downswing 均為生理合規 367ms）、關鍵影格 Keyframes、人體骨架 Landmarks 幾何座標與審查狀態。
+  - 測試結束後 100% 安全清理臨時資源，使用者既有練習紀錄完全不受影響。
+- [x] **E. 全量測試與構建**：
+  - 後端測試套件：**80 / 80 PASSED (100%)** in 194s。
+  - 前端構建：Next.js 15.5.28 **9/9 靜態頁面 0 錯誤**。
+  - 隔離 Mac App Smoke Test：**100% PASS**（結果報告已儲存於 `docs/reports/takeover/smoke_test_report.json`）。
+
+## Round 5: Final RC Gate — Top Accuracy & Ranking Integrity (2026-10-26)
+- [x] **P0-1：解決 Top 精度重大回退（Top Plateau Saturated Height & Downswing Initiation）**：
+  - 釐清高爾夫動作分析慣例之 Top 定義：Top 為頂部蓄力停頓期（Top Pause Plateau）結束、手臂發動向下攻擊的轉換臨界點（Downswing Initiation / Transition Breakaway）。
+  - 手腕高位蓄力區（頂點 15% 範圍內）幾何高度平滑飽和（`h_score = min(1.0, h_raw / 0.85)`，權重 2.5），避免微米級高度差異壓制下桿發動轉折。
+  - 停頓期下桿爆發轉折：手腕處於頂點高位區且向下速度切換為正、加速度爆發（`acc >= 0.0020`），給予 `breakaway_bonus = 4.0` 獎勵。
+  - 生理下桿時長相容性中立區間（190–390ms 保持中立 `0.0` 分），杜絕人為固定 333ms 先驗吸附，並對 `> 480ms` 給予 `-6.5` 分重懲。
+  - **30fps 正式 Worker Proxy Top MAE**：由 124.4ms 降至 **86.1 ms (2.6 影格 @ 30fps，PASS)**！
+  - **60fps 原片 Top MAE**：由 151.5ms 降至 **90.4 ms (5.4 影格 @ 60fps，PASS)**！
+  - **Swing #9** Top 偏差由 180ms 縮減至 **80ms**！
+  - **Swing #10** 下桿時長由 534ms 恢復至 **367ms**（GT 233ms），Top 誤差 82ms！
+- [x] **P0-2：保留高自動化率，杜絕放寬審核換取假準確（Acceptance Integrity Gate）**：
+  - 將下桿異常上限門檻由 650ms 收斂至生理合理的 480ms；下桿時間超過 480ms 嚴格標記 `timing_anomaly` 並降級為 `needs_review`。
+  - 第 10 球在 Top 校正後下桿時長回歸 367ms，運動學最低點制動紮實，維持 `auto_accepted`。
+  - 30fps 正式 Worker Proxy 自動通過率穩定維持 **91.7% (11/12 球)**，時序異常球數 **0 球**！
+- [x] **P0-3：修正最佳姿勢排行榜（Posture Composite Ranking & Subpar Tempo Marker）**：
+  - 重構 `rank_session_swings` 中的姿勢榜：徹底揚棄直接使用 `overall_score` 的做法，實作專門的姿勢綜合評分 `get_posture_composite_score`（融合軀幹前傾穩定 `spine_tilt_stability` 60% + 頭部相對位移 `head_stability` 40%）。
+  - 姿勢榜推薦說明格式化為「軀幹前傾穩定 Δ=X°、頭部位移 r=Y，姿勢得分 Z 分」（例如 Rank #1 Swing #11：84.8 分）。
+  - 節奏榜對得分低於 50 分之推薦球次，前綴自動加註「（本場相對最佳）」，絕不誇大為技術優秀。
+- [x] **P0-4：消除驗收報告硬編碼，健全證據鏈（Report Integrity & Verifiable Provenance）**：
+  - `scripts/run_production_acceptance.py` 產出之 Markdown 與 JSON 全面改為 100% 動態生成，移除 `(11/12 球)`、`PASS` 等任何字面寫死。
+  - 自動寫入測試影片 SHA-256 雜湊、Git HEAD Commit Hash、分支名稱與 Development Set Alignment 聲明。
+- [x] **全量服務與全鏈路驗收**：
+  - 後端測試套件：**80 / 80 PASSED (100%)** in 195s。
+  - 前端構建：`npm --prefix apps/web run build` 9/9 靜態頁面 0 錯誤。
+
+## Round 4: Release Candidate — False Review Reduction & True E2E (2026-10-24)
+- [x] **第一優先：大幅修正不必要的 needs_review（Tri-State Audio-Kinematic Plausibility）**：
+  - 遍歷候選區間內所有合理音訊瞬態峰值（避免距離 center 最近單一峰值誤導）。
+  - 三層清楚區分：
+    - 情境 A（環境雜音/隨揮雜音拒絕）：若運動學最低點扎實，而音訊落在隨揮期或偏差過大，安全拒絕雜音（標記 `ambient_audio_rejected`），維持 `auto_accepted`。
+    - 情境 B（跨模態爭議）：運動學自身亦存在雙峰競爭時才標記 `audio_kinematic_conflict` 並降級為 `needs_review`。
+    - 情境 C（運動學自身亦無法定位）：降級為 `needs_review`。
+  - 正式 30fps Proxy 的**自動通過率從 41.7% 提升至 91.7% (11/12 球自動通過)**。
+  - 保留第 10 球防止隨揮晚期雜音誤判能力（定位 120967ms，誤差 52ms / 1.6 影格），標記 `ambient_audio_rejected`，維持 `auto_accepted`。
+- [x] **第二優先：解除下桿時間過度集中在 ~333ms（Prior Bias Removal）**：
+  - 徹底移除粗掃與局部精修中對 `220 <= ds <= 360` 額外給予 `+5.0` 分的先驗吸附。
+  - 生理合理區間（180–600ms）中立化（`0.0` 分），將決定權完全回歸手腕空間幾何最高點（`h_score * 5.0`）、速度換向零交越（`cand_zc * 3.0`）與下桿爆發啟動（`acc * 35.0`）。
+  - 對非手腕頂點高位區候選施予懲罰（`-8.0`），確保頂點主導權。
+  - 30fps Proxy 呈現自然真實下桿時序差異（333ms, 366ms, 400ms, 466ms, 467ms, 500ms, 534ms）。
+- [x] **第三優先：驗收結果與正式推論 JSON 100% 一致（Report Integrity Assurance）**：
+  - `scripts/run_production_acceptance.py` 產出 `production_acceptance_report.json` 後，直接由該 JSON 自動生成 `production_acceptance_summary.md`。
+  - 內建完整性斷言，逐欄校驗數值，若有任何不一致直接拋出 `REPORT_INTEGRITY_FAIL`。
+- [x] **第四優先：真正跑通 App 完整 E2E（True E2E Pipeline）**：
+  - 建立 `tests/test_true_e2e_pipeline.py`（全套 3 個測試 100% 通過）：
+    - 真實 11 秒 iPhone 錄影完整 Pipeline（Probe PTS/VFR → 720p/30fps Proxy 與縮圖 → Scanner → 狀態機 → 評分引擎 → SQLite DB 持久化 → FastAPI `/report` 與 `/swings/{id}` 端點讀取 → 排行榜驗證 → 測試完成安全自動清理）。
+    - 動作分類硬門檻：非 `valid_swing`（走路、空揮、放球），`overall_nullable` 必然為 `None`，杜絕「走路拿 70 分」。
+    - 動作品質嚴懲扣分：抬頭起身、失控節奏（1.2:1）、收桿失衡嚴格扣分（總分降至 35~45 分），杜絕爛球虛高 70+ 分。
+- [x] **服務與全量測試驗收**：
+  - 後端測試套件：**80 / 80 PASSED (100%)**。
+  - 前端構建：`npm --prefix apps/web run build` 9/9 靜態頁面 0 錯誤。
+  - 前端構建：`npm --prefix apps/web run build` 9/9 靜態頁面 0 錯誤。
+
+## Round 2: Production Acceptance & Independent Accuracy Audit (2026-10-23)
+- [x] **P0-1 修正 Ground Truth 證據來源聲明與保存關鍵接觸片**：
+  - 更新 `docs/reports/takeover/independent_human_gt_2min.json`：明確標註為 `developer_assisted_visual_annotation`，角色為 Development Set，外部盲測精度維持 `NOT_VALIDATED`。
+  - 產出並保存關鍵球（#8、#9、#10）連續影格接觸片至 `docs/reports/takeover/contact_sheets/`（`swing_8_contact_sheet.jpg`, `swing_9_contact_sheet.jpg`, `swing_10_contact_sheet.jpg`）。
+- [x] **P0-2 正式 Worker 30fps Proxy 作為主要驗收路徑**：
+  - 透過 `apps/worker/tasks.py` 標準路徑生成 Safari 相容 720p/30fps H.264 Proxy 與縮圖。
+  - 30fps Proxy 驗收指標（Primary Acceptance Target）：
+    - 揮桿分類正確率：**100.0% (12/12)**
+    - Top MAE：**66.7 ms (2.0 frames @ 30fps)**（由 125.4ms 大幅縮減）
+    - Impact MAE：**41.1 ms (1.2 frames @ 30fps)**
+    - 生理下桿符合率：**100.0%**
+    - 自動通過率：**100.0%**
+    - 時序異常球數：**0 球**
+  - 60fps 原片路徑指標（Development Set Alignment）：
+    - Top MAE：**89.0 ms (5.3 frames @ 60fps)**（由 179.3ms 縮小 50%）
+    - Impact MAE：**27.8 ms (1.7 frames @ 60fps)**
+  - 60fps vs 30fps 逐球事件對齊中位數誤差 < 34ms，解碼與 PTS 時間碼完全同步。
+- [x] **P0-3 改善 Top 事件候選與下桿發動轉折點（Downswing Initiation）**：
+  - 實作左右手腕可見度平滑加權融合（`_midpoint`），消除 DTL 視角單側遮擋飄移拉偏。
+  - 頂點停頓蓄力高位區（Top Pause Plateau）轉折判定：在手腕高位蓄力區加入 `is_crest` 幾何高度閘門，並鎖定向下速度突變之下桿爆發啟動點（Transition Breakaway Launch）；結合生理下桿時長（200~380ms）先驗約束，根除第 8 球、第 9 球、第 10 球偏早 150~330ms 的系統性偏差。
+- [x] **P0-4 校準 Confidence 與 Timing Uncertainty**：
+  - 嚴格分離 Sampling Resolution（16~33ms）、Timing Uncertainty（Top 保守標記 60~80ms，Impact 33~55ms）與 Heuristic Confidence（封頂 0.88）。
+  - 徹底杜絕將 16ms 影格解析度冒充定位誤差，或骨架清晰即宣稱 0.96 假高分。
+- [x] **P0-5 負樣本分類驗證與 Top 5 可信度**：
+  - 6 類負樣本測試 100% 通過（空揮、Waggle、走動、撿球、調整站姿、出鏡）。
+  - Top 5 榜單（最佳姿勢、最佳節奏、最佳收桿、IG 精選）基於可觀測幾何指標排序，標註為啟發式推薦，絕不宣稱球速、距離、球路或擊球甜蜜點。
+- [x] **P1 日常使用驗收與服務健康**：
+  - 11 秒短片（`測試影片/11秒.mov`）：成功自動辨識單球完整揮桿（Top 3473ms, Impact 3807ms, ds 334ms, score 73.2）。
+  - 後端全量測試：**74 / 74 PASSED (100%)**。
+  - 前端打包：`npm --prefix apps/web run build` 9/9 頁面成功。
+
+## Round 1: Principal Engineering Takeover & Autonomous Accuracy Recovery (2026-10-23)
+- [x] **P0-1 建立全片接觸片與獨立人工視覺真值**：撰寫 `scripts/frame_evidence.py` 輸出 12 球逐格 Contact Sheet，獨立檢視 8,342 影格。確認 12 球全部為真實完整擊球（`valid_swing`），生理下桿時間均在 233ms ~ 367ms。建立專案首份客觀獨立人工真值檔 `docs/reports/takeover/independent_human_gt_2min.json`。
+- [x] **P0-2 根除放桿假動作吞噬與截斷隨揮 Bug**：重構 `packages/analysis/events/state_machine.py`，隨揮頂點搜尋不受後續放桿假動作截斷。生理下桿時間引入黃金區間打分（200~420ms +6.0分，500ms以上放桿扣分），下桿動能峰值佔全視窗最大速度比（`spd_ratio >= 0.70` +5.0分，無發力放桿扣分），徹底讓第 8 球、第 9 球正式擊球勝出。
+- [x] **P0-3 根除局部高 FPS 精修手腕在頭頂誤判 Impact Bug**：重構 `packages/analysis/detection/scanner.py` 中的 `_refine_event_local_high_fps`。加入手腕高度閘門（Height Gates，手腕必須在垂直幅度 40% 以下之擊球區），優先與音訊瞬態精確同步。徹底消除第 1、4、12 球手腕在頭頂被誤判為 Impact 的 170~200ms 巨大偏差。
+- [x] **P0-4 修正小白球追蹤器盲目回饋空中球**：在 `scanner.py` 中加入生理下桿時序防呆（`180 <= (obs_launch - top_ev.time_ms) <= 550`），若時序異常拒絕覆寫，根除下桿 1050ms 的 timing_anomaly。
+- [x] **P0-5 修正 Impact 制動減速計算方向與幾何深度權重**：將 `_generate_swing_hypotheses` 中的衝擊制動量修正為 `speed[idx-1] - speed[idx]`（前一影格速度減去當前影格速度），加入手腕深度硬性約束與軌跡最低點加分，徹底解決第 8 球被頭頂隨揮 NMS 抑制抹殺之 Bug。
+- [x] **P0-6 修正緊湊半揮桿被硬性振幅誤判空揮**：解除第 998 行 `stroke_amplitude < 0.065` 一票否決，引入音訊客觀擊球證據與動能綜合判定，使第 10 球成功恢復為高分優質揮桿。
+- [x] **P0-7 端到端全量驗收與客觀評估報告**：
+  - 揮桿分類正確率：**100.0% (12/12)**。
+  - Impact MAE：從 293.2ms 驟降至 **29.2ms（1.7 影格）**，誤差縮小 10 倍！
+  - 生理下桿符合率：**100.0%**。
+  - 免人工審核自動通過率：**100.0%**。
+  - 時序異常球數：**0 球**。
+  - 後端測試：**74/74 PASSED (100%)**。
+  - 前端建置：Next.js 9/9 靜態路由成功。
+  - 本機服務監聽：FastAPI `28000` 與 Web `23000` 正常運作。
 
 ## Final Swing Selection & Ranking Fix (2026-10-22)
 - [x] **P0-1 修正 Follow-through 跨動作污染**：重構 `packages/analysis/events/state_machine.py`，建立物理邊界偵測機制。若存在下一個擊球候選，以兩者之間的放桿／重新站定點作為動作終止界線，切斷跨動作隨揮。隨揮頂點搜尋嚴格限制在 `imp_t + 650ms` 生理區間內。實作連續姿態穩定性計算 `finish_hold_ms`，從隨揮頂點逐幀檢查手腕是否維持在收桿高度（`<= follow_y + 0.08`）且運動速度維持平靜，嚴禁使用 `times[-1]` 借用影片剩餘時間。新增「先試擺再正式擊球」獨立回歸測試（`test_waggle_before_swing_no_cross_contamination`）。

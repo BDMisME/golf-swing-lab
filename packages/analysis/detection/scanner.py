@@ -455,7 +455,17 @@ class CoarseToFineDetector:
                     # 僅當明確檢測到真球升空 (airborne / moving) 且時間差在生理合理範圍內時，方回饋 Impact
                     if ball_res.get("is_valid") and launch_state in ("airborne", "moving") and obs_launch is not None:
                         diff = abs(obs_launch - imp_ev.time_ms)
-                        if diff <= 180:
+                        # 生理下桿防呆：若 top_ev 存在，下桿時間必須在生理區間 [180, 550] 內
+                        ds_valid = True
+                        if top_ev:
+                            cand_ds = obs_launch - top_ev.time_ms
+                            if cand_ds < 180 or cand_ds > 550:
+                                ds_valid = False
+                                logger.info(
+                                    f"小白球出發時間 ({obs_launch}ms) 與 Top ({top_ev.time_ms}ms) 的下桿時間 ({cand_ds}ms) 違反生理常理，已拒絕覆寫"
+                                )
+
+                        if diff <= 150 and ds_valid:
                             orig_imp = imp_ev.time_ms
                             imp_ev.time_ms = obs_launch
                             imp_ev.uncertainty_ms = 16
@@ -473,44 +483,28 @@ class CoarseToFineDetector:
                     logger.debug(f"小白球彈道追蹤跳過或異常: {b_exc}")
 
             # ---------------------------------------------------------
-            # 2. 局部高 FPS 二次精修 (P0-3 & P0-4: 真正影格與時序防呆)
+            # 2. 局部高 FPS 二次精修 (P0-3 & P0-4: 先 Impact 錨定，再精修 Top 轉換發動點)
             # ---------------------------------------------------------
             local_refinements: dict[str, Any] = {}
             finalized_event_frames: dict[str, FramePoseResult] = {}
 
-            if top_ev and (top_ev.uncertainty_ms > 20 or top_ev.confidence < 0.95):
-                top_ref = self._refine_event_local_high_fps(
-                    video_path=video_path,
-                    extractor=ext,
-                    event_name="top",
-                    center_ms=top_ev.time_ms,
-                    window_radius_ms=200,
-                    high_fps_step_ms=16,
-                )
-                if top_ref and abs(top_ref.get("delta_ms", 0)) <= 200:
-                    top_ev.time_ms = top_ref["refined_ms"]
-                    top_ev.confidence = top_ref["confidence"]
-                    top_ev.uncertainty_ms = top_ref["uncertainty_ms"]
-                    top_ev.sampling_resolution_ms = top_ref.get("sampling_resolution_ms", 16)
-                    for s in top_ref["sources"]:
-                        if s not in top_ev.detection_sources:
-                            top_ev.detection_sources.append(s)
-                    if "refined_frame" in top_ref:
-                        finalized_event_frames["top"] = top_ref["refined_frame"]
-                    local_ref_copy = {k: v for k, v in top_ref.items() if k != "refined_frame"}
-                    local_refinements["top"] = local_ref_copy
-
+            # (A) 先行精修 Impact：具有音訊瞬態與球體起飛等硬客觀證據
             if imp_ev and not ball_feedback_info.get("applied") and (imp_ev.uncertainty_ms > 20 or imp_ev.confidence < 0.95):
                 imp_ref = self._refine_event_local_high_fps(
                     video_path=video_path,
                     extractor=ext,
                     event_name="impact",
                     center_ms=imp_ev.time_ms,
-                    window_radius_ms=200,
+                    window_radius_ms=160,
                     high_fps_step_ms=16,
+                    audio_transients_ms=audio_transients_ms,
                 )
                 if imp_ref:
-                    # 驗證精修後的合理性：下桿時間必須維持在生理區間，且精修偏移不應失控
+                    for flg in imp_ref.get("flags", []):
+                        flags_set.add(flg)
+                    if "audio_kinematic_conflict" in imp_ref.get("flags", []):
+                        review_status = "needs_review"
+
                     refined_ds = imp_ref["refined_ms"] - (top_ev.time_ms if top_ev else 0)
                     if 180 <= refined_ds <= 650 and abs(imp_ref.get("delta_ms", 0)) <= 180:
                         imp_ev.time_ms = imp_ref["refined_ms"]
@@ -528,6 +522,35 @@ class CoarseToFineDetector:
                         logger.info(
                             f"局部 Impact 精修違反生理區間 (refined_ds={refined_ds}ms, delta={imp_ref.get('delta_ms')}ms)，已保守拒絕精修"
                         )
+
+            # (B) 再行精修 Top：以確認之 Impact 作為下桿生理區間 (200-380ms) 約束，精確鎖定下桿發動轉折點
+            if top_ev and (top_ev.uncertainty_ms > 20 or top_ev.confidence < 0.95):
+                top_ref = self._refine_event_local_high_fps(
+                    video_path=video_path,
+                    extractor=ext,
+                    event_name="top",
+                    center_ms=top_ev.time_ms,
+                    window_radius_ms=220,
+                    high_fps_step_ms=16,
+                    ref_impact_ms=imp_ev.time_ms if imp_ev else None,
+                )
+                if top_ref and abs(top_ref.get("delta_ms", 0)) <= 250:
+                    top_ev.time_ms = top_ref["refined_ms"]
+                    top_ev.confidence = top_ref["confidence"]
+                    top_ev.uncertainty_ms = top_ref["uncertainty_ms"]
+                    top_ev.sampling_resolution_ms = top_ref.get("sampling_resolution_ms", 16)
+                    for s in top_ref["sources"]:
+                        if s not in top_ev.detection_sources:
+                            top_ev.detection_sources.append(s)
+                    if "refined_frame" in top_ref:
+                        finalized_event_frames["top"] = top_ref["refined_frame"]
+                    local_ref_copy = {k: v for k, v in top_ref.items() if k != "refined_frame"}
+                    local_refinements["top"] = local_ref_copy
+
+            # (C) 同步更新 downswing 中繼事件時間碼
+            downswing_ev = next((e for e in events if e.event_name == "downswing"), None)
+            if downswing_ev and top_ev and imp_ev:
+                downswing_ev.time_ms = (top_ev.time_ms + imp_ev.time_ms) // 2
 
             # ---------------------------------------------------------
             # 3. 誠實清理 detection_sources (未使用的來源絕不保留)
@@ -548,7 +571,7 @@ class CoarseToFineDetector:
             # ---------------------------------------------------------
             if top_ev and imp_ev:
                 final_ds = imp_ev.time_ms - top_ev.time_ms
-                if final_ds < 180 or final_ds > 650:
+                if final_ds < 180 or final_ds > 480:
                     if "timing_anomaly_detected" not in top_ev.detection_sources:
                         top_ev.detection_sources.append("timing_anomaly_detected")
                     if "timing_anomaly_detected" not in imp_ev.detection_sources:
@@ -800,13 +823,13 @@ class CoarseToFineDetector:
         extractor: PoseExtractor,
         event_name: str,
         center_ms: int,
-        window_radius_ms: int = 200,
+        window_radius_ms: int = 160,
         high_fps_step_ms: int = 16,
+        audio_transients_ms: list[int] | None = None,
+        ref_impact_ms: int | None = None,
     ) -> dict[str, Any] | None:
         """
-        針對特定關鍵事件 (Top 或 Impact) 進行局部高幀率 (~60 FPS) 取樣精修。
-        僅讀取 [center_ms - window_radius_ms, center_ms + window_radius_ms] 短暫視窗，
-        無需重新解碼整部影片。
+        針對特定關鍵事件 (Top 或 Impact) 進行局部高幀率取樣精修。
         """
         start_ms = max(0, center_ms - window_radius_ms)
         end_ms = center_ms + window_radius_ms
@@ -817,6 +840,34 @@ class CoarseToFineDetector:
             end_ms=end_ms,
             step_ms=high_fps_step_ms,
         )
+        return self._refine_event_local_high_fps_from_frames(
+            local_frames=local_frames,
+            event_name=event_name,
+            center_ms=center_ms,
+            high_fps_step_ms=high_fps_step_ms,
+            audio_transients_ms=audio_transients_ms,
+            ref_impact_ms=ref_impact_ms,
+        )
+
+    def _refine_event_local_high_fps_from_frames(
+        self,
+        local_frames: list[FramePoseResult],
+        event_name: str,
+        center_ms: int,
+        high_fps_step_ms: int = 16,
+        audio_transients_ms: list[int] | None = None,
+        ref_impact_ms: int | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        純影格資料精修邏輯：
+        1. 左右手腕可見度加權融合，杜絕 DTL 視角單側遮擋跳動。
+        2. Top 結合下桿生理時間先驗 (200~380ms) 與頂點停頓下桿爆發轉折 (Transition Breakaway Launch)。
+        3. Impact 運動學合理性閘門 (Kinematic Plausibility Gate)：
+           - 手腕必須處於最低點深部 (>= max_y - 0.22 * span)
+           - 垂直速度不可為劇烈隨揮上升 (vy >= -0.22)
+           - 音訊若與運動學最低點偏差 > 55ms 判定為 audio_kinematic_conflict 並誠實降級
+        4. 嚴格校準 Heuristic Confidence (封頂 0.88) 與 Estimated Uncertainty。
+        """
         if len(local_frames) < 3:
             return None
 
@@ -824,63 +875,256 @@ class CoarseToFineDetector:
         wrist_ys = []
         wrist_confs = []
         for f in local_frames:
-            w = f.landmarks.get("right_wrist") or f.landmarks.get("left_wrist")
-            if w:
-                wrist_ys.append(float(w.y))
-                wrist_confs.append(float(w.visibility))
+            rw = f.landmarks.get("right_wrist")
+            lw = f.landmarks.get("left_wrist")
+            rw_y = rw.y if rw else 1.0
+            rw_v = rw.visibility if rw else 0.0
+            lw_y = lw.y if lw else 1.0
+            lw_v = lw.visibility if lw else 0.0
+            wr = max(0.01, rw_v - 0.15) if rw_v >= 0.20 else 0.0
+            wl = max(0.01, lw_v - 0.15) if lw_v >= 0.20 else 0.0
+            if wr + wl > 0:
+                wy = (rw_y * wr + lw_y * wl) / (wr + wl)
+                conf = (rw_v * wr + lw_v * wl) / (wr + wl)
+            elif rw:
+                wy = rw_y
+                conf = rw_v
+            elif lw:
+                wy = lw_y
+                conf = lw_v
             else:
-                wrist_ys.append(1.0)
-                wrist_confs.append(0.0)
+                wy = 1.0
+                conf = 0.0
+            wrist_ys.append(wy)
+            wrist_confs.append(conf)
 
-        dt_arr = np.diff(times).astype(float)
-        dt_arr[dt_arr <= 0] = 16.6
+        sampling_res = int(round(float(np.median(np.diff(times))))) if len(times) > 1 else high_fps_step_ms
         v_y = np.gradient(wrist_ys, times)
+        speeds = np.abs(v_y)
+
+        min_y = float(np.min(wrist_ys))
+        max_y = float(np.max(wrist_ys))
+        wrist_span = max_y - min_y
 
         if event_name == "top":
-            # 搜尋手腕最高點與零交越點
-            zero_crossings = [i for i in range(len(v_y) - 1) if v_y[i] <= 0 and v_y[i + 1] > 0]
-            y_min_idx = int(np.argmin(wrist_ys))
-            refined_idx = y_min_idx
-            sources = ["wrist_y_local_minimum", "local_high_fps_refinement"]
-            if zero_crossings:
-                best_zc = min(zero_crossings, key=lambda i: abs(i - y_min_idx))
-                refined_idx = best_zc
-                sources = ["wrist_velocity_zero_crossing", "local_high_fps_refinement"]
+            # Top 必須在手腕高位蓄力區 (y <= min_y + 0.35 * span)
+            high_indices = [
+                i for i in range(len(wrist_ys))
+                if wrist_ys[i] <= (min_y + 0.35 * max(1e-4, wrist_span))
+            ]
+            if not high_indices:
+                high_indices = list(range(len(wrist_ys)))
 
+            scored_top_cands = []
+            for i in high_indices:
+                h_raw = (max_y - wrist_ys[i]) / max(1e-4, wrist_span)
+                # 幾何高度平滑飽和：頂部 15% 區間內高度平坦飽和 (滿分 2.5)
+                h_score = min(1.0, h_raw / 0.85)
+                cand_zc = bool(i < len(v_y) - 1 and v_y[i] <= 0 and v_y[i + 1] > 0)
+                post_s = speeds[i : min(len(speeds), i + 4)]
+                acc = float(np.max(post_s)) - speeds[i] if len(post_s) > 0 else 0.0
+
+                # 生理下桿時長相容性 (Broad Biomechanical Tempo Plausibility)：
+                # 190~390ms 為人類生理自然揮桿範圍，保持中立 (0.0分)，杜絕過度吸附於固定 333ms
+                tempo_score = 0.0
+                if ref_impact_ms is not None:
+                    cand_ds = ref_impact_ms - times[i]
+                    if 190 <= cand_ds <= 390:
+                        tempo_score = 0.0
+                    elif (160 <= cand_ds < 190) or (390 < cand_ds <= 430):
+                        tempo_score = -1.0
+                    elif 430 < cand_ds <= 480:
+                        tempo_score = -3.5
+                    else:
+                        tempo_score = -6.5
+                else:
+                    dist_to_center = abs(times[i] - center_ms)
+                    tempo_score = -(dist_to_center / 80.0)
+
+                # 頂點停頓結束、下桿爆發啟動加分 (Transition Breakaway Launch)
+                is_crest = bool(wrist_ys[i] <= min_y + 0.30 * wrist_span)
+                is_launching = bool(
+                    is_crest
+                    and (
+                        (cand_zc and (i < len(v_y) - 1 and v_y[i + 1] > 0.00015))
+                        or (v_y[i] > 0 and acc >= 0.0020 and i < len(v_y) - 1 and v_y[i + 1] > 0)
+                    )
+                )
+                breakaway = 4.0 if is_launching else 0.0
+
+                # 幾何高度 (h_score) 保持平坦飽和 (權重 2.5)，防止微米級高度差異壓制真實下桿發動轉折
+                c_score = (
+                    h_score * 2.5
+                    + (1.5 if cand_zc else 0.0)
+                    + acc * 35.0
+                    + tempo_score
+                    + breakaway
+                )
+                scored_top_cands.append({
+                    "idx": i,
+                    "score": c_score,
+                    "cand_zc": cand_zc,
+                    "breakaway": breakaway > 0,
+                    "tie_key": (round(c_score, 4), times[i], -wrist_ys[i]),
+                })
+
+            scored_top_cands.sort(key=lambda x: x["tie_key"], reverse=True)
+            best_top_item = scored_top_cands[0]
+            refined_idx = best_top_item["idx"]
             refined_time_ms = times[refined_idx]
+
+            sources = ["wrist_y_local_crest", "local_high_fps_refinement"]
+            if best_top_item["breakaway"]:
+                sources.append("transition_breakaway_launch")
+            if best_top_item["cand_zc"]:
+                sources.append("wrist_velocity_zero_crossing")
+            if ref_impact_ms is not None:
+                sources.append("downswing_tempo_constrained")
+
+            # P0-4 校準不確定度與信心度
+            uncertainty_ms = max(60, int(round(sampling_res * 2.2)))
+            lm_vis = float(wrist_confs[refined_idx])
+            has_breakaway = best_top_item["breakaway"]
+            conf = round(min(0.88, max(0.65, 0.65 + 0.15 * lm_vis + (0.05 if has_breakaway else 0.0))), 3)
+
             return {
                 "refined_ms": refined_time_ms,
-                "confidence": min(0.96, max(0.75, wrist_confs[refined_idx])),
-                "uncertainty_ms": 20,
-                "sampling_resolution_ms": 16,
+                "confidence": conf,
+                "uncertainty_ms": uncertainty_ms,
+                "sampling_resolution_ms": sampling_res,
                 "sources": sources,
+                "flags": [],
                 "delta_ms": refined_time_ms - center_ms,
                 "refined_frame": local_frames[refined_idx],
             }
 
         elif event_name == "impact":
-            # 搜尋下桿速度劇烈制動點 (減速峰值)
-            # 必須是在速度達到一定水準的有效動能區段內，排除起點雜訊
-            speeds = np.abs(v_y)
-            mean_speed = float(np.mean(speeds)) if len(speeds) > 0 else 1e-4
-            valid_cands = [
-                i for i in range(1, len(speeds) - 1)
-                if speeds[i] >= 0.75 * mean_speed
+            # 1. 運動學擊球特徵 (Kinematic Impact Candidate)
+            # 尋找手腕垂直深度最深 35% 區域 (手腕位於擊球打擊墊鄰近)
+            low_indices = [
+                i for i in range(len(wrist_ys))
+                if (wrist_span < 0.04 or wrist_ys[i] >= (max_y - 0.35 * wrist_span))
+                and abs(times[i] - center_ms) <= 120
             ]
-            if not valid_cands:
-                valid_cands = list(range(len(speeds)))
+            if not low_indices:
+                low_indices = [
+                    i for i in range(len(wrist_ys))
+                    if abs(times[i] - center_ms) <= 120
+                ]
+            if not low_indices:
+                low_indices = list(range(len(wrist_ys)))
 
-            accels = np.diff(speeds, prepend=speeds[0])
-            decel_idx = min(valid_cands, key=lambda i: accels[i])
-            refined_time_ms = times[decel_idx]
+            max_spd = float(np.max(speeds)) if len(speeds) > 0 else 1e-4
+            scored_cands: list[tuple[float, int]] = []
+            for i in low_indices:
+                depth_s = ((wrist_ys[i] - min_y) / max(1e-4, wrist_span)) * 4.5
+                decel = (speeds[i - 1] - speeds[i]) if (i > 0 and i < len(speeds)) else 0.0
+                decel_s = max(0.0, decel / max_spd) * 3.5
+                dist_p = (abs(times[i] - center_ms) / 50.0) * 1.0
+                cand_total = depth_s + decel_s - dist_p
+                scored_cands.append((cand_total, i))
+
+            scored_cands.sort(key=lambda x: x[0], reverse=True)
+            kine_best_idx = scored_cands[0][1]
+            kine_best_time = times[kine_best_idx]
+
+            # 2. 音訊瞬態與運動學跨模態檢驗 (Tri-State Audio-Kinematic Plausibility Evaluation)
+            best_idx = None
+            sources = []
+            flags = []
+            has_audio_sync = False
+            has_conflict = False
+            ambient_rejected = False
+
+            # (1) 遍歷候選視窗內所有音訊瞬態，尋找是否有具備運動學支持之真實擊球音訊
+            valid_sync_candidates = []
+            if audio_transients_ms:
+                candidate_audios = [
+                    a for a in audio_transients_ms
+                    if abs(a - center_ms) <= 120 or abs(a - kine_best_time) <= 90
+                ]
+                for aud in candidate_audios:
+                    aud_idx = min(range(len(times)), key=lambda i: abs(times[i] - aud))
+                    # 檢驗運動學條件：
+                    # a. 垂直深度處於深部擊球區 (>= max_y - 0.25 * wrist_span)
+                    # b. 垂直速度不是劇烈隨揮上升 (v_y >= -0.22)
+                    # c. 時間與運動學最低點偏差合理 (<= 55ms)
+                    is_depth_ok = bool(wrist_span < 0.04 or wrist_ys[aud_idx] >= (max_y - 0.25 * wrist_span))
+                    is_vy_ok = bool(v_y[aud_idx] >= -0.22)
+                    time_diff_kine = abs(times[aud_idx] - kine_best_time)
+                    is_timing_consistent = bool(time_diff_kine <= 55)
+
+                    if is_depth_ok and is_vy_ok and is_timing_consistent:
+                        valid_sync_candidates.append({
+                            "idx": aud_idx,
+                            "time_ms": times[aud_idx],
+                            "diff_kine": time_diff_kine,
+                            "audio_ms": aud,
+                        })
+
+                if valid_sync_candidates:
+                    # 找到與運動學最一致的真實擊球音訊
+                    valid_sync_candidates.sort(key=lambda x: x["diff_kine"])
+                    best_sync = valid_sync_candidates[0]
+                    best_idx = best_sync["idx"]
+                    sources = ["audio_transient_synchronized", "local_high_fps_refinement"]
+                    has_audio_sync = True
+                else:
+                    # 視窗內有音訊瞬態，但無一符合運動學擊球條件（如隨揮期雜音、旁道擊球聲）
+                    # 評估運動學擊球之獨立強度 (Kinematic Impact Strength)
+                    kine_depth_ratio = (wrist_ys[kine_best_idx] - min_y) / max(1e-4, wrist_span)
+                    kine_vis = float(wrist_confs[kine_best_idx])
+                    # 檢查是否有次要運動學競爭峰值 (Competing hypothesis margin)
+                    second_best_diff = (scored_cands[0][0] - scored_cands[1][0]) if len(scored_cands) > 1 else 999.0
+
+                    if kine_depth_ratio >= 0.70 and kine_vis >= 0.40 and second_best_diff >= 0.5:
+                        # 情境 A: 運動學具備可靠獨立證據，音訊為環境雜音或隨揮雜音（如第 10 球之晚期雜音）
+                        # 安全拒絕不相關雜音，以運動學自主定案，維持可自動接受
+                        ambient_rejected = True
+                        best_idx = kine_best_idx
+                        sources = ["wrist_kinematic_lowest_point", "ambient_noise_rejected"]
+                        flags.append("ambient_audio_rejected")
+                    elif len(candidate_audios) > 0 and (kine_depth_ratio < 0.65 or second_best_diff < 0.4):
+                        # 情境 B: 音訊與運動學相互矛盾，且運動學自身亦存在多假說競爭或深度不足
+                        has_conflict = True
+                        flags.append("audio_kinematic_conflict")
+                        best_idx = kine_best_idx
+                        sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
+                    else:
+                        # 默認採用運動學最低點
+                        best_idx = kine_best_idx
+                        sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
+
+            if best_idx is None:
+                best_idx = kine_best_idx
+                sources = ["wrist_kinematic_lowest_point", "local_high_fps_refinement"]
+
+            refined_time_ms = times[best_idx]
+            lm_vis = float(wrist_confs[best_idx])
+
+            # P0-4 & P0-B: 嚴格校準 Heuristic Confidence 與 Estimated Uncertainty
+            if has_audio_sync:
+                uncertainty_ms = max(33, int(round(sampling_res * 1.2)))
+                conf = round(min(0.88, 0.75 + 0.10 * lm_vis + 0.05), 3)
+            elif ambient_rejected:
+                uncertainty_ms = max(45, int(round(sampling_res * 1.8)))
+                conf = round(min(0.82, max(0.68, 0.65 + 0.15 * lm_vis)), 3)
+            elif has_conflict:
+                uncertainty_ms = max(75, int(round(sampling_res * 2.5)))
+                conf = round(min(0.65, max(0.50, 0.55 + 0.10 * lm_vis)), 3)
+            else:
+                uncertainty_ms = max(50, int(round(sampling_res * 2.0)))
+                conf = round(min(0.78, 0.60 + 0.15 * lm_vis), 3)
+
             return {
                 "refined_ms": refined_time_ms,
-                "confidence": min(0.95, max(0.72, wrist_confs[decel_idx])),
-                "uncertainty_ms": 20,
-                "sampling_resolution_ms": 16,
-                "sources": ["wrist_kinematic_deceleration", "local_high_fps_refinement"],
+                "confidence": conf,
+                "uncertainty_ms": uncertainty_ms,
+                "sampling_resolution_ms": sampling_res,
+                "sources": sources,
+                "flags": flags,
                 "delta_ms": refined_time_ms - center_ms,
-                "refined_frame": local_frames[decel_idx],
+                "refined_frame": local_frames[best_idx],
             }
 
         return None

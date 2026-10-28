@@ -1,26 +1,30 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新開發策略執行狀態（Final Swing Selection & Ranking Fix）
-1. **修正 Follow-through 跨動作污染**：`PASS`
-   - 重構 `packages/analysis/events/state_machine.py`：
-     - **物理動作鏈邊界截斷**：若存在後續 Impact 候選，隨揮與收桿嚴格在兩次動作之間的放桿／重新站定點截斷（避免跨越下一次完整揮桿），隨揮頂點搜尋嚴格限制在 `imp_t + 650ms` 生理區間內。
-     - **真實連續姿態穩定性計算 `finish_hold_ms`**：從隨揮頂點逐幀檢查手腕是否維持在收桿平衡高度（`<= follow_y + 0.08`）且運動速度維持平靜（`<= max(0.0025, 0.25 * max_speed)`），統計真實維持時長，**嚴禁使用 `times[-1]` 借用影片剩餘長度**。
-     - 新增「先試擺再正式擊球」獨立回歸測試（`test_waggle_before_swing_no_cross_contamination`），驗證試擺隨揮被截斷、收桿時長不溢出、正式擊球大幅勝出。
-2. **修正多候選選擇造成的精度回退**：`PASS`
-   - **Score-ranked NMS 重構**：徹底根除時間順序滑動替換產生的連鎖吞食（Sliding Chaining Bug），改採基於物理衝擊強度的非極大值抑制。
-   - **客觀雙峰爭議標記**：當試擺與正式擊球得分接近時，客觀標記為 `is_ambiguous=True`、`review_flags` 加入 `candidate_ambiguous`，`review_status` 設為 `needs_review`，不強行選取；同一次推論輸出候選時間碼與支持/反對理由。
-   - 經物理特徵精確對齊，#8（Top=111697ms, Imp=112497ms, 5.0分 vs 3.0分）與 #9（Top=115363ms, Imp=115898ms, 11.5分 vs 7.0分）皆以顯著優勢裁決正式擊球；#10（120432ms/121098ms, 12.0分 vs 11.5分）客觀標記雙峰爭議保留審核。
-3. **修正正式 Top 5 資料流與驗收**：`PASS`
-   - **打通真實分數與安全過濾**：`apps/api/main.py` 在 `_serialize_segment(..., include_detail=False)` 中完整暴露 `unreliable_for_ranking` 與 `quality_metadata`。
-   - **爭議球嚴格排除**：具有 `unreliable_for_ranking`、`is_ambiguous`、`candidate_ambiguous`、`timing_anomaly` 或 `needs_review` 爭議之球次，嚴格於 `posture`（姿勢最佳）與 `tempo`（節奏最佳）排行榜中排除。
-   - **排行榜非空保證與手動置頂**：新增 `test_rank_session_swings_reliable_vs_disputed_exclusion` 驗證可靠球正常入榜、爭議球徹底排除、手動置頂標記 `manual_pinned=True`，合規球存在時嚴禁全空。
-4. **全量品質與回歸驗證**：`PASS`
-   - 後端全量測試：**74 / 74 PASSED (100%)** in 202.81s。
-   - 前端打包：`npm run build` 9/9 靜態路由頁面打包成功。
-   - 正式真值校驗：`tests/golden/real_2min_session_gt.json` 保持 0 污染。
-- **最後更新時間**：2026-10-22T13:30:00+08:00
-- **最新基準版本**：`8040609`
-- **正式驗收檔案**：`docs/reports/final_evidence_lock.json` 與 `docs/FINAL_EVIDENCE_LOCK_REPORT.md`
+## 最新開發策略執行狀態（Round 8: PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate）
+1. **P0 WebKit GUI 真實 DOM 按鈕跳轉與 Clean Motion 驗收**：`PASS`
+   - **動態取得最新 139 秒正式分析資料**：執行 `scripts/setup_verification_session.py`，驗證原片 SHA-256（`4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9`），在正式 Pipeline 中產生 12 球分析成果與 30fps Proxy，動態讀取 Session、Video 及第 8、9、10 球的真實 ID 與時間碼，杜絕跨場次寫死資料比對。
+   - **真實 DOM 按鈕觸發跳轉（Zero-Drift Pause）**：前端單球頁面 (`apps/web/src/app/swings/[id]/page.tsx`) 增強 `jumpToEvent`，點擊事件按鈕時即刻呼叫 `video.pause()` 定格畫面，並加上 `data-event` 與 `data-time-ms` 屬性。測試以原生 WebKit 執行真實 `btn.click()` 觸發。
+   - **時間碼跳轉實測（<= 100ms 門檻，實測 0.0ms 誤差）**：
+     - **Swing #8** (`829b04ed-...`): Top 目標 110833ms，解碼 110833.0ms (diff 0.0ms)；Impact 目標 111200ms，解碼 111200.0ms (diff 0.0ms)
+     - **Swing #9** (`9d733a7c-...`): Top 目標 114700ms，解碼 114700.0ms (diff 0.0ms)；Impact 目標 115067ms，解碼 115067.0ms (diff 0.0ms)
+     - **Swing #10** (`cfd10e17-...`): Top 目標 120600ms，解碼 120600.0ms (diff 0.0ms)；Impact 目標 120967ms，解碼 120967.0ms (diff 0.0ms)
+   - **Clean Motion Canvas 特徵繪製與防殘留保護**：
+     - Top 階段驗證肩膀姿態線（18~20px）與手部光環（89~90px）；Impact 階段驗證擊球點（69~71px）與頭部檢核圈（28~31px）。
+     - 驗證跨階段切換防殘留保護（`no_residual_artifacts: true`），畫布無舊影格污染。
+   - **產出 7 張原生快照與 JSON 報告**：存證於 `docs/screenshots/webkit/`，`docs/reports/takeover/webkit_gui_smoke_report.json` 標記 `GUI_EVENT_VERIFIED: PASS`，Console 0 錯誤。
+2. **P1 本機金鑰持久化 Fail-Closed 安全防護**：`PASS`
+   - `apps/api/config.py` 中 `resolve_session_secret()` 移除靜默回退臨時密鑰的漏洞。若目錄無法建立或權限不足無法持久化至 `~/.golfswinglab/session_secret` 時，明確拋出 `RuntimeError`（Fail-Closed），嚴禁靜默降級導致登入態遺失。
+   - 單元測試 `test_session_secret_local_persistence_and_invalidation` 驗證 `0700` 目錄、`0600` 檔案、唯讀目錄無法寫入時拋出例外、跨呼叫一致性，全數通過。
+3. **全鏈路與回歸品質保證**：`PASS`
+   - 後端測試套件：**82 / 82 PASSED (100%)** in 202.73s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
+- **最後更新時間**：2026-10-27T19:05:00+08:00
+- **當前分支**：`fix/autonomous-event-accuracy-recovery`
+- **正式驗收證據**：`docs/reports/takeover/webkit_gui_smoke_report.json`、`docs/screenshots/webkit/01_webkit_session_report.png` 至 `07_webkit_swing10_impact.png`
+
+## 前期重大里程碑狀態（Round 7: PR #1 Final Security & Visual Smoke Gate）
+
+## 前期重大里程碑狀態（Round 6: Beta Release & Merge Preparation）
 
 ## 前期重大里程碑狀態（Final Reliability Gate）
 1. **P0-1：Top 重對齊邏輯修復與候選順序不變性**：`PASS`

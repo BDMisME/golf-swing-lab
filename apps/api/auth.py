@@ -94,6 +94,8 @@ def decode_session_token(token: str) -> dict[str, Any]:
 def ensure_default_admin(db: Session) -> User:
     """確保系統預設管理員帳戶存在。"""
     settings = get_settings()
+    if settings.app_env == "production" and settings.admin_password == "GolfSwingLab!2026":
+        raise RuntimeError("生產環境嚴禁使用預設密碼初始化管理員帳戶，請透過 ADMIN_PASSWORD 注入自訂高強度密碼。")
     admin = db.scalar(select(User).where(User.email == settings.admin_email))
     if not admin:
         admin = User(

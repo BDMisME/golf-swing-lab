@@ -116,12 +116,12 @@ def test_long_video_2min_12_swings_benchmark():
         gt_data = json.load(f)
 
     detector = CoarseToFineDetector()
-    t0 = time.time()
+    t0 = time.monotonic()
     candidates, quality = detector.analyze_video(
         video_path=VIDEO_2MIN,
         duration_ms=139053,
     )
-    elapsed = time.time() - t0
+    elapsed = time.monotonic() - t0
 
     preds = [
         {

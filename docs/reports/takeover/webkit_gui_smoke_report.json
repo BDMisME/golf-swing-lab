@@ -1,0 +1,91 @@
+{
+  "tested_at": "2026-10-27T10:54:43.331422+00:00",
+  "analyzer_version": "2.1.0-beta",
+  "session_id": "e8e182dd-0300-430e-b023-1a06d6e00e69",
+  "session_title": "2分鐘.mov 正式驗收場次 (12記揮桿)",
+  "video_id": "39608133-6f60-42aa-9fb3-a20326a3a94a",
+  "video_sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
+  "video_duration_ms": 139053,
+  "ui_trigger_method": "dom_button_click",
+  "session_report_verified": true,
+  "swings_verified": {
+    "swing_8": {
+      "sequence_no": 8,
+      "id": "829b04ed-9e9f-4334-86c3-188525e82cc2",
+      "start_ms": 109600,
+      "end_ms": 113200,
+      "top_target_ms": 110833,
+      "top_actual_ms": 110833.0,
+      "top_time_diff_ms": 0.0,
+      "top_canvas_rendered": true,
+      "top_motion_features": {
+        "total_pixels": 108.0,
+        "shoulder_line_pixels": 18.0,
+        "wrist_halo_pixels": 90.0
+      },
+      "imp_target_ms": 111200,
+      "imp_actual_ms": 111200.0,
+      "imp_time_diff_ms": 0.0,
+      "imp_canvas_rendered": true,
+      "imp_motion_features": {
+        "total_pixels": 98.0,
+        "impact_wrist_spot_pixels": 69.0,
+        "head_box_pixels": 29.0
+      },
+      "no_residual_artifacts": true
+    },
+    "swing_9": {
+      "sequence_no": 9,
+      "id": "9d733a7c-c36f-4d1b-8305-1e6fd9ca4634",
+      "start_ms": 113400,
+      "end_ms": 117000,
+      "top_target_ms": 114700,
+      "top_actual_ms": 114700.0,
+      "top_time_diff_ms": 0.0,
+      "top_canvas_rendered": true,
+      "top_motion_features": {
+        "total_pixels": 110.0,
+        "shoulder_line_pixels": 20.0,
+        "wrist_halo_pixels": 90.0
+      },
+      "imp_target_ms": 115067,
+      "imp_actual_ms": 115067.0,
+      "imp_time_diff_ms": 0.0,
+      "imp_canvas_rendered": true,
+      "imp_motion_features": {
+        "total_pixels": 102.0,
+        "impact_wrist_spot_pixels": 71.0,
+        "head_box_pixels": 31.0
+      },
+      "no_residual_artifacts": true
+    },
+    "swing_10": {
+      "sequence_no": 10,
+      "id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
+      "start_ms": 119000,
+      "end_ms": 123000,
+      "top_target_ms": 120600,
+      "top_actual_ms": 120600.0,
+      "top_time_diff_ms": 0.0,
+      "top_canvas_rendered": true,
+      "top_motion_features": {
+        "total_pixels": 108.0,
+        "shoulder_line_pixels": 19.0,
+        "wrist_halo_pixels": 89.0
+      },
+      "imp_target_ms": 120967,
+      "imp_actual_ms": 120967.0,
+      "imp_time_diff_ms": 0.0,
+      "imp_canvas_rendered": true,
+      "imp_motion_features": {
+        "total_pixels": 99.0,
+        "impact_wrist_spot_pixels": 71.0,
+        "head_box_pixels": 28.0
+      },
+      "no_residual_artifacts": true
+    }
+  },
+  "console_errors": [],
+  "GUI_EVENT_VERIFIED": "PASS",
+  "status": "PASS"
+}
