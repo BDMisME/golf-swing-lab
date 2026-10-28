@@ -44,7 +44,13 @@ export interface ReferenceSwingData {
   sha256: string;
   event_timestamps: Record<string, number>;
   pose_artifact: Record<string, any>;
-  calibration_params: FramingCalibration & { torso_length?: number };
+  calibration_params: FramingCalibration & {
+    torso_length?: number;
+    is_slow_motion?: boolean;
+    source_start_ms?: number;
+    source_end_ms?: number;
+    source_sha256?: string;
+  };
   is_default: boolean;
   notes: string;
   stream_url: string;
@@ -64,9 +70,9 @@ interface SwingComparisonPlayerProps {
 }
 
 const ALL_CLUBS = [
-  "Driver", "3W", "5W",
-  "3H", "4H", "5H",
-  "4I", "5I", "6I", "7I", "8I", "9I",
+  "Driver", "3W", "5W", "7W",
+  "3H", "4H", "5H", "Hybrid",
+  "3I", "4I", "5I", "6I", "7I", "8I", "9I",
   "PW", "GW/AW", "SW", "LW",
   "Putter",
 ];
@@ -92,6 +98,7 @@ export function SwingComparisonPlayer({
   const [isLooping, setIsLooping] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [ghostOpacity, setGhostOpacity] = useState<number>(0.5);
+  const [showIndividualControls, setShowIndividualControls] = useState<boolean>(false);
 
   // 3. 畫面對齊 (Auto-Framing & Manual Calibration)
   const [calibration, setCalibration] = useState<FramingCalibration>({
@@ -457,6 +464,105 @@ export function SwingComparisonPlayer({
     }
   };
 
+  // 單獨控制個人影片 (Individual User Video Controls)
+  const toggleUserPlay = () => {
+    const uVid = userVideoRef.current;
+    if (!uVid) return;
+    if (uVid.paused) {
+      uVid.play().catch(() => {});
+    } else {
+      uVid.pause();
+    }
+  };
+
+  const stepUserFrame = (deltaFrames: number) => {
+    const uVid = userVideoRef.current;
+    if (!uVid) return;
+    uVid.pause();
+    setIsPlaying(false);
+    const frameMs = 33.333;
+    const curSec = uVid.currentTime;
+    const nextSec = Math.max(
+      userTimeline.startMs / 1000,
+      Math.min(userTimeline.endMs / 1000, curSec + (deltaFrames * frameMs) / 1000)
+    );
+    uVid.currentTime = nextSec;
+    setUserCurrentMs(Math.round(nextSec * 1000));
+  };
+
+  const replayUser = () => {
+    const uVid = userVideoRef.current;
+    if (!uVid) return;
+    uVid.currentTime = userTimeline.startMs / 1000;
+    setUserCurrentMs(userTimeline.startMs);
+    uVid.play().catch(() => {});
+  };
+
+  // 單獨控制示範影片 (Individual Reference Video Controls)
+  const toggleRefPlay = () => {
+    const rVid = refVideoRef.current;
+    if (!rVid) return;
+    if (rVid.paused) {
+      rVid.play().catch(() => {});
+    } else {
+      rVid.pause();
+    }
+  };
+
+  const stepRefFrame = (deltaFrames: number) => {
+    const rVid = refVideoRef.current;
+    if (!rVid) return;
+    rVid.pause();
+    setIsPlaying(false);
+    const frameMs = 33.333;
+    const curSec = rVid.currentTime;
+    const durSec = (refSwing?.duration_ms || 3000) / 1000;
+    const nextSec = Math.max(0, Math.min(durSec, curSec + (deltaFrames * frameMs) / 1000));
+    rVid.currentTime = nextSec;
+    setRefCurrentMs(Math.round(nextSec * 1000));
+  };
+
+  const replayRef = () => {
+    const rVid = refVideoRef.current;
+    if (!rVid) return;
+    rVid.currentTime = 0;
+    setRefCurrentMs(0);
+    rVid.play().catch(() => {});
+  };
+
+  // 畫面位置與等比例縮放微調
+  const adjustScale = (delta: number) => {
+    setCalibration((prev) => ({
+      ...prev,
+      scale: Math.max(0.5, Math.min(2.0, parseFloat((prev.scale + delta).toFixed(2)))),
+    }));
+  };
+
+  const adjustOffsetX = (delta: number) => {
+    setCalibration((prev) => ({
+      ...prev,
+      offsetX: prev.offsetX + delta,
+    }));
+  };
+
+  const adjustOffsetY = (delta: number) => {
+    setCalibration((prev) => ({
+      ...prev,
+      offsetY: prev.offsetY + delta,
+    }));
+  };
+
+  const resetAlignment = () => {
+    setCalibration({
+      scale: 1.0,
+      zoom: 1.0,
+      offsetX: 0,
+      offsetY: 0,
+    });
+    setManualOffsetMs(0);
+  };
+
+
   // 核心時鐘監聽與平滑漂移校正循環 (Drift Monitor Loop via requestAnimationFrame)
   useEffect(() => {
     if (!isPlaying) return;
@@ -579,15 +685,20 @@ export function SwingComparisonPlayer({
     }
   };
 
-  const userVideoSrc = `${API_BASE_URL}/api/videos/${userSwing.video_id}/stream${
-    getAuthToken() ? `?token=${encodeURIComponent(getAuthToken() || "")}` : ""
-  }#t=${(userTimeline.startMs / 1000).toFixed(2)}`;
+  const userVideoSrc = useMemo(() => {
+    const token = getAuthToken() || "";
+    return `${API_BASE_URL}/api/videos/${userSwing.video_id}/stream${
+      token ? `?token=${encodeURIComponent(token)}` : ""
+    }`;
+  }, [userSwing.video_id]);
 
-  const refVideoSrc = refSwing
-    ? `${API_BASE_URL}${refSwing.stream_url}${
-        getAuthToken() ? `?token=${encodeURIComponent(getAuthToken() || "")}` : ""
-      }#t=${(((computeExpectedRefMs(userTimeline.startMs) || 0) / 1000)).toFixed(2)}`
-    : "";
+  const refVideoSrc = useMemo(() => {
+    if (!refSwing) return "";
+    const token = getAuthToken() || "";
+    return `${API_BASE_URL}${refSwing.stream_url}${
+      token ? `?token=${encodeURIComponent(token)}` : ""
+    }`;
+  }, [refSwing?.id, refSwing?.stream_url]);
 
   return (
     <div className="rounded-2xl border border-sky-800/80 bg-gradient-to-b from-[#0a141f] to-[#070d14] p-4 text-white shadow-xl space-y-4">
@@ -619,17 +730,17 @@ export function SwingComparisonPlayer({
         </div>
       </div>
 
-      {/* 17 種球桿選擇器與三態統計 (P0-3) */}
+      {/* 球桿選擇器與三態統計 (誠信原則透明揭露) */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-gray-400 flex-wrap gap-2">
-          <span className="font-semibold text-gray-300">選擇球桿參考 (17 Club Types)：</span>
+          <span className="font-semibold text-gray-300">選擇球桿參考 ({ALL_CLUBS.length} 種分類)：</span>
           <div className="flex items-center gap-3 text-[11px] flex-wrap">
             <span>
               可用示範影片：
               <strong className="text-emerald-400 font-bold">
                 {clubsCatalog.filter((c) => c.status === "available").length}
               </strong>{" "}
-              / 17 種
+              / {ALL_CLUBS.length} 種
             </span>
             <span>
               全身姿勢比對：
@@ -642,7 +753,7 @@ export function SwingComparisonPlayer({
                   ).length
                 }
               </strong>{" "}
-              / 17 種
+              / {ALL_CLUBS.length} 種
             </span>
             <span className="text-amber-400 font-semibold">
               已驗證職業標準：
@@ -738,7 +849,13 @@ export function SwingComparisonPlayer({
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-gray-900/60 border border-dashed border-gray-700 p-3 text-xs text-gray-400">
           <div className="flex items-center gap-2">
-            <span>ℹ️ 目前球桿 ({selectedClub}) 尚未收錄標準示範影片 (missing_reference)</span>
+            <span>
+              ℹ️ 目前球桿 ({selectedClub}) 尚未收錄標準示範影片 (missing_reference)
+              {selectedClub === "Hybrid" && " — 系統支援 3H/4H/5H，通用 Hybrid 暫無明確號數示範，請選擇具體號數或手動匯入。"}
+              {selectedClub === "7W" && " — 7號木桿示範影片待補，可手動匯入。"}
+              {selectedClub === "3I" && " — 3號鐵桿示範影片待補，可手動匯入。"}
+              {selectedClub === "GW/AW" && " — GW/AW (50~52°) 示範影片待補，可手動匯入。"}
+            </span>
           </div>
           <button
             type="button"
@@ -773,13 +890,30 @@ export function SwingComparisonPlayer({
             style={layout === "ghost_overlay" ? { opacity: ghostOpacity } : undefined}
           >
             {layout !== "ghost_overlay" && (
-              <span className="absolute top-2 left-2 z-10 rounded bg-black/70 px-2 py-0.5 text-[11px] font-bold text-cyan-300 border border-cyan-800/40">
-                {refSwing?.reference_category === "test_fixture"
-                  ? `技術測試基準 (${selectedClub})`
-                  : refSwing?.is_verified_standard
-                  ? `已驗證職業示範 (${selectedClub})`
-                  : `示範對照 (${selectedClub})`}
-              </span>
+              <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                <span className="rounded bg-black/75 px-2 py-0.5 text-[11px] font-bold text-cyan-300 border border-cyan-800/40">
+                  {refSwing?.reference_category === "test_fixture"
+                    ? `技術測試基準 (${selectedClub})`
+                    : refSwing?.is_verified_standard
+                    ? `已驗證職業示範 (${selectedClub})`
+                    : `示範對照 (${selectedClub})`}
+                </span>
+                {Boolean(refSwing?.calibration_params?.is_slow_motion || (refSwing?.pose_artifact as any)?.is_slow_motion) && (
+                  <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-800/40">
+                    ⏱️ 慢動作示範 (僅供姿勢影格比較，不計真實節奏)
+                  </span>
+                )}
+                {refSwing?.shot_type && refSwing.shot_type !== "full_swing" && (
+                  <span className="rounded bg-purple-950/80 px-2 py-0.5 text-[10px] font-semibold text-purple-300 border border-purple-800/40">
+                    ⚠️ 非全揮桿 ({refSwing.shot_type === "pitch_90yd" ? "90碼 Pitch" : refSwing.shot_type === "flop_shot" ? "高拋 Flop" : refSwing.shot_type === "putt" ? "推桿特寫" : refSwing.shot_type === "bunker_shot" ? "沙坑示範" : refSwing.shot_type})
+                  </span>
+                )}
+                {refSwing?.camera_angle && refSwing.camera_angle !== "DTL" && (
+                  <span className="rounded bg-blue-950/80 px-2 py-0.5 text-[10px] font-semibold text-blue-300 border border-blue-800/40">
+                    📷 非標準 DTL ({refSwing.camera_angle})
+                  </span>
+                )}
+              </div>
             )}
             {refSwing ? (
               <video
@@ -969,6 +1103,92 @@ export function SwingComparisonPlayer({
           </div>
         </div>
 
+        {/* 雙影片個別獨立控制開關與面板 */}
+        <div className="flex items-center justify-between pt-1 border-t border-gray-800/40 text-xs">
+          <button
+            type="button"
+            onClick={() => setShowIndividualControls(!showIndividualControls)}
+            className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-cyan-300 transition"
+          >
+            <span>{showIndividualControls ? "▾ 收起各影片獨立控制" : "▸ 展開各影片獨立控制 (個別播放/逐格/重播)"}</span>
+          </button>
+        </div>
+
+        {showIndividualControls && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-2 bg-black/40 rounded-lg border border-gray-800/60 text-xs">
+            {/* 示範影片獨立控制 */}
+            <div className="flex items-center justify-between p-1.5 rounded bg-cyan-950/20 border border-cyan-900/30">
+              <span className="text-cyan-300 font-semibold text-[11px]">示範影片 ({selectedClub})</span>
+              <div className="flex items-center gap-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={toggleRefPlay}
+                  className="rounded bg-cyan-900/50 px-2 py-0.5 text-cyan-200 hover:bg-cyan-800"
+                >
+                  ▶/⏸
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepRefFrame(-1)}
+                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-cyan-500"
+                >
+                  -1f
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepRefFrame(1)}
+                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-cyan-500"
+                >
+                  +1f
+                </button>
+                <button
+                  type="button"
+                  onClick={replayRef}
+                  className="rounded bg-cyan-950 px-1.5 py-0.5 border border-cyan-800 text-cyan-300"
+                >
+                  ↺ 重播
+                </button>
+              </div>
+            </div>
+
+            {/* 個人影片獨立控制 */}
+            <div className="flex items-center justify-between p-1.5 rounded bg-emerald-950/20 border border-emerald-900/30">
+              <span className="text-emerald-300 font-semibold text-[11px]">個人揮桿 (#{userSwing.sequence_no})</span>
+              <div className="flex items-center gap-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={toggleUserPlay}
+                  className="rounded bg-emerald-900/50 px-2 py-0.5 text-emerald-200 hover:bg-emerald-800"
+                >
+                  ▶/⏸
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepUserFrame(-1)}
+                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-emerald-500"
+                >
+                  -1f
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepUserFrame(1)}
+                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-emerald-500"
+                >
+                  +1f
+                </button>
+                <button
+                  type="button"
+                  onClick={replayUser}
+                  className="rounded bg-emerald-950 px-1.5 py-0.5 border border-emerald-800 text-emerald-300"
+                >
+                  ↺ 重播
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+
         {/* 關鍵事件錨點跳轉與同步模式切換 */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-800/60 text-xs">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1113,7 +1333,50 @@ export function SwingComparisonPlayer({
             >
               +50ms
             </button>
+
+            <span className="ml-2">位置:</span>
+            <button
+              type="button"
+              onClick={() => adjustOffsetX(-8)}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600 text-gray-300"
+              title="示範影片向左移"
+            >
+              ←X
+            </button>
+            <button
+              type="button"
+              onClick={() => adjustOffsetX(8)}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600 text-gray-300"
+              title="示範影片向右移"
+            >
+              X→
+            </button>
+            <button
+              type="button"
+              onClick={() => adjustOffsetY(-8)}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600 text-gray-300"
+              title="示範影片向上移"
+            >
+              ↑Y
+            </button>
+            <button
+              type="button"
+              onClick={() => adjustOffsetY(8)}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600 text-gray-300"
+              title="示範影片向下移"
+            >
+              Y↓
+            </button>
+            <button
+              type="button"
+              onClick={resetAlignment}
+              className="rounded bg-black px-1.5 py-0.5 border border-cyan-900/60 text-cyan-400 hover:border-cyan-600 text-[10px]"
+              title="重設位置與縮放"
+            >
+              重設
+            </button>
           </div>
+
         </div>
       </div>
 

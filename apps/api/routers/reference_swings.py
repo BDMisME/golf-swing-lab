@@ -140,9 +140,12 @@ ALL_CLUB_TYPES = [
     "Driver",
     "3W",
     "5W",
+    "7W",
     "3H",
     "4H",
     "5H",
+    "Hybrid",
+    "3I",
     "4I",
     "5I",
     "6I",
@@ -155,6 +158,7 @@ ALL_CLUB_TYPES = [
     "LW",
     "Putter",
 ]
+
 
 
 class ReferenceSwingResponse(BaseModel):

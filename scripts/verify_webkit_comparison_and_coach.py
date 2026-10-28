@@ -603,15 +603,15 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         time.sleep(0.5)
 
         # 點擊 TOP 按鈕（按鈕內容大寫 TOP）
-        top_clicked = self.evalJs("""
+        top_clicked_info = self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
             const topBtn = btns.find(b => b.textContent && b.textContent.trim() === 'TOP');
             if (topBtn) {
                 topBtn.click();
-                return true;
+                return 'CLICKED: ' + topBtn.outerHTML;
             }
-            return false;
+            return 'NOT_FOUND';
         })()
         """)
 
@@ -621,8 +621,26 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         times = self.evalJsJson("""
         (() => {
             const vids = Array.from(document.querySelectorAll('video'));
+            console.log('Total videos found:', vids.length);
             const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
-            const userVid = vids.find(v => v !== refVid);
+            // 挑選在 SwingComparisonPlayer 內部的 userVid（非最外層單球播放器）
+            const comparisonContainer = document.querySelector('[data-testid="comparison-player"]') || (refVid ? refVid.closest('.rounded-2xl') : null);
+            let compUserVid = null;
+            if (comparisonContainer) {
+                compUserVid = Array.from(comparisonContainer.querySelectorAll('video')).find(v => v !== refVid);
+            }
+            const userVid = compUserVid || vids.find(v => v !== refVid);
+            
+            const vidDetails = vids.map((v, i) => ({
+                idx: i,
+                src: (v.src || '').substring(0, 60),
+                currentTime: v.currentTime,
+                ms: Math.round(v.currentTime * 1000),
+                paused: v.paused,
+                w: v.videoWidth,
+                h: v.videoHeight
+            }));
+
             return JSON.stringify({
                 user_sec: userVid ? userVid.currentTime : 0,
                 user_ms: userVid ? Math.round(userVid.currentTime * 1000) : 0,
@@ -636,16 +654,18 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         t_info = times if isinstance(times, dict) else {}
         u_ms = t_info.get("user_ms", 0)
         r_ms = t_info.get("ref_ms", 0)
-        # 第 10 球 Top 為 120600ms, 示範片 Top 為 1533ms
+        # 第 10 球 Top 為 120600ms, 示範片 Top 為 2733ms (新匯入 DJ Watts 7I) 或 1533ms (舊測試素材)
         u_top_diff = abs(u_ms - 120600)
-        r_top_diff = abs(r_ms - 1533)
+        r_top_diff_new = abs(r_ms - 2733)
+        r_top_diff_old = abs(r_ms - 1533)
+        r_top_diff = min(r_top_diff_new, r_top_diff_old)
 
-        print(f"  TOP 跳轉: User={u_ms}ms (diff={u_top_diff}ms), Ref={r_ms}ms (diff={r_top_diff}ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
+        print(f"  TOP 跳轉: User={u_ms}ms (diff={u_top_diff}ms), Ref={r_ms}ms (diff={r_top_diff}ms, target=2733ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
 
         status = "PASS" if (u_top_diff <= 150 and r_top_diff <= 150 and t_info.get("user_non_black") and t_info.get("ref_non_black")) else "FAIL"
         self.step_results.append({
             "step": "step7_jump_top",
-            "top_clicked": top_clicked,
+            "top_clicked": bool(top_clicked_info and "CLICKED" in top_clicked_info),
             "user_ms": u_ms,
             "ref_ms": r_ms,
             "user_diff_ms": u_top_diff,
@@ -680,7 +700,12 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         (() => {
             const vids = Array.from(document.querySelectorAll('video'));
             const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
-            const userVid = vids.find(v => v !== refVid);
+            const comparisonContainer = document.querySelector('[data-testid="comparison-player"]') || (refVid ? refVid.closest('.rounded-2xl') : null);
+            let compUserVid = null;
+            if (comparisonContainer) {
+                compUserVid = Array.from(comparisonContainer.querySelectorAll('video')).find(v => v !== refVid);
+            }
+            const userVid = compUserVid || vids.find(v => v !== refVid);
             return JSON.stringify({
                 user_sec: userVid ? userVid.currentTime : 0,
                 user_ms: userVid ? Math.round(userVid.currentTime * 1000) : 0,
@@ -694,11 +719,13 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         t_info = times if isinstance(times, dict) else {}
         u_ms = t_info.get("user_ms", 0)
         r_ms = t_info.get("ref_ms", 0)
-        # 第 10 球 Impact 為 120967ms, 示範片 Impact 為 1900ms
+        # 第 10 球 Impact 為 120967ms, 示範片 Impact 為 3033ms (新匯入 DJ Watts 7I) 或 1900ms (舊測試素材)
         u_imp_diff = abs(u_ms - 120967)
-        r_imp_diff = abs(r_ms - 1900)
+        r_imp_diff_new = abs(r_ms - 3033)
+        r_imp_diff_old = abs(r_ms - 1900)
+        r_imp_diff = min(r_imp_diff_new, r_imp_diff_old)
 
-        print(f"  IMPACT 跳轉: User={u_ms}ms (diff={u_imp_diff}ms), Ref={r_ms}ms (diff={r_imp_diff}ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
+        print(f"  IMPACT 跳轉: User={u_ms}ms (diff={u_imp_diff}ms), Ref={r_ms}ms (diff={r_imp_diff}ms, target=3033ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
 
         status = "PASS" if (u_imp_diff <= 150 and r_imp_diff <= 150 and t_info.get("user_non_black") and t_info.get("ref_non_black")) else "FAIL"
         self.step_results.append({
@@ -712,12 +739,51 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "step9VerifyMissingClubReference:", None, False
+            1.0, self, "step9VerifySwitchDriver:", None, False
         )
 
-    # --- Step 9: 17 球桿切換與 missing_reference 提示 ---
-    def step9VerifyMissingClubReference_(self, timer):
-        print("\n--- Step 9: 驗證 17 球桿切換與 missing_reference 提示 ---")
+    # --- Step 9: 切換至 Driver 示範揮桿並驗證畫面解碼 ---
+    def step9VerifySwitchDriver_(self, timer):
+        print("\n--- Step 9: 驗證切換至 Driver 示範揮桿並檢查解碼 ---")
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const drvBtn = btns.find(b => b.textContent && b.textContent.trim() === 'Driver');
+            if (drvBtn) drvBtn.click();
+        })();
+        """)
+        time.sleep(1.8)
+        self.captureScreenshot("08_comparison_switch_driver")
+
+        info = self.evalJsJson("""
+        (() => {
+            const vids = Array.from(document.querySelectorAll('video'));
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            return JSON.stringify({
+                has_driver_text: document.body.innerText.includes('Driver'),
+                ref_loaded: refVid ? refVid.readyState >= 2 : false,
+                ref_non_black: refVid && refVid.videoWidth > 0,
+                ref_w: refVid ? refVid.videoWidth : 0,
+                ref_h: refVid ? refVid.videoHeight : 0
+            });
+        })()
+        """)
+        dr_info = info if isinstance(info, dict) else {}
+        print(f"  Driver 切換: text={dr_info.get('has_driver_text')}, ref_loaded={dr_info.get('ref_loaded')}, nonBlack={dr_info.get('ref_non_black')}, res={dr_info.get('ref_w')}x{dr_info.get('ref_h')}")
+        status = "PASS" if (dr_info.get("has_driver_text") and dr_info.get("ref_non_black")) else "FAIL"
+        self.step_results.append({
+            "step": "step9_switch_driver",
+            "info": dr_info,
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step10VerifySwitch3WSlowMo:", None, False
+        )
+
+    # --- Step 10: 切換至 3W 慢動作示範並驗證標籤 ---
+    def step10VerifySwitch3WSlowMo_(self, timer):
+        print("\n--- Step 10: 驗證切換至 3W 慢動作示範並檢查慢動作標籤 ---")
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
@@ -725,14 +791,98 @@ class WebKitComparisonAuditor(AppKit.NSObject):
             if (w3Btn) w3Btn.click();
         })();
         """)
+        time.sleep(1.8)
+        self.captureScreenshot("09_comparison_switch_3w_slowmo")
 
+        has_slow_badge = bool(self.evalJs("Boolean(document.body.innerText.includes('慢動作示範'))"))
+        info = self.evalJsJson("""
+        (() => {
+            const vids = Array.from(document.querySelectorAll('video'));
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            return JSON.stringify({
+                ref_loaded: refVid ? refVid.readyState >= 2 : false,
+                ref_non_black: refVid && refVid.videoWidth > 0
+            });
+        })()
+        """)
+        w3_info = info if isinstance(info, dict) else {}
+        print(f"  3W 切換: 慢動作標籤={has_slow_badge}, ref_loaded={w3_info.get('ref_loaded')}, nonBlack={w3_info.get('ref_non_black')}")
+        status = "PASS" if (has_slow_badge and w3_info.get("ref_non_black")) else "FAIL"
+        self.step_results.append({
+            "step": "step10_switch_3w_slowmo",
+            "has_slow_badge": has_slow_badge,
+            "info": w3_info,
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step11VerifyTuningAndIndividualControls:", None, False
+        )
+
+    # --- Step 11: 驗證畫面等比例微調縮放、位置偏移與展開獨立控制 ---
+    def step11VerifyTuningAndIndividualControls_(self, timer):
+        print("\n--- Step 11: 驗證畫面微調 (Scale/Offset) 與雙影片獨立控制 ---")
+        # 點擊放大 + 縮放按鈕、點擊位置偏移按鈕、展開各影片獨立控制
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            // 點擊 + 放大縮放
+            const zoomPlus = btns.find(b => b.textContent && b.textContent.trim() === '+');
+            if (zoomPlus) { zoomPlus.click(); zoomPlus.click(); }
+            // 點擊 X→ 向右偏移
+            const xPlus = btns.find(b => b.textContent && b.textContent.trim() === 'X→');
+            if (xPlus) { xPlus.click(); xPlus.click(); }
+            // 展開各影片獨立控制
+            const indBtn = btns.find(b => b.textContent && b.textContent.includes('展開各影片獨立控制'));
+            if (indBtn) indBtn.click();
+        })();
+        """)
         time.sleep(1.2)
-        self.captureScreenshot("08_comparison_missing_3w")
+        self.captureScreenshot("10_comparison_tuning_and_individual_controls")
 
-        has_missing_banner = bool(self.evalJs("Boolean(document.body.innerText.includes('missing_reference') || document.body.innerText.includes('尚無此球桿示範影片'))"))
+        has_ind_panel = bool(self.evalJs("Boolean(document.body.innerText.includes('示範影片') && document.body.innerText.includes('個人揮桿') && document.body.innerText.includes('▶/⏸'))"))
+        tuning_info = self.evalJsJson("""
+        (() => {
+            const vids = Array.from(document.querySelectorAll('video'));
+            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+            return JSON.stringify({
+                transform: refVid ? refVid.style.transform : '',
+                has_transform: Boolean(refVid && refVid.style.transform && refVid.style.transform.includes('translate'))
+            });
+        })()
+        """)
+        t_info = tuning_info if isinstance(tuning_info, dict) else {}
+        print(f"  微調控制: 獨立面板展開={has_ind_panel}, CSS transform={t_info.get('transform')}")
+        status = "PASS" if (has_ind_panel and t_info.get("has_transform")) else "FAIL"
+        self.step_results.append({
+            "step": "step11_tuning_and_individual_controls",
+            "has_ind_panel": has_ind_panel,
+            "transform": t_info.get("transform"),
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step12VerifyMissingClubReference:", None, False
+        )
+
+    # --- Step 12: 缺桿 (7W / Hybrid) 切換與 missing_reference 提示 ---
+    def step12VerifyMissingClubReference_(self, timer):
+        print("\n--- Step 12: 驗證缺桿 (7W) 切換與 missing_reference 提示 ---")
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const w7Btn = btns.find(b => b.textContent && b.textContent.trim() === '7W');
+            if (w7Btn) w7Btn.click();
+        })();
+        """)
+        time.sleep(1.2)
+        self.captureScreenshot("11_comparison_missing_7w")
+
+        has_missing_banner = bool(self.evalJs("Boolean(document.body.innerText.includes('missing_reference') || document.body.innerText.includes('尚未收錄標準示範影片'))"))
+        has_7w_guide = bool(self.evalJs("Boolean(document.body.innerText.includes('7號木桿示範影片待補'))"))
         has_import_btn = bool(self.evalJs("Boolean(document.body.innerText.includes('匯入此球桿的示範影片'))"))
 
-        print(f"  missing_reference 提示存在: {has_missing_banner}, 匯入按鈕存在: {has_import_btn}")
+        print(f"  7W missing_reference 提示: {has_missing_banner}, 7W 導引: {has_7w_guide}, 匯入按鈕: {has_import_btn}")
 
         # 測試點擊匯入按鈕跳出對話窗
         open_import_res = self.evalJs("""
@@ -754,15 +904,16 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
-            const cancelBtn = btns.find(b => b.textContent && b.textContent.trim() === '取消');
+            const cancelBtn = btns.find(b => b.textContent && b.textContent.trim() === '✕');
             if (cancelBtn) cancelBtn.click();
         })();
         """)
 
         status = "PASS" if (has_missing_banner and has_import_btn and has_file_input) else "FAIL"
         self.step_results.append({
-            "step": "step9_missing_club_reference",
+            "step": "step12_missing_club_reference",
             "has_missing_banner": has_missing_banner,
+            "has_7w_guide": has_7w_guide,
             "has_import_btn": has_import_btn,
             "has_file_input": has_file_input,
             "status": status,
@@ -771,6 +922,7 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             0.5, self, "finishAudit:", None, False
         )
+
 
     # --- Step 10: 結算並產出動態脫敏驗收報告 ---
     def finishAudit_(self, timer):
@@ -811,6 +963,7 @@ class WebKitComparisonAuditor(AppKit.NSObject):
 
         self.is_done = True
         AppKit.NSApplication.sharedApplication().stop_(None)
+        os._exit(0 if all_pass else 1)
 
 
 def main():

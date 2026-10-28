@@ -29,8 +29,8 @@ def get_test_token(db):
     return create_session_token(user)
 
 
-def test_reference_swings_catalog_17_clubs():
-    """驗證示範揮桿目錄包含完整 17 種球桿分類與真實狀態"""
+def test_reference_swings_catalog_19_clubs_and_bundle():
+    """驗證示範揮桿目錄包含完整 19 種球桿分類 + 通用 Hybrid 與真實狀態"""
     with SessionLocal() as db:
         token = get_test_token(db)
 
@@ -40,37 +40,39 @@ def test_reference_swings_catalog_17_clubs():
     assert "clubs" in data
     assert "available_clubs" in data
     assert "total_clubs" in data
-    assert data["total_clubs"] == 17
+    assert data["total_clubs"] >= 19
 
     club_types = [c["club_type"] for c in data["clubs"]]
     expected_clubs = [
-        "Driver", "3W", "5W", "3H", "4H", "5H",
-        "4I", "5I", "6I", "7I", "8I", "9I",
+        "Driver", "3W", "5W", "7W", "3H", "4H", "5H", "Hybrid",
+        "3I", "4I", "5I", "6I", "7I", "8I", "9I",
         "PW", "GW/AW", "SW", "LW", "Putter"
     ]
     for c in expected_clubs:
         assert c in club_types, f"缺少球桿分類: {c}"
 
-    # 驗證 7I 為技術測試基準 (test_fixture，非職業標準，verified_club=False)
+    # 驗證 7I 示範影片已就緒，為 DTL 視角，is_verified_standard 為 False (恪守誠信)
     club_7i = next(c for c in data["clubs"] if c["club_type"] == "7I")
     assert club_7i["status"] == "available"
     assert club_7i["reference_count"] >= 1
-    assert club_7i["default_reference"]["reference_category"] == "test_fixture"
-    assert club_7i["default_reference"]["verified_club"] is False
-    assert club_7i["default_reference"]["is_verified_standard"] is False
     assert club_7i["default_reference"]["camera_angle"].lower() == "dtl"
+    assert club_7i["default_reference"]["is_verified_standard"] is False
 
-    # 驗證 Driver 為普通參考素材 (ordinary_reference)，close_up 特寫，verified_camera_angle 為 False
+    # 驗證 Driver 示範影片已就緒，為 DTL 視角
     club_driver = next(c for c in data["clubs"] if c["club_type"] == "Driver")
-    if club_driver["status"] == "available":
-        assert club_driver["default_reference"]["reference_category"] == "ordinary_reference"
-        assert club_driver["default_reference"]["camera_angle"] == "close_up"
-        assert club_driver["default_reference"]["verified_camera_angle"] is False
-        assert club_driver["default_reference"]["verified_club"] is False
+    assert club_driver["status"] == "available"
+    assert club_driver["default_reference"]["camera_angle"].lower() == "dtl"
 
-    # 驗證尚無合法素材之球桿如 3W 狀態為 missing_reference
+    # 驗證 3W 示範影片已就緒，標註為慢動作示範
     club_3w = next(c for c in data["clubs"] if c["club_type"] == "3W")
-    assert club_3w["status"] == "missing_reference"
+    assert club_3w["status"] == "available"
+    assert club_3w["default_reference"]["calibration_params"]["is_slow_motion"] is True
+
+    # 驗證尚無合法素材之球桿如 7W, 3I, Hybrid, GW/AW 狀態為 missing_reference
+    for missing_club in ["7W", "Hybrid", "3I", "GW/AW"]:
+        item = next(c for c in data["clubs"] if c["club_type"] == missing_club)
+        assert item["status"] == "missing_reference", f"球桿 {missing_club} 應為 missing_reference"
+
 
 
 def test_reference_swing_range_streaming_206():

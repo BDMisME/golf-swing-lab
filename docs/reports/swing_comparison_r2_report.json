@@ -1,8 +1,8 @@
 {
   "title": "Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 Acceptance Report",
-  "timestamp": "2026-10-28T18:46:55.178627+00:00",
+  "timestamp": "2026-10-28T19:31:36.901064+00:00",
   "git": {
-    "commit_sha": "9ac6b3ede801df377edd2e9c50e03bfae3e48993",
+    "commit_sha": "3e63da3ee0dfd76b5f0ca881783e140dcced5936",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -66,13 +66,13 @@
       "ref_video_state": {
         "found": true,
         "readyState": 4,
-        "width": 1080,
-        "height": 1920,
-        "currentTime": 0,
+        "width": 640,
+        "height": 360,
+        "currentTime": 1.066,
         "paused": true,
         "nonBlack": true,
-        "mean": 115.8,
-        "std": 64.4,
+        "mean": 132.4,
+        "std": 46.5,
         "error": null
       },
       "ready_ok": true,
@@ -84,11 +84,11 @@
       "play_result": "PLAY_CLICKED",
       "user_advancing": true,
       "ref_advancing": true,
-      "user_t1": 120.0339439139295,
-      "user_t2": 121.04393262211065,
-      "ref_t1": 0.9567312084024463,
-      "ref_t2": 1.9586361233956686,
-      "sync_drift_ms": 8.1,
+      "user_t1": 120.05246241673296,
+      "user_t2": 121.06170025095565,
+      "ref_t1": 2.1098381660072123,
+      "ref_t2": 3.116179415939927,
+      "sync_drift_ms": 2.9,
       "user_non_black": true,
       "ref_non_black": true,
       "status": "PASS"
@@ -108,7 +108,7 @@
       "step": "step7_jump_top",
       "top_clicked": true,
       "user_ms": 120600,
-      "ref_ms": 1533,
+      "ref_ms": 2733,
       "user_diff_ms": 0,
       "ref_diff_ms": 0,
       "status": "PASS"
@@ -117,14 +117,41 @@
       "step": "step8_jump_impact",
       "impact_clicked": true,
       "user_ms": 120967,
-      "ref_ms": 1900,
+      "ref_ms": 3033,
       "user_diff_ms": 0,
       "ref_diff_ms": 0,
       "status": "PASS"
     },
     {
-      "step": "step9_missing_club_reference",
+      "step": "step9_switch_driver",
+      "info": {
+        "has_driver_text": true,
+        "ref_loaded": true,
+        "ref_non_black": true,
+        "ref_w": 640,
+        "ref_h": 360
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step10_switch_3w_slowmo",
+      "has_slow_badge": true,
+      "info": {
+        "ref_loaded": true,
+        "ref_non_black": true
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step11_tuning_and_individual_controls",
+      "has_ind_panel": true,
+      "transform": "scale(1.2) translate(-127px, 46px)",
+      "status": "PASS"
+    },
+    {
+      "step": "step12_missing_club_reference",
       "has_missing_banner": true,
+      "has_7w_guide": true,
       "has_import_btn": true,
       "has_file_input": true,
       "status": "PASS"
@@ -160,8 +187,20 @@
       "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/07_comparison_jump_impact.png"
     },
     {
-      "name": "08_comparison_missing_3w",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/08_comparison_missing_3w.png"
+      "name": "08_comparison_switch_driver",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/08_comparison_switch_driver.png"
+    },
+    {
+      "name": "09_comparison_switch_3w_slowmo",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/09_comparison_switch_3w_slowmo.png"
+    },
+    {
+      "name": "10_comparison_tuning_and_individual_controls",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/10_comparison_tuning_and_individual_controls.png"
+    },
+    {
+      "name": "11_comparison_missing_7w",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r2/11_comparison_missing_7w.png"
     }
   ]
 }
