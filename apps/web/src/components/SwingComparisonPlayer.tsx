@@ -54,6 +54,13 @@ export interface ReferenceSwingData {
   is_default: boolean;
   notes: string;
   stream_url: string;
+  // 六維度技術狀態旗標
+  media_processed?: boolean;
+  pose_analyzed?: boolean;
+  is_valid_clip?: boolean;
+  events_reliable?: boolean;
+  supports_realtime_sync?: boolean;
+  supports_phase_sync?: boolean;
 }
 
 export interface ClubCatalogItem {
@@ -440,18 +447,19 @@ export function SwingComparisonPlayer({
     }
   };
 
-  // 同步逐格步進
+  // 同步逐格步進 (依使用者與示範各自真實 FPS 計算單影格時間)
   const stepSyncFrame = (deltaFrames: number) => {
     handlePause();
     const uVid = userVideoRef.current;
     const rVid = refVideoRef.current;
     if (!uVid) return;
 
-    const frameMs = 33.333;
+    const uFps = (userSwing as any).fps || 30.0;
+    const uFrameSec = 1.0 / uFps;
     const curSec = uVid.currentTime;
     const nextSec = Math.max(
       userTimeline.startMs / 1000,
-      Math.min(userTimeline.endMs / 1000, curSec + (deltaFrames * frameMs) / 1000)
+      Math.min(userTimeline.endMs / 1000, curSec + deltaFrames * uFrameSec)
     );
     uVid.currentTime = nextSec;
     const uMs = Math.round(nextSec * 1000);
@@ -480,11 +488,12 @@ export function SwingComparisonPlayer({
     if (!uVid) return;
     uVid.pause();
     setIsPlaying(false);
-    const frameMs = 33.333;
+    const uFps = (userSwing as any).fps || 30.0;
+    const uFrameSec = 1.0 / uFps;
     const curSec = uVid.currentTime;
     const nextSec = Math.max(
       userTimeline.startMs / 1000,
-      Math.min(userTimeline.endMs / 1000, curSec + (deltaFrames * frameMs) / 1000)
+      Math.min(userTimeline.endMs / 1000, curSec + deltaFrames * uFrameSec)
     );
     uVid.currentTime = nextSec;
     setUserCurrentMs(Math.round(nextSec * 1000));
@@ -514,10 +523,11 @@ export function SwingComparisonPlayer({
     if (!rVid) return;
     rVid.pause();
     setIsPlaying(false);
-    const frameMs = 33.333;
+    const rFps = refSwing?.fps || 30.0;
+    const rFrameSec = 1.0 / rFps;
     const curSec = rVid.currentTime;
     const durSec = (refSwing?.duration_ms || 3000) / 1000;
-    const nextSec = Math.max(0, Math.min(durSec, curSec + (deltaFrames * frameMs) / 1000));
+    const nextSec = Math.max(0, Math.min(durSec, curSec + deltaFrames * rFrameSec));
     rVid.currentTime = nextSec;
     setRefCurrentMs(Math.round(nextSec * 1000));
   };
@@ -812,38 +822,99 @@ export function SwingComparisonPlayer({
 
       {/* 示範影片資訊列與真偽標記 */}
       {refSwing ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-black/40 border border-gray-800/80 px-3 py-2 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-cyan-300">示範素材：{refSwing.title}</span>
-            <span className="text-gray-400">作者：{refSwing.reference_author}</span>
+        <div className="flex flex-col gap-2 rounded-xl bg-black/40 border border-gray-800/80 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-cyan-300">示範素材：{refSwing.title}</span>
+              <span className="text-gray-400">作者：{refSwing.reference_author}</span>
 
-            {/* 素材分類標籤 (恪守最高誠信原則) */}
-            {refSwing.reference_category === "test_fixture" && (
-              <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-700/60 flex items-center gap-1">
-                ⚠️ 技術測試素材 (Test Fixture)
-              </span>
-            )}
-            {refSwing.camera_angle.toLowerCase() === "close_up" && (
-              <span className="rounded bg-rose-950/80 px-2 py-0.5 text-[10px] font-bold text-rose-300 border border-rose-700/60 flex items-center gap-1">
-                ⚠️ 打擊區特寫 (非完整 DTL)
-              </span>
-            )}
-            {!refSwing.is_verified_standard && (
-              <span className="rounded bg-gray-900 px-1.5 py-0.5 text-[10px] text-gray-400 border border-gray-800">
-                未經認證參考
-              </span>
-            )}
+              {/* 素材分類標籤 (恪守最高誠信原則) */}
+              {refSwing.reference_category === "test_fixture" && (
+                <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-700/60 flex items-center gap-1">
+                  ⚠️ 技術測試素材 (Test Fixture)
+                </span>
+              )}
+              {refSwing.camera_angle.toLowerCase() === "close_up" && (
+                <span className="rounded bg-rose-950/80 px-2 py-0.5 text-[10px] font-bold text-rose-300 border border-rose-700/60 flex items-center gap-1">
+                  ⚠️ 打擊區特寫 (非完整 DTL)
+                </span>
+              )}
+              {!refSwing.is_verified_standard && (
+                <span className="rounded bg-gray-900 px-1.5 py-0.5 text-[10px] text-gray-400 border border-gray-800">
+                  未經認證參考
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-gray-400">
+              <span>授權：{refSwing.content_license}</span>
+              <span>FPS: {refSwing.fps}</span>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="text-cyan-400 hover:underline"
+              >
+                更換示範影片
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-gray-400">
-            <span>授權：{refSwing.content_license}</span>
-            <span>FPS: {refSwing.fps}</span>
-            <button
-              type="button"
-              onClick={() => setShowImportModal(true)}
-              className="text-cyan-400 hover:underline"
+
+          {/* 六維度技術狀態徽章 (最高誠信與可重現運動學驗收) */}
+          <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-gray-800/60">
+            <span className="text-[10px] text-gray-400 font-semibold mr-1">狀態驗證：</span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${
+                refSwing.media_processed !== false
+                  ? "bg-emerald-950/80 text-emerald-300 border-emerald-800/40"
+                  : "bg-rose-950/80 text-rose-300 border-rose-800/40"
+              }`}
             >
-              更換示範影片
-            </button>
+              {refSwing.media_processed !== false ? "✓ 媒體處理" : "✗ 媒體待轉碼"}
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${
+                refSwing.pose_analyzed !== false
+                  ? "bg-emerald-950/80 text-emerald-300 border-emerald-800/40"
+                  : "bg-amber-950/80 text-amber-300 border-amber-800/40"
+              }`}
+            >
+              {refSwing.pose_analyzed !== false ? "✓ 2D骨架" : "⚠️ 骨架待抽"}
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${
+                refSwing.is_valid_clip !== false
+                  ? "bg-emerald-950/80 text-emerald-300 border-emerald-800/40"
+                  : "bg-amber-950/80 text-amber-300 border-amber-800/40"
+              }`}
+            >
+              {refSwing.is_valid_clip !== false ? "✓ 單球剪輯" : "⚠️ 範圍待修"}
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${
+                refSwing.events_reliable
+                  ? "bg-emerald-950/80 text-emerald-300 border-emerald-800/40"
+                  : "bg-amber-950/80 text-amber-300 border-amber-800/40"
+              }`}
+            >
+              {refSwing.events_reliable ? "✓ 事件可信" : "⚠️ 待手動校正"}
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${
+                refSwing.supports_realtime_sync
+                  ? "bg-cyan-950/80 text-cyan-300 border-cyan-800/40"
+                  : "bg-amber-950/80 text-amber-300 border-amber-800/40"
+              }`}
+            >
+              {refSwing.supports_realtime_sync ? "✓ 原速同步" : "⏱️ 慢動作 (僅階段對齊)"}
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${
+                refSwing.supports_phase_sync
+                  ? "bg-purple-950/80 text-purple-300 border-purple-800/40"
+                  : "bg-rose-950/80 text-rose-300 border-rose-800/40"
+              }`}
+            >
+              {refSwing.supports_phase_sync ? "✓ 階段對齊" : "✗ 無法階段對齊"}
+            </span>
           </div>
         </div>
       ) : (
@@ -852,6 +923,7 @@ export function SwingComparisonPlayer({
             <span>
               ℹ️ 目前球桿 ({selectedClub}) 尚未收錄標準示範影片 (missing_reference)
               {selectedClub === "Hybrid" && " — 系統支援 3H/4H/5H，通用 Hybrid 暫無明確號數示範，請選擇具體號數或手動匯入。"}
+              {["3H", "4H", "5H"].includes(selectedClub) && ` — ${selectedClub} 示範影片待補，不可拿通用 Hybrid 混充，可手動匯入。`}
               {selectedClub === "7W" && " — 7號木桿示範影片待補，可手動匯入。"}
               {selectedClub === "3I" && " — 3號鐵桿示範影片待補，可手動匯入。"}
               {selectedClub === "GW/AW" && " — GW/AW (50~52°) 示範影片待補，可手動匯入。"}

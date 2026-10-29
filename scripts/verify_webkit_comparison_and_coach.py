@@ -100,6 +100,28 @@ class WebKitComparisonAuditor(AppKit.NSObject):
     @objc.python_method
     def startAudit(self):
         self.token = obtain_auth_token()
+        # 動態獲取 7I 預設參考資料與真實事件時間碼
+        try:
+            resp = requests.get(
+                f"{get_settings().api_base_url}/api/reference-swings?club_type=7I",
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                catalog = resp.json()
+                ref_item = next((r for r in catalog.get("references", []) if r.get("is_default")), None)
+                if not ref_item and catalog.get("references"):
+                    ref_item = catalog["references"][0]
+                if ref_item:
+                    self.ref_swing_id = ref_item["id"]
+                    self.ref_top_ms = int(ref_item.get("event_timestamps", {}).get("top", 1367))
+                    self.ref_impact_ms = int(ref_item.get("event_timestamps", {}).get("impact", 1700))
+                    print(f"[Audit] 動態獲取 7I 示範影片: id={self.ref_swing_id}, Top={self.ref_top_ms}ms, Impact={self.ref_impact_ms}ms")
+        except Exception as exc:
+            print(f"[Audit] 獲取 7I 示範影片失敗: {exc}")
+            self.ref_top_ms = 1367
+            self.ref_impact_ms = 1700
+
         rect = AppKit.NSMakeRect(0, 0, 1440, 1080)
         style = (
             AppKit.NSWindowStyleMaskTitled
@@ -654,13 +676,12 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         t_info = times if isinstance(times, dict) else {}
         u_ms = t_info.get("user_ms", 0)
         r_ms = t_info.get("ref_ms", 0)
-        # 第 10 球 Top 為 120600ms, 示範片 Top 為 2733ms (新匯入 DJ Watts 7I) 或 1533ms (舊測試素材)
+        # 第 10 球 Top 為 120600ms, 示範片 Top 為真實動態獲取的事件時間碼 (新 7I 為 1367ms)
         u_top_diff = abs(u_ms - 120600)
-        r_top_diff_new = abs(r_ms - 2733)
-        r_top_diff_old = abs(r_ms - 1533)
-        r_top_diff = min(r_top_diff_new, r_top_diff_old)
+        target_ref_top = getattr(self, "ref_top_ms", 1367)
+        r_top_diff = abs(r_ms - target_ref_top)
 
-        print(f"  TOP 跳轉: User={u_ms}ms (diff={u_top_diff}ms), Ref={r_ms}ms (diff={r_top_diff}ms, target=2733ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
+        print(f"  TOP 跳轉: User={u_ms}ms (diff={u_top_diff}ms), Ref={r_ms}ms (diff={r_top_diff}ms, target={target_ref_top}ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
 
         status = "PASS" if (u_top_diff <= 150 and r_top_diff <= 150 and t_info.get("user_non_black") and t_info.get("ref_non_black")) else "FAIL"
         self.step_results.append({
@@ -670,6 +691,7 @@ class WebKitComparisonAuditor(AppKit.NSObject):
             "ref_ms": r_ms,
             "user_diff_ms": u_top_diff,
             "ref_diff_ms": r_top_diff,
+            "target_ref_top": target_ref_top,
             "status": status,
         })
 
@@ -719,13 +741,12 @@ class WebKitComparisonAuditor(AppKit.NSObject):
         t_info = times if isinstance(times, dict) else {}
         u_ms = t_info.get("user_ms", 0)
         r_ms = t_info.get("ref_ms", 0)
-        # 第 10 球 Impact 為 120967ms, 示範片 Impact 為 3033ms (新匯入 DJ Watts 7I) 或 1900ms (舊測試素材)
+        # 第 10 球 Impact 為 120967ms, 示範片 Impact 為真實動態獲取的事件時間碼 (新 7I 為 1700ms)
         u_imp_diff = abs(u_ms - 120967)
-        r_imp_diff_new = abs(r_ms - 3033)
-        r_imp_diff_old = abs(r_ms - 1900)
-        r_imp_diff = min(r_imp_diff_new, r_imp_diff_old)
+        target_ref_imp = getattr(self, "ref_impact_ms", 1700)
+        r_imp_diff = abs(r_ms - target_ref_imp)
 
-        print(f"  IMPACT 跳轉: User={u_ms}ms (diff={u_imp_diff}ms), Ref={r_ms}ms (diff={r_imp_diff}ms, target=3033ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
+        print(f"  IMPACT 跳轉: User={u_ms}ms (diff={u_imp_diff}ms), Ref={r_ms}ms (diff={r_imp_diff}ms, target={target_ref_imp}ms), nonBlack: {t_info.get('user_non_black')} & {t_info.get('ref_non_black')}")
 
         status = "PASS" if (u_imp_diff <= 150 and r_imp_diff <= 150 and t_info.get("user_non_black") and t_info.get("ref_non_black")) else "FAIL"
         self.step_results.append({

@@ -1,26 +1,25 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 13: 16 支真實高爾夫示範影片匯入與 19 桿雙影片同步對照全面驗收通過）
-1. **16 支示範影片素材完整性與隔離入庫**：`PASS`
-   - **來源校驗**：解壓使用者提供的 `~/Downloads/GSL_reference_videos_bundle_20261029.zip` 至 `~/.golfswinglab/reference_import_staging/`，逐支驗證 SHA-256，16 支檔案 100% 吻合 `GSL_reference_manifest_20261029.json`。
-   - **切片與姿態分析**：透過 `scripts/import_16_reference_bundle.py`，使用 FFmpeg 裁切出乾淨單次揮桿片段、抽取 0.5s 高清縮圖、執行 MediaPipe 2D 姿態特徵抽取與事件時間碼計算，持久化入庫寫入 PostgreSQL `reference_swings`（共 18 筆示範揮桿記錄）。
-   - **隔離儲存**：實體媒體檔案統一存於本機高速 NVMe `~/.golfswinglab/storage/references/<club_slug>/`，絕不將二進位大檔加入 Git 版控，`.gitignore` 嚴格把關。
-2. **球桿分類模型與缺桿治理 (19 類 + Hybrid)**：`PASS`
-   - 後端與前端全面擴充支援 19 類球桿（`Driver, 3W, 5W, 7W, 3H, 4H, 5H, 3I, 4I, 5I, 6I, 7I, 8I, 9I, PW, GW/AW, SW, LW, Putter`）以及通用 `Hybrid`。
-   - 對 4 桿經深度調查無合法教練純示範之球桿（3I, 7W, Hybrid, GW）維持誠信 `missing_reference`，絕不拿其他鐵桿或木桿冒充，並提供友好導引與使用者自訂上傳 Modal。
-3. **慢動作與特殊揮桿誠信標記**：`PASS`
-   - 慢動作示範（3W, 6I, SW）在資料庫與 UI 明確標註 `⏱️ 慢動作示範 (僅供姿勢影格比較，不計真實節奏)`，嚴禁將其時間碼用於自然節奏比計算。
-   - 非全揮桿／非標準 DTL 示範（PW, 8I, LW, Putter, SW Bunker）標註 `needs_calibration`、`⚠️ 非全揮桿` 與 `📷 非標準 DTL`，杜絕誤導。
-4. **雙影片播放器時鐘控制與 media fragment 污染根除**：`PASS`
-   - **根除 `#t` media fragment 污染**：查明先前 video src 包含 `#t=` media fragment 導致 React re-render 時觸發瀏覽器強制 seek 洗掉時間碼之根因，重構 `userVideoSrc` 與 `refVideoSrc` 為乾淨串流 URL 並以 `useMemo` 快取，交由 JavaScript 控制 `currentTime`。
-   - **獨立控制與等比例微調**：新增單獨左右播放/暫停/逐幀步進/重播按鈕，新增 Scale/Offset X/Y 微調控制群，支援使用者針對不同體型與相機視角進行人體等比例縮放對齊。
-5. **全流程自動化與原生 WebKit 12 大步驟端到端驗收**：`PASS`
-   - `scripts/verify_webkit_comparison_and_coach.py` 執行 12 大步驟：單球播放、動作差異卡片、幾何提示、對照模式準備、雙影片同步播放推進、上下堆疊切換、TOP 錨點跳轉 (0ms 誤差)、IMPACT 錨點跳轉 (0ms 誤差)、Driver 切換、3W 慢動作標籤、微調與獨立控制、7W 缺桿導引與 Modal 開啟。
-   - 12 大步驟全數 **PASS (True)**，雙側視訊像素採樣非黑畫面 (Mean>110, Std>45)，產出 11 張真實 GPU 渲染快照與結構化脫敏報告 `docs/reports/swing_comparison_r2_report.json`。
-   - 後端專項測試 `uv run pytest tests/test_token_leak_prevention.py tests/test_swing_comparison_and_coach.py` **8/8 PASSED (100%)**。
-   - Next.js 15.5.28 生產構建 **9/9 靜態路由 0 錯誤**。
-   - 交付逐支素材驗收矩陣文件：`docs/REFERENCE_VIDEOS_ACCEPTANCE_MATRIX.md`。
-- **最後更新時間**：2026-10-29T03:32:00+08:00
+## 最新修復狀態（Round 13: 16 支示範影片獨立精度修復與真實 FPS 步進全面通過）
+1. **P0 根除固定假時間碼與真實運動學狀態機定位**：`PASS`
+   - **徹底根除寫死偏移**：移除了先前所有寫死之固定偏移量（Top+300ms、慢動作Top+1200ms、時長百分比）。
+   - **真實狀態機與運動學定位**：採用 `CoarseToFineDetector` 狀態機與 2D 骨架手腕物理軌跡（Top 頂點手腕最高 $y$ 局部極小值、Impact 觸球區）真實定位。
+   - **6 維度狀態持久化**：封裝並持久化 `media_processed`, `pose_analyzed`, `is_valid_clip`, `events_reliable`, `supports_realtime_sync`, `supports_phase_sync` 於 `calibration_params` 與 API 頂層欄位。
+2. **P0 重新確立乾淨單球邊界**：`PASS`
+   - 逐支重新檢查全部 16 支 MP4，確立乾淨單球邊界（Address 前站定緩衝 -> 上桿 -> Top -> 擊球 -> 收桿平衡 Finish），徹底排除跨球、走動、口播或標題卡。
+   - 7I 示範片截取 DJ Watts 第 2 球乾淨單球（`13600ms ~ 17600ms`，Top 14967ms 映射為 1367ms，Impact 15300ms 映射為 1700ms，Downswing 333ms，手腕最高點 $y=0.315$，擊球點 $y=0.504$）。
+3. **P0 冪等更新機制與資料清理**：`PASS`
+   - 以 `(source_sha256, club_type, source_start_ms, source_end_ms)` 與邏輯對照為依據原地更新既有記錄，徹底清理 3 筆歷史舊假數據，資料庫無垃圾 UUID 膨脹。
+4. **P1 逐格控制依據真實 FPS**：`PASS`
+   - `SwingComparisonPlayer.tsx` 移除固定 33.333ms，改依兩側各自真實 FPS 計算單影格步進（$\Delta t = 1/\text{FPS}$），按鈕動態呈現對應毫秒數。
+5. **P1 球桿覆蓋率與缺桿誠信標記**：`PASS`
+   - 完整支援 19 類球桿，缺少 6 桿（7W, 3H, 4H, 5H, 3I, GW/AW）誠實標示 `missing_reference`，絕不拿通用 Hybrid 混充 3H/4H/5H。
+   - 示範影片資訊列加入六維度技術狀態徽章。
+6. **全鏈路驗收與 WebKit 實測**：`PASS`
+   - WebKit 原生 GUI 12 步驟端到端實測 100% 通過（Top/Impact 誤差 0ms、兩側解碼非黑畫面、同步時鐘漂移 2.4ms、無任何 Token 洩漏）。
+   - 後端全量測試：**90 / 90 PASSED (100%)** in 202.29s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由 0 錯誤**。
+- **最後更新時間**：2026-10-29T13:25:00+08:00
 - **當前分支**：`feat/swing-comparison-and-evidence-coach`
 
 ## 前期重大里程碑狀態（Round 12: PR #2 最後視覺驗收與 Beta 收斂 — 全流程實測通過）

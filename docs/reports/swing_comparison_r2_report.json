@@ -1,8 +1,8 @@
 {
   "title": "Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 Acceptance Report",
-  "timestamp": "2026-10-28T19:31:36.901064+00:00",
+  "timestamp": "2026-10-29T05:18:02.580285+00:00",
   "git": {
-    "commit_sha": "3e63da3ee0dfd76b5f0ca881783e140dcced5936",
+    "commit_sha": "45ae3495278c58dcfee35569fd94034f4ebcc505",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -15,7 +15,7 @@
     "proxy_resolution": "360x640"
   },
   "reference_metadata": {
-    "id": "1d5ecee0-1809-4d0c-a553-1c28e95bbac0",
+    "id": "05af5507-f68a-4d32-9b3c-89bb8a40001a",
     "club_type": "7I",
     "reference_category": "test_fixture",
     "is_verified_standard": false,
@@ -68,11 +68,11 @@
         "readyState": 4,
         "width": 640,
         "height": 360,
-        "currentTime": 1.066,
+        "currentTime": 0,
         "paused": true,
         "nonBlack": true,
-        "mean": 132.4,
-        "std": 46.5,
+        "mean": 135,
+        "std": 44.4,
         "error": null
       },
       "ready_ok": true,
@@ -84,11 +84,11 @@
       "play_result": "PLAY_CLICKED",
       "user_advancing": true,
       "ref_advancing": true,
-      "user_t1": 120.05246241673296,
-      "user_t2": 121.06170025095565,
-      "ref_t1": 2.1098381660072123,
-      "ref_t2": 3.116179415939927,
-      "sync_drift_ms": 2.9,
+      "user_t1": 120.02723795927012,
+      "user_t2": 121.03262766672098,
+      "ref_t1": 0.7548566665031357,
+      "ref_t2": 1.7578287501991434,
+      "sync_drift_ms": 2.4,
       "user_non_black": true,
       "ref_non_black": true,
       "status": "PASS"
@@ -108,16 +108,17 @@
       "step": "step7_jump_top",
       "top_clicked": true,
       "user_ms": 120600,
-      "ref_ms": 2733,
+      "ref_ms": 1367,
       "user_diff_ms": 0,
       "ref_diff_ms": 0,
+      "target_ref_top": 1367,
       "status": "PASS"
     },
     {
       "step": "step8_jump_impact",
       "impact_clicked": true,
       "user_ms": 120967,
-      "ref_ms": 3033,
+      "ref_ms": 1700,
       "user_diff_ms": 0,
       "ref_diff_ms": 0,
       "status": "PASS"
@@ -145,7 +146,7 @@
     {
       "step": "step11_tuning_and_individual_controls",
       "has_ind_panel": true,
-      "transform": "scale(1.2) translate(-127px, 46px)",
+      "transform": "scale(1.1) translate(16px)",
       "status": "PASS"
     },
     {

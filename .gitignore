@@ -52,3 +52,7 @@ assets/reference_videos/*_raw.mp4
 *.onnx
 *.engine
 dist_mac/
+
+# Scratch and temporary debug scripts
+scratch/
+

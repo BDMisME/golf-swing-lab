@@ -191,6 +191,13 @@ class ReferenceSwingResponse(BaseModel):
     analysis_version: str
     imported_at: datetime
     stream_url: str
+    # 6 維度狀態解析 (恪守最高誠信與可重現運動學驗收)
+    media_processed: bool = True
+    pose_analyzed: bool = True
+    is_valid_clip: bool = True
+    events_reliable: bool = True
+    supports_realtime_sync: bool = True
+    supports_phase_sync: bool = True
 
 
 class ReferenceCatalogItem(BaseModel):
@@ -237,6 +244,20 @@ class UpdateReferenceRequest(BaseModel):
 
 
 def _to_response_item(item: ReferenceSwing) -> ReferenceSwingResponse:
+    calib = item.calibration_params or {}
+    is_slow = bool(calib.get("is_slow_motion", False))
+    ev = item.event_timestamps or {}
+    has_events = bool(ev.get("top") is not None and (ev.get("impact") is not None or ev.get("impact_estimated") is not None))
+    status_str = item.analysis_status or "pending_analysis"
+
+    # 六維度技術狀態計算
+    media_processed = bool(calib.get("media_processed", bool(item.storage_key and item.duration_ms > 0)))
+    pose_analyzed = bool(calib.get("pose_analyzed", bool(item.pose_artifact and (item.pose_artifact.get("landmarks") or item.pose_artifact.get("keyframes")))))
+    is_valid_clip = bool(calib.get("is_valid_clip", True))
+    events_reliable = bool(calib.get("events_reliable", bool(status_str == "completed" and has_events)))
+    supports_realtime_sync = bool(calib.get("supports_realtime_sync", not is_slow))
+    supports_phase_sync = bool(calib.get("supports_phase_sync", has_events))
+
     return ReferenceSwingResponse(
         id=item.id,
         club_type=item.club_type,
@@ -273,6 +294,12 @@ def _to_response_item(item: ReferenceSwing) -> ReferenceSwingResponse:
         analysis_version=item.analysis_version,
         imported_at=item.imported_at,
         stream_url=f"/api/reference-swings/{item.id}/stream",
+        media_processed=media_processed,
+        pose_analyzed=pose_analyzed,
+        is_valid_clip=is_valid_clip,
+        events_reliable=events_reliable,
+        supports_realtime_sync=supports_realtime_sync,
+        supports_phase_sync=supports_phase_sync,
     )
 
 

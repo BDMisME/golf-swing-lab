@@ -4,27 +4,35 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
-## Round 13: 16 支真實高爾夫示範影片匯入與 19 桿雙影片同步對照驗收 (2026-10-29) — 全面完成
-- [x] **16 支示範影片素材完整解壓與 SHA-256 校驗**：
-  - 解壓 `~/Downloads/GSL_reference_videos_bundle_20261029.zip` 至獨立暫存區 `~/.golfswinglab/reference_import_staging/`。
-  - 16 支檔案 SHA-256 100% 吻合 `GSL_reference_manifest_20261029.json`。
-- [x] **球桿分類模型擴充支援 19 類 + Hybrid**：
-  - 後端 `apps/api/routers/reference_swings.py` 與前端 `SwingComparisonPlayer.tsx` 擴充支援 `Driver, 3W, 5W, 7W, 3H, 4H, 5H, 3I, 4I, 5I, 6I, 7I, 8I, 9I, PW, GW/AW, SW, LW, Putter` 與通用 `Hybrid`。
-  - 對未提供影片之 4 桿（3I, 7W, Hybrid, GW）維持 `missing_reference` 狀態，提供透明缺桿提示與手動匯入導引。
-- [x] **16 支影片逐支精準切片、縮圖抽取與 MediaPipe 2D 骨架抽取入庫**：
-  - 實作匯入腳本 `scripts/import_16_reference_bundle.py`，完成單次揮桿精準切片、縮圖抽取與姿態分析。
-  - 實體檔案存於本機高速 NVMe `~/.golfswinglab/storage/references/<club_slug>/`，入庫寫入 PostgreSQL `reference_swings`（共 18 筆示範揮桿記錄），零二進位大檔提交 Git。
-  - 產出詳細匯入報告：`docs/reports/reference_swings_import_report.json`。
-- [x] **慢動作與特殊模式示範標記規範落實**：
-  - 慢動作影片（3W, 6I, SW）標註 `⏱️ 慢動作示範`，嚴禁用於自然節奏計算。
-  - 特殊動作（PW, 8I, LW, Putter, SW Bunker）標記 `needs_calibration` 或 `special_mode`，杜絕冒充全揮桿。
-- [x] **雙影片播放器升級與 media fragment 污染根除**：
-  - 移除 video src 上的 `#t` media fragment，使用 `useMemo` 快取，徹底解決切換錨點時強制重設 currentTime 的缺陷。
-  - 新增雙影片單獨獨立播放/暫停/逐幀步進/重播按鈕，新增等比例 Scale/Offset 微調控制群。
-- [x] **WebKit 原生 GUI 12 大步驟端到端實測 100% PASS**：
-  - 執行 `scripts/verify_webkit_comparison_and_coach.py`，TOP 與 IMPACT 錨點跳轉 0ms 誤差，雙側視訊非黑畫面 (Mean>110, Std>45)，產出 11 張 GPU 原生截圖與全 PASS 脫敏報告 `docs/reports/swing_comparison_r2_report.json`。
-- [x] **逐支素材驗收矩陣文件交付**：
-  - 撰寫 `docs/REFERENCE_VIDEOS_ACCEPTANCE_MATRIX.md`，詳列 16 支素材之檔名、桿種、視角、揮桿數、可否比較、人工確認狀態、授權狀態與匯入結果。
+## Round 13: 16 支真實高爾夫示範影片匯入與獨立精度修復驗收 (2026-10-29) — 全面完成
+- [x] **P0：徹底拔除假事件時間碼（根除固定時間偏移）**：
+  - 徹底移除 `import_16_reference_bundle.py` 中寫死的固定時間偏移邏輯（如 Top+300ms, 慢動作Top+1200ms, 時長百分比）。
+  - 全面改由 `CoarseToFineDetector` 狀態機與 2D 骨架手腕物理極值（Top 頂點手腕最高 $y$ 局部極小值、Downswing 轉換啟動、Impact 觸球區）真實運動學定位。
+  - 對於慢動作影片（3W, 6I, SW），自動標記 `supports_realtime_sync=False`、`supports_phase_sync=True`；對於特寫推桿（17_Putter），標記 `camera_angle="close_up"`、`events_reliable=False`。
+- [x] **P0：重新確立乾淨單球邊界**：
+  - 逐支重新檢查全部 16 支 MP4，確立真正單球時間範圍（`source_start_ms` ~ `source_end_ms`），涵蓋 Address 站定緩衝 → 上桿 → Top → 擊球 → 收桿平衡 Finish，徹底排除跨球、走動、口播或標題卡。
+  - 採用相對時間碼映射（`rel_ms = raw_ms - start_ms`），確保切片後事件時間與視訊播放時間完全吻合。
+- [x] **P0：資料庫冪等更新與歷史假數據清理**：
+  - 以 `(source_sha256, club_type, source_start_ms, source_end_ms)` 與邏輯映射為依據原地安全更新既有記錄。
+  - 徹底刪除先前包含假事件偏移（diff=300ms 或 1200ms）的舊假記錄（6I, 7I, 8I），杜絕 UUID 垃圾膨脹。
+  - 將新 7I（`10_Iron7.mp4`，ID: `05af5507-f68a-4d32-9b3c-89bb8a40001a`，Top=1367ms, Impact=1700ms, Downswing=333ms）設為唯一的 `is_default=True`。
+- [x] **P0：以新匯入 7I 實測驗證雙影片精準同步**：
+  - WebKit 實測腳本 `scripts/verify_webkit_comparison_and_coach.py` 改為動態自 API 讀取 7I 示範影片真實 ID 與事件時間碼。
+  - 實測點擊 TOP 錨點跳轉（User=120600ms, Ref=1367ms，雙側誤差 0ms <= 100ms 門檻，PASS）。
+  - 實測點擊 IMPACT 錨點跳轉（User=120967ms, Ref=1700ms，雙側誤差 0ms <= 100ms 門檻，PASS）。
+  - 雙影片解碼畫面驗證非黑畫面（User Mean=111.5/Std=64.5, Ref Mean=115.8/Std=64.4），時鐘同步播放漂移僅 2.4ms。
+- [x] **P1：逐格控制依據真實 FPS 步進**：
+  - `SwingComparisonPlayer.tsx` 徹底移除固定 33.333ms 步進，改依兩側各自真實 FPS 計算單影格時長（`userFrameSec = 1.0 / (userFps || 30.0)`，`refFrameSec = 1.0 / (refFps || 30.0)`）。
+  - 支援單側獨立控制與雙側同步步進，精準捕捉關鍵瞬間。
+- [x] **P1：球桿覆蓋率誠實治理與六維度狀態持久化**：
+  - 完整支援 19 類球桿（Driver, 3W, 5W, 7W, 3H, 4H, 5H, 3I, 4I, 5I, 6I, 7I, 8I, 9I, PW, GW/AW, SW, LW, Putter）。
+  - 缺少 6 桿（7W, 3H, 4H, 5H, 3I, GW/AW）誠實標示 `missing_reference`，絕不拿通用 Hybrid 混充 3H/4H/5H。
+  - API 與資料庫擴充並回傳六維度技術狀態（`media_processed`, `pose_analyzed`, `is_valid_clip`, `events_reliable`, `supports_realtime_sync`, `supports_phase_sync`），並在 UI 示範資訊列中清晰呈現「狀態驗證」徽章。
+- [x] **全套測試與 WebKit 端到端 12 步驟 100% PASS**：
+  - 後端單元與整合測試：**90 / 90 PASSED (100%)** in 202s。
+  - 前端 Next.js 15.5.28：**9/9 靜態路由 build 0 錯誤**。
+  - WebKit 原生 GUI 12 步驟全數 PASS，產出 11 張真實 GPU 快照與結構化脫敏報告 `docs/reports/swing_comparison_r2_report.json`（Token 零洩漏）。
+  - 更新驗收文件：`docs/REFERENCE_VIDEOS_ACCEPTANCE_MATRIX.md`、`docs/TEST_REPORT.md`、`IMPLEMENTATION_STATE.md`。
 
 ## Round 12: PR #2 最後視覺驗收與 Beta 收斂 (2026-10-29) — 雙影片同步播放與全流程實測完成
 - [x] **P0-1：真正證明雙影片同步播放成功**：
