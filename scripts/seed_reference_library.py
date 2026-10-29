@@ -208,16 +208,31 @@ def seed():
                 "notes": "開發用技術測試素材，包含完整全身入鏡與 9 階段時間標記，僅供系統同步功能研發測試",
             }
 
-            existing_7i = db.query(ReferenceSwing).filter(ReferenceSwing.club_type == "7I").first()
-            if not existing_7i:
+            # 僅在資料庫完全無 7I 或針對舊 dev_fixture 記錄時更新，絕不覆蓋已校正的正式示範影片
+            existing_7i = (
+                db.query(ReferenceSwing)
+                .filter(ReferenceSwing.club_type == "7I")
+                .filter(ReferenceSwing.storage_key.ilike("%dev_fixture_dtl_7iron.mp4"))
+                .first()
+            )
+            has_official_7i = (
+                db.query(ReferenceSwing)
+                .filter(ReferenceSwing.club_type == "7I")
+                .filter(ReferenceSwing.storage_key.ilike("%ref_7i_%"))
+                .first()
+            )
+            if not existing_7i and not has_official_7i:
                 db.add(ReferenceSwing(**item_7i_data))
                 logger.info("已新增 7I 技術測試素材")
-            else:
+            elif existing_7i and not has_official_7i:
                 for k, v in item_7i_data.items():
                     setattr(existing_7i, k, v)
                 logger.info("已更新 7I 技術測試素材真實標註")
+            else:
+                logger.info("資料庫中已有已校正之 7I 正式示範影片，非破壞性保護：完全跳過覆蓋")
         else:
             logger.info("assets/reference_videos/ref_7i_dtl_standard.mp4 不存在，安全跳過 7I 技術測試素材種子")
+
 
         # 2. 匯入 Driver 桿頭特寫示範影片（真實來源：Pexels 6541451，標註非 DTL 視角限制）
         ref_driver_path = Path("assets/reference_videos/ref_driver_closeup.mp4")
@@ -272,19 +287,34 @@ def seed():
                 "notes": "注意：本影片為打擊區擊球特寫，非全身 DTL 鏡頭，不可用於身體 2D 關節角度比較",
             }
 
-            existing_drv = db.query(ReferenceSwing).filter(ReferenceSwing.club_type == "Driver").first()
-            if not existing_drv:
+            # 僅在資料庫完全無 Driver 或針對舊 pexels_driver 記錄時更新，絕不覆蓋已校正的正式示範影片
+            existing_drv = (
+                db.query(ReferenceSwing)
+                .filter(ReferenceSwing.club_type == "Driver")
+                .filter(ReferenceSwing.storage_key.ilike("%pexels_driver_6541451.mp4"))
+                .first()
+            )
+            has_official_drv = (
+                db.query(ReferenceSwing)
+                .filter(ReferenceSwing.club_type == "Driver")
+                .filter(ReferenceSwing.storage_key.ilike("%ref_driver_%"))
+                .first()
+            )
+            if not existing_drv and not has_official_drv:
                 db.add(ReferenceSwing(**item_drv_data))
                 logger.info("已新增 Driver 擊球特寫素材")
-            else:
+            elif existing_drv and not has_official_drv:
                 for k, v in item_drv_data.items():
                     setattr(existing_drv, k, v)
                 logger.info("已更新 Driver 擊球特寫素材真實標註")
+            else:
+                logger.info("資料庫中已有已校正之 Driver 正式示範影片，非破壞性保護：完全跳過覆蓋")
         else:
             logger.info("assets/reference_videos/ref_driver_closeup.mp4 不存在，安全跳過 Driver 擊球特寫素材種子")
 
         db.commit()
         logger.info("示範揮桿資料庫種子完成！")
+
 
 
 
