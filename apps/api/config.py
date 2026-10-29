@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 KNOWN_LEAKED_SECRETS: set[str] = {
     "change-me-in-production-at-least-32-bytes-long-secret-key",
     "gsl-rotated-session-secret-7578cfc2fc2e5e4964be15b584741a88e550d330",
+    "c0600f9929e95b8562048f41bc87df58d184681b9de0a304cb131b3d705b2707",
 }
 
 

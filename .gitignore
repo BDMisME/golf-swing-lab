@@ -45,9 +45,29 @@ tests/golden/private_videos/
 *.MOV
 !tests/fixtures/*.mp4
 !tests/fixtures/*.mov
+assets/reference_videos/*_raw.mp4
 
 # AI Model weights (stored in ~/Library/Application Support/GolfSwingLab/models)
 *.pt
 *.onnx
 *.engine
 dist_mac/
+
+# Scratch and temporary debug scripts
+scratch/
+
+# Reference contact sheets & local database backups (never commit third-party frames or local DB dumps)
+docs/reports/reference_contact_sheets/
+docs/reports/reference_swings_backup.json
+docs/reports/*backup*.json
+
+# Reference video assets & demonstration clips (never commit third-party clips or thumbnails)
+assets/reference_videos/*.mp4
+assets/reference_videos/*.jpg
+assets/reference_videos/*.jpeg
+assets/reference_videos/*.png
+
+# WebKit verification screenshots containing raw user frames or third-party swing stills
+docs/screenshots/webkit_r2/
+
+

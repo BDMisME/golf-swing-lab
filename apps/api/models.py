@@ -447,3 +447,45 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ReferenceSwing(Base):
+    """專業示範揮桿庫 (`reference_swings`)，支援 17 種完整球桿分類與視角比較。"""
+
+    __tablename__ = "reference_swings"
+    __table_args__ = (
+        Index("ix_ref_swings_club_hand", "club_type", "handedness", "is_default"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    club_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)  # Driver, 3W, 5W, 3H, 4H, 5H, 4I, 5I, 6I, 7I, 8I, 9I, PW, GW/AW, SW, LW, Putter
+    handedness: Mapped[str] = mapped_column(String(16), nullable=False, default="right")  # right / left
+    camera_angle: Mapped[str] = mapped_column(String(16), nullable=False, default="DTL")  # DTL / face_on
+    shot_type: Mapped[str] = mapped_column(String(32), nullable=False, default="full_swing")  # full_swing, pitch, chip, putt, punch
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    reference_author: Mapped[str] = mapped_column(String(120), nullable=False, default="Professional Standard")
+    source_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    content_license: Mapped[str] = mapped_column(String(120), nullable=False, default="Educational Reference")
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False, default="")  # s3 key or local file path
+    thumbnail_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    verified_club: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    verified_camera_angle: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    analysis_status: Mapped[str] = mapped_column(String(32), default="pending_analysis", nullable=False)  # completed, missing_reference, pending_analysis, needs_calibration, failed
+    reference_category: Mapped[str] = mapped_column(String(32), default="test_fixture", nullable=False)  # professional_standard, community_reference, test_fixture
+    is_verified_standard: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    verification_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), default="local_fixture", nullable=False)  # local_fixture, external_licensed, user_imported
+    fps: Mapped[float] = mapped_column(Float, default=30.0, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    event_timestamps: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    pose_artifact: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    calibration_params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    analysis_version: Mapped[str] = mapped_column(String(32), default="pose-v1", nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+

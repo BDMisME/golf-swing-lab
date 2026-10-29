@@ -1,6 +1,156 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 9: 大影片分段上傳與登入憑證失效處理修復）
+## 最新修復狀態（Round 16: PR #2 最終合併前素材清理與 Git 差異純淨化）
+1. **P0 移除依然追蹤的示範媒體與截圖**：`PASS`
+   - **本機永久安全保留**：將 `assets/reference_videos/` 內 12 個檔案（含 2 支舊測試 MP4 與 10 張縮圖）完整備份至 `~/.golfswinglab/assets_reference_videos_backup/`；將包含使用者/第三方原片影格的 15 張 WebKit 快照備份至 `~/.golfswinglab/webkit_r2_screenshots/`。
+   - **自 Git 追蹤乾淨移除**：執行 `git rm --cached` 移除這 12 個媒體檔案與 `docs/screenshots/webkit_r2/` 全部 15 張截圖，從 PR 發行差異中徹底排除未授權再散布影像。
+   - **防護規則持久化**：更新 `.gitignore` 加入 `assets/reference_videos/*.mp4`, `*.jpg`, `*.png` 與 `docs/screenshots/webkit_r2/`，杜絕再次提交。
+   - **發行差異純淨化**：實測 `git diff main assets/ docs/screenshots/webkit_r2/` 輸出為空（差異完全為 0），PR 合併至 main 時零二進制冗餘素材。
+2. **P0 腳本無素材安全跳過防護**：`PASS`
+   - 更新 `scripts/seed_reference_library.py`，當工作目錄不存在內建 MP4 時，明確日誌輸出並優雅跳過（Exit Code 0），不影響 Docker 部署或無素材環境執行。
+3. **P0 本機 Storage 與串流播放驗證**：`PASS`
+   - 核驗本機 `~/.golfswinglab/storage/references/` 下 16 支正式示範影片 100% 存在且大小健全。
+   - 透過 API 實測 7I、Driver、3W 的 HTTP 206 Partial Content Range 串流，均回傳 HTTP 206 OK。
+4. **P1 精度成果與資料庫一致性百分之百鎖定**：`PASS`
+   - 資料庫、API 與報告維持 0ms 漂移一致性（`tests/test_reference_events_consistency.py` 5/5 PASSED）。
+   - 11 支 `confirmed_strike`（來源標記 `developer_visual_annotated`）、5 支 `impact_estimated`（含 03_Wood5 30fps 快門間隙出球 Frame 38 1267ms 診斷結論）、0 支 `unresolved`。
+5. **全量品質保證驗收**：`PASS`
+   - 後端測試套件：**95 / 95 PASSED (100%)** in 220.91s。
+   - 前端 Next.js 15.5.28 建置：**9/9 靜態路由 0 錯誤**。
+   - WebKit 原生 GUI 端到端實測：12/12 步驟全數通過（時鐘同步漂移僅 2.9ms，Top/Impact 誤差 0ms，雙側非黑畫面 Mean 111.5 / 135.0，Token 零洩漏）。
+- **最後更新時間**：2026-10-29T17:35:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+- **合併判定**：**READY FOR PERSONAL BETA MERGE**（請使用者於 GitHub PR #2 點選 Squash and merge，嚴禁自行合併 main）。
+
+## 前期重大里程碑狀態（Round 15: PR #2 資料一致性、真值擊球確認、本機素材隔離與個人 Beta 釋出治理）
+1. **P0-1 驗證時間碼單一事實來源寫回資料庫**：`PASS`
+   - **徹底消除報告與資料庫時間碼漂移**：建立單一權威事實來源字典 `STRIKE_EVIDENCE_MAP`，將審查確認之 Top 與 Impact 錨點直接綁定為 active events，並在 `scripts/verify_reference_events_and_generate_sheets.py` 中 100% 寫回 PostgreSQL。
+   - **完全保留原始 Candidate Events**：`calibration_params["candidate_events"]` 忠實記錄初始粗估值，`calibration_params["active_events"]` 與 `event_timestamps` 100% 同步且誤差為 **0ms**。
+   - **資料庫筆數與 ID 恆定**：示範影片記錄恆定為 18 筆（16 支新 bundle + 2 支既有 fixture），維持原有 UUID，無重複記錄或垃圾資料膨脹。
+   - **自動化一致性回歸測試**：撰寫 `tests/test_reference_events_consistency.py`（5 項專案測試），逐支核驗 16 支影片之 DB、報告與 `/api/reference-swings`，測試結果 **5 / 5 PASSED (100%)**。
+2. **P0-2 擊球確認真值分類與 5W 快門間隙診斷**：`PASS`
+   - **移除按球桿名批量推論邏輯**：嚴格依真實影像證據判定，16 支影片分類為：
+     - `confirmed_strike`（11 支，68.8%）：桿頭過球與小白球飛出瞬間清晰可見（01_Driver, 02_Wood3, 07_Iron4, 08_Iron5, 09_Iron6, 10_Iron7, 11_Iron8, 12_Iron9, 15_SW, Bonus Driver TW, Bonus Driver WAX）。
+     - `impact_estimated`（5 支，31.2%）：5W (快門間隙出球)、13_PW (後斜非正 DTL)、16_LW (後斜高拋非全揮桿)、17_Putter (特寫無全身)、Bonus SW Bunker (炸沙擊球)。
+     - `unresolved`：0 支。
+   - **03_Wood5.mp4 專項影格診斷**：實測解碼 Frame 37 (1233ms) 桿身在腰部下桿中段，Frame 38 (1267ms) 桿頭接近球位，Frame 39 (1300ms) 球已飛出。確認擊球發生於 30fps 快門間隙，時間碼校正為 Frame 38 (1267ms)，標記為 `impact_estimated`，徹底排除假 confirmed。
+   - **Contact Sheet 文字標籤反映真實狀態**：第 8 格清晰標註 `8. [CONFIRMED_STRIKE]` 或 `8. [IMPACT_ESTIMATED]`。
+3. **P0-3 隔離本機素材與 Git 追蹤清理**：`PASS`
+   - **本機永久安全備份**：16 張 Contact Sheet JPG 已安全備份至 `~/.golfswinglab/reference_contact_sheets/`，資料庫備份保存於 `~/.golfswinglab/backups/reference_swings_backup.json`，絕不遺失。
+   - **Git 追蹤清理與忽略**：以 `git rm --cached` 移除 `docs/reports/reference_contact_sheets/*.jpg` 與 `docs/reports/reference_swings_backup.json`，並更新 `.gitignore`。
+   - **PR 分支歷史評估**：嚴格禁止 Force Push 與 Hard Reset，在最新 Commit 中乾淨移除追蹤；評估既有歷史 Commit 殘留素材僅佔用數 MB，不影響程式碼運作，建議合併時在 GitHub 採用 **Squash and merge**，將整個 PR 壓縮為單一乾淨 Commit 進入 main。
+4. **WebKit 原生 GUI 雙影片比較端到端驗收**：`PASS`
+   - 執行 `scripts/verify_webkit_comparison_and_coach.py` 12 步驟全數通過（Top/Impact 誤差 0ms、兩側解碼非黑畫面 Mean 111.5 / 135.0、時鐘同步漂移僅 2.5ms、Token 零洩漏）。
+5. **全量品質保證驗收**：`PASS`
+   - 後端測試套件：**95 / 95 PASSED (100%)** in 200.41s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由 0 錯誤**。
+- **最後更新時間**：2026-10-29T16:48:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+- **合併判定**：**READY FOR PERSONAL BETA MERGE**（請使用者於 GitHub PR #2 點選 Squash and merge）。
+
+## 前期重大里程碑狀態（Round 14: 16 支示範影片真實事件影格驗證、Contact Sheet 生成、安全備份與可信度修復交付）
+1. **P0-A 16 支影片真實事件影格驗證與視覺接觸表生成**：`PASS`
+   - **實體逐幀解碼運動學驗證**：撰寫並執行 `scripts/verify_reference_events_and_generate_sheets.py`，真正解碼 16 支 MP4，檢驗手腕最高 $y$ 極小值（Top 頂點與轉換啟動）與擊球區桿頭過球（Impact 觸球出球）。
+   - **產出 16 張 3x3 高解析 Contact Sheet**：全部存於 `docs/reports/reference_contact_sheets/*.jpg`，並產出結構化檢驗總報告 `docs/reports/reference_events_verification.json` 與 Markdown 審查報告 `docs/reports/reference_events_verification.md`。
+   - **重大錯誤修正（5W 重新校準）**：查明先前 03_Wood5 裁切區間誤切入 18.6s~24.0s 口播廣告，重新校準為第 1 記真實揮桿（`0ms ~ 3600ms`，Top 867ms, Impact 1233ms, Downswing 366ms），恢復高品質全揮桿。
+   - **事件來源誠信標記**：嚴格標註 `event_sources` 為 `developer_visual_annotated` 或 `estimated`，絕不將自我校驗偽稱為第三方雙盲 Ground Truth。
+2. **P0-B 六維度狀態旗標修正與節奏保護**：`PASS`
+   - **擊球狀態統計**：Confirmed Strike 15 支 (93.8%)，Impact Estimated 1 支 (6.2%，17_Putter 特寫無出球視角)。
+   - **事件可靠度**：14 支可信全揮桿與劈起/高拋/沙坑 (87.5%)；17_Putter 誠實標記 `events_reliable = False`。
+   - **節奏保護**：慢動作示範（3W, 6I, SW）標記 `supports_realtime_sync = False`、`supports_phase_sync = True`，防止自然 1:1 時鐘被拉偏。
+   - **單球裁切完整性**：16/16 (100%) 通過，排除標題字卡、跨球與口播。
+3. **P0-C 資料庫安全備份與冪等更新**：`PASS`
+   - 執行前自動將 18 筆既有資料安全備份至 `docs/reports/reference_swings_backup.json`。
+   - 以 `(source_sha256, club_type, source_start_ms, source_end_ms)` 與既有 ID 嚴格雙向錨定，原地 UPDATE，保證 UUID 100% 恆定，無孤兒數據。
+   - 版本持久化為 `clip_version = '2.2.0'`、`analysis_version = 'pose-v1-visual-audit'`。
+4. **P1-A WebKit 雙影片比較端到端驗收更新**：`PASS`
+   - 執行 `scripts/verify_webkit_comparison_and_coach.py` 12 步驟全數通過（Top/Impact 誤差 0ms、兩側解碼非黑畫面 Mean 111.5 / 135.0、時鐘同步漂移 2.8ms、Token 零洩漏）。
+   - 產出 11 張 GPU 快照與脫敏結構化報告 `docs/reports/swing_comparison_r2_report.json`。
+5. **全量品質保證測試**：`PASS`
+   - 後端測試：**90 / 90 PASSED (100%)** in 211.88s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由 0 錯誤**。
+- **最後更新時間**：2026-10-29T16:05:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+
+## 前期重大里程碑狀態（Round 13: 16 支示範影片獨立精度修復與真實 FPS 步進全面通過）
+1. **P0 根除固定假時間碼與真實運動學狀態機定位**：`PASS`
+   - **徹底根除寫死偏移**：移除了先前所有寫死之固定偏移量（Top+300ms、慢動作Top+1200ms、時長百分比）。
+   - **真實狀態機與運動學定位**：採用 `CoarseToFineDetector` 狀態機與 2D 骨架手腕物理軌跡（Top 頂點手腕最高 $y$ 局部極小值、Impact 觸球區）真實定位。
+   - **6 維度狀態持久化**：封裝並持久化 `media_processed`, `pose_analyzed`, `is_valid_clip`, `events_reliable`, `supports_realtime_sync`, `supports_phase_sync` 於 `calibration_params` 與 API 頂層欄位。
+2. **P0 重新確立乾淨單球邊界**：`PASS`
+   - 逐支重新檢查全部 16 支 MP4，確立乾淨單球邊界（Address 前站定緩衝 -> 上桿 -> Top -> 擊球 -> 收桿平衡 Finish），徹底排除跨球、走動、口播或標題卡。
+   - 7I 示範片截取 DJ Watts 第 2 球乾淨單球（`13600ms ~ 17600ms`，Top 14967ms 映射為 1367ms，Impact 15300ms 映射為 1700ms，Downswing 333ms，手腕最高點 $y=0.315$，擊球點 $y=0.504$）。
+3. **P0 冪等更新機制與資料清理**：`PASS`
+   - 以 `(source_sha256, club_type, source_start_ms, source_end_ms)` 與邏輯對照為依據原地更新既有記錄，徹底清理 3 筆歷史舊假數據，資料庫無垃圾 UUID 膨脹。
+4. **P1 逐格控制依據真實 FPS**：`PASS`
+   - `SwingComparisonPlayer.tsx` 移除固定 33.333ms，改依兩側各自真實 FPS 計算單影格步進（$\Delta t = 1/\text{FPS}$），按鈕動態呈現對應毫秒數。
+5. **P1 球桿覆蓋率與缺桿誠信標記**：`PASS`
+   - 完整支援 19 類球桿，缺少 6 桿（7W, 3H, 4H, 5H, 3I, GW/AW）誠實標示 `missing_reference`，絕不拿通用 Hybrid 混充 3H/4H/5H。
+   - 示範影片資訊列加入六維度技術狀態徽章。
+6. **全鏈路驗收與 WebKit 實測**：`PASS`
+   - WebKit 原生 GUI 12 步驟端到端實測 100% 通過（Top/Impact 誤差 0ms、兩側解碼非黑畫面、同步時鐘漂移 2.4ms、無任何 Token 洩漏）。
+   - 後端全量測試：**90 / 90 PASSED (100%)** in 202.29s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由 0 錯誤**。
+- **最後更新時間**：2026-10-29T13:25:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+
+## 前期重大里程碑狀態（Round 12: PR #2 最後視覺驗收與 Beta 收斂 — 全流程實測通過）
+1. **P0-1 真正證明雙影片同步播放成功**：`PASS`
+   - **黑畫面真實根因排查與徹底修復**：查明先前本地 NVMe 存儲缺失 `video_2min.mov` 與 `proxy.mp4` 導致串流 404 Not Found 之根因。實體還原真實 139 秒 iPhone 錄影 (`4993a3b6...`)，生成 Safari 相容之 30fps H.264 proxy.mp4 (57MB) 與縮圖，驗證 HTTP 206 Partial Content Range 串流成功。
+   - **單一 DOM 樹架構重構**：重構 `<SwingComparisonPlayer>` 為單一 DOM 容器，佈局切換（左右並排 / 上下堆疊 / 疊影對照）時使用 CSS 控制顯示，**不銷毀重建 `<video>` 節點**，徹底消除了切換佈局導致解碼器 buffer 重置與黑畫面的缺陷。
+   - **Canvas 畫素非黑畫面驗證**：在 WebKit 中實時以 32x32 Canvas 取樣計算兩側影片畫面之像素平均亮度 (Mean) 與標準差 (Std)。實測個人影片 Mean=111.5, Std=64.5，示範影片 Mean=115.8, Std=64.4（遠大於黑畫面門檻 Mean>5.0, Std>2.0），客觀證明兩側皆非黑畫面且畫面具有高度動態色差細節。
+   - **播放中截圖與解碼推進**：點擊「雙影片同步播放」，等待 1.2 秒後在**播放進行中**擷取快照 (`04_comparison_playing_side_by_side.png`)。實測個人揮桿時間自 120.034s 前進至 121.044s (Δ=1.010s)，示範影片時間自 0.957s 前進至 1.959s (Δ=1.002s)，時鐘同步漂移僅 **8.1ms** (遠低於 150ms 門檻)。
+   - **上下堆疊切換與播放中截圖**：切換為上下堆疊佈局，在播放進行中擷取快照 (`05_comparison_playing_stacked.png`)，DOM flex-col 正常且影片持續流暢解碼。
+   - **TOP / IMPACT 錨點跳轉與重設 Bug 修復**：查明先前 `useEffect` 因依賴 `computeExpectedRefMs` 在錨點切換時過度觸發並將示範片重設回 0 秒之根因，修正為 `prevSwingKeyRef` 守衛並於 `jumpSyncAnchor` 直接傳入 anchor 計算目標時間。實測點擊 TOP 錨點跳轉（User=120600ms, Ref=1533ms，誤差 0ms），點擊 IMPACT 錨點跳轉（User=120967ms, Ref=1900ms，誤差 0ms），快照 `06_comparison_jump_top.png` 與 `07_comparison_jump_impact.png` 精準呈現頂點與擊球瞬間。
+2. **P0-2 移除假 PASS 與動態脫敏報告**：`PASS`
+   - **移除寬鬆 fallback**：徹底移除 `else "PASS" if has_comp_header else "FAIL"`，所有斷言（解碼進展、非全黑畫面、尺寸、漂移）嚴格檢驗，未達標一律 FAIL。
+   - **動態驗收報告**：報告 `docs/reports/swing_comparison_r2_report.json` 包含 Git SHA (`9ac6b3ed...`)、Dirty 狀態、時間戳、影片 SHA-256、解碼狀態、兩側尺寸與同步漂移。
+   - **全面脫敏安全**：所有 URL 之 `token` 均替換為 `[REDACTED]`，杜絕任何 Token 洩漏。
+3. **P0-3 示範影片真偽及 UI 語意一致**：`PASS`
+   - 取消將 7I `test_fixture` 顯示為「標準參考」，改為「技術測試基準 (7I)」或中立的「揮桿雙影片對照」。
+   - 統計區塊明確區分三態：可用示範影片 2 / 17、全身姿勢比對 1 / 17、已驗證職業標準示範 0 / 17（尚無）。
+4. **P1 AI 教練功能誠實標示**：`PASS`
+   - 規則式分析明確標記幾何提示與「ℹ️ 規則式幾何運動學引擎生成 (未調用多模態 AI 影像模型)」。
+   - 杜絕不可觀測之物理因果臆測。
+5. **P1 示範影片素材管理與串流匯入**：`PASS`
+   - 更新 `docs/REFERENCE_CLUB_LIBRARY.md`，清楚列出 4 種分類現狀。
+   - 示範影片上傳與本地匯入全面改為 `storage.put_file` 串流拷貝，徹底解決 500MB 大檔整支讀入記憶體 OOM 問題。
+6. **全鏈路驗收證據**：`PASS`
+   - 後端測試套件：**90 / 90 PASSED (100%)** in 214s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由頁面 0 錯誤**。
+   - WebKit 原生 GUI 驗收：`scripts/verify_webkit_comparison_and_coach.py` 9 大步驟全數 PASS，產出 8 張真實 GPU 渲染截圖與結構化脫敏報告。
+- **最後更新時間**：2026-10-29T02:48:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+
+## 前期重大里程碑狀態（Round 11: PR #2 Independent Audit Remediation — 解除 NO-GO 判定）
+
+## 前期重大里程碑狀態（Round 10: Swing Comparison & Evidence-Based Coaching R2）
+1. **P0 單球播放器修復與體驗升級**：`PASS`
+   - **自然結束重播機制**：影片自然結束或進度條拖曳至末端後，點擊 Play 自動重設回 `start_ms / 1000` 並從頭流暢起播，解決舊版畫面卡死問題。
+   - **顯著重播與循環控制**：新增顯著「↺ 重新播放 (Replay)」與「⟲ 循環播放 (Loop)」Toggle 按鈕（預設關閉，開啟時呈翡翠綠發光標記）。
+   - **真實 FPS 逐幀步進與邊界防呆**：逐幀步進嚴格依據影片真實 FPS（30fps 每次 `±33.3ms`，5f 每次 `±166.7ms`），並嚴格鎖定在 `[start_ms, end_ms]` 區間內，絕不溢出至前後其他球。
+   - **時間軸與事件動態跟隨**：新增青光進度條與階段游標；9 大事件按鈕隨時間碼動態高亮青光指示燈；未確認擊球標註「推估擊球瞬間」與信心度。
+2. **P1 專業揮桿比較 (Professional Swing Comparison)**：`PASS`
+   - **17 種完整球桿分類支援**：資料模型與前端全數支援 `Driver`, `3W`, `5W`, `3H`, `4H`, `5H`, `4I`, `5I`, `6I`, `7I`, `8I`, `9I`, `PW`, `GW/AW`, `SW`, `LW`, `Putter`。
+   - **示範影片資料庫模型與 API**：新增 `ReferenceSwing` 模型、PostgreSQL 資料表與完整 REST API (`/api/reference-swings`, 支援 HTTP 206 Partial Content Range 串流與本機匯入)。
+   - **標準素材庫與誠信原則**：從標準原片中精準裁切 7I DTL 高清示範影片 (`ref_7i_dtl_standard.mp4`, 1080x1920 60fps) 作為基準；Driver 擊球特寫影片標記 `close_up` 與 `verified=false` 並觸發視角差異警示；其餘 15 種球桿誠實標記 `missing_reference`，絕不將鐵桿冒充其他球桿，並提供手動匯入引導。
+   - **雙影片比較播放器組件 (`<SwingComparisonPlayer>`)**：支援左右並列 (side-by-side)、上下堆疊 (stacked)、半透明疊影 (ghost overlay)。
+   - **揮桿同步引擎 (`SwingSynchronizationEngine`)**：支援 Mode A（自然節奏，保留原始速度，依 Impact 或 Top 錨點對齊）與 Mode B（動作階段分段線性對齊）；提供等比例 Auto-Framing 縮放與置中（保護身體不被拉伸）以及手動微調。
+3. **P2 動作差異分析 AI Coach (Evidence-Based Action Differences)**：`PASS`
+   - **移除空泛分數卡片**：將原先大篇幅生硬分數改為精煉的「動作差異分析」卡片（最多 1~2 項具有真實影像證據之具體動作差異）。
+   - **精準影格對齊**：每項標明關鍵階段標籤 (`[TOP]`, `[IMPACT]`)、時間碼（如 `120600ms`）、偏差幅度（如 `前傾角變化 9.4°` 或 `上下桿比例 2.00:1`）與客觀影像測量證據。
+   - **一鍵跳轉對齊**：提供「🎯 影格 ({time_ms}ms)」按鈕，點擊後單球播放器立即跳轉至該關鍵影格。
+   - **深入分析此差異 (Vision AI 解讀)**：提供專屬非同步分析按鈕與 API (`POST /api/swings/{id}/deep-insight`)，展開運動學深度解析報告（2D 骨架關節運動趨勢、動力鏈影響、分步 Drill 課表、最高誠信原則免責聲明）。
+4. **全鏈路驗證證據**：`PASS`
+   - 後端專項測試：`tests/test_swing_comparison_and_coach.py` 4/4 PASSED (100%)。
+   - 回歸測試：26/26 PASSED (100%)。
+   - 前端打包：`npm run build` 9/9 靜態路由 0 錯誤。
+   - WebKit 原生 GUI 驗收：`scripts/verify_webkit_comparison_and_coach.py` 6 大步驟全數 PASS，生成 6 張真實 GPU 渲染截圖與結構化 JSON 報告。
+   - 文件產出：`docs/REFERENCE_CLUB_LIBRARY.md` 與 `docs/reports/swing_comparison_r2_report.json`。
+- **最後更新時間**：2026-10-28T20:41:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+
+## 前期重大里程碑狀態（Round 9: 大影片分段上傳與登入憑證失效處理修復）
 1. **P0 大檔案（1.38GB）分段上傳 85% 失敗根因與修復**：`PASS`
    - **根本原因**：Docker Desktop 虛擬機磁碟空間被多專案映像檔佔滿（剩餘 257MB），MinIO 寫入時觸發 `XMinioStorageFull`。舊版 `HybridStorageService` 在捕獲 S3 錯誤後錯誤地將後續分段寫入 LocalStorage，造成分段在 S3 與本地兩端分裂；當前端呼叫 `/complete` 時，在本地端找不到前面的分段而拋出 `FileNotFoundError`。
    - **分段上傳單一物理後端綁定**：徹底移除 `put_part_bytes` 與 `complete_multipart_upload` 的非法降級邏輯，新增 `_get_backend_for_upload(s3_upload_id)`，以 `upload_id` 嚴格綁定單一存儲後端（`local_up_` 開頭走 LocalStorage，其餘走 S3/MinIO），杜絕分段分裂。

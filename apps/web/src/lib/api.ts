@@ -105,6 +105,7 @@ export interface SwingSegmentItem {
     [key: string]: any;
   };
   ball_trajectory?: Array<{ time_ms: number; x: number; y: number }>;
+  action_differences?: ActionDifferenceItem[];
   feedback_history?: Array<{
     id: string;
     category: string;
@@ -115,6 +116,40 @@ export interface SwingSegmentItem {
     notes: string;
     created_at: string;
   }>;
+}
+
+export interface ActionDifferenceItem {
+  id: string;
+  title: string;
+  phase: string;
+  time_ms: number;
+  magnitude: string;
+  evidence_text: string;
+  suggested_cue: string;
+  retest_target: string;
+  confidence: number;
+}
+
+export interface DeepInsightReportItem {
+  diff_id: string;
+  title: string;
+  phase: string;
+  time_ms: number;
+  visual_evidence_analysis: string;
+  kinetic_chain_effect: string;
+  step_by_step_drill: {
+    preparation: string;
+    execution: string;
+    checkpoint: string;
+  };
+  retest_metric_target: string;
+  truthfulness_notice: string;
+  provider: string;
+  llm_used: boolean;
+  analysis_mode?: "multimodal_vision_ai" | "rule_based_advice";
+  model_name?: string;
+  images_used?: boolean;
+  keyframe_sources?: string[];
 }
 
 export function getAuthToken(): string | null {

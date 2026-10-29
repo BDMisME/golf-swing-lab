@@ -16,6 +16,13 @@
 
 | 輪次 | 測試範圍 | 執行指令 | 通過 / 失敗 | 性質 (Real / Mock) | 狀態 |
 |---|---|---|---|---|---|
+| **Round 16 PR #2 最終合併前素材清理與 Git 差異純淨化 (Pre-Merge Assets Untracking & Release Diff Sanitization)** | 完整備份 `assets/reference_videos/` 內 12 個二進制檔案至 `~/.golfswinglab/assets_reference_videos_backup/`，並備份 15 張包含使用者原片/第三方影格之快照至 `~/.golfswinglab/webkit_r2_screenshots/`；執行 `git rm --cached` 移除這 12 個媒體檔案與 `docs/screenshots/webkit_r2/` 全部 15 張截圖，從 PR 發行差異中徹底排除未授權再散布影像；更新 `.gitignore` 杜絕再次提交；驗證 `git diff main assets/ docs/screenshots/webkit_r2/` 輸出為空（差異完全為 0）；更新 `scripts/seed_reference_library.py` 加入安全跳過日誌，無 MP4 素材時優雅跳過（Exit Code 0）；核驗本機 Storage `~/.golfswinglab/storage/references/` 下 16 支正式示範影片 100% 存在且大小健全；實測 7I、Driver、3W 之 HTTP 206 Partial Content Range 串流皆正常；資料庫、API 與報告維持 0ms 漂移一致性（`tests/test_reference_events_consistency.py` 5/5 PASSED）；macOS 原生 WebKit WKWebView 12 大步驟端到端實測 100% 通過（時鐘同步漂移僅 2.9ms，Top/Impact 誤差 0ms，雙側非黑畫面 Mean 111.5 / 135.0，Token 零洩漏）；全套後端測試 95/95 100% 通過 (220.91s)，Next.js 9/9 靜態路由 build 0 錯誤。 | `git rm --cached assets/reference_videos/* && git rm -r --cached docs/screenshots/webkit_r2/` + `PYTHONPATH=. uv run python scripts/seed_reference_library.py` + `uv run pytest tests/test_reference_events_consistency.py -v` + `uv run python scripts/verify_webkit_comparison_and_coach.py` + `uv run pytest tests/` + `npm --prefix apps/web run build` | 95 / 95 全量後端測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 12 步驟 100% PASS (Top/Impact 0ms 誤差, 雙影片解碼無黑畫面, 漂移 2.9ms, Token 零洩漏), 一致性回歸測試 5/5 PASS, 發行差異純淨化 100% | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機 16 支真實示範庫) | `PASS` (最終合併前素材清理與 Git 差異純淨化全面通過，個人 Beta 釋出就緒) |
+| **Round 15 PR #2 資料一致性、真值擊球確認、本機素材隔離與個人 Beta 釋出治理 (Data Consistency, Truthful Strike Verification & Release Governance)** | 建立單一權威事實來源字典 `STRIKE_EVIDENCE_MAP`，將審查確認之 Top 與 Impact 錨點直接綁定為 active events，並在 `scripts/verify_reference_events_and_generate_sheets.py` 中 100% 寫回 PostgreSQL，徹底消除報告與資料庫時間碼漂移；完全保留原始 Candidate Events 於 `calibration_params["candidate_events"]`，`calibration_params["active_events"]` 與 `event_timestamps` 100% 同步且誤差為 **0ms**；示範影片資料庫記錄恆定為 18 筆（16 支新 bundle + 2 支既有 fixture），維持原有 UUID，無重複記錄或垃圾資料膨脹；移除按球桿名批量推論邏輯，嚴格依真實影像證據判定擊球確認度（Confirmed Strike 11 支 68.8%、Impact Estimated 5 支 31.2%、Unresolved 0 支）；03_Wood5.mp4 專項影格診斷（解碼 Frame 37 1233ms 桿身仍在腰部、Frame 38 1267ms 接近球位、Frame 39 1300ms 球飛出，確認擊球發生於 30fps 快門間隙，時間碼校正為 Frame 38 1267ms 並標記為 `impact_estimated`）；Contact Sheet 標籤文字反映真實狀態；16 張 Contact Sheet JPG 安全備份於 `~/.golfswinglab/reference_contact_sheets/`，資料庫備份保存於 `~/.golfswinglab/backups/reference_swings_backup.json`；以 `git rm --cached` 移除追蹤並更新 `.gitignore`，嚴禁 Force Push；撰寫專項自動化一致性回歸測試 `tests/test_reference_events_consistency.py` 5/5 PASSED (100%)；macOS 原生 WebKit WKWebView 12 大步驟端到端實測 100% 通過（Top/Impact 誤差 0ms、雙側非黑畫面 Mean 111.5 / 135.0、時鐘漂移 2.5ms、Token 零洩漏）；全套後端測試 95/95 100% 通過 (200.41s)，Next.js 9/9 靜態路由 build 0 錯誤。 | `PYTHONPATH=. uv run python scripts/verify_reference_events_and_generate_sheets.py` + `uv run pytest tests/test_reference_events_consistency.py -v` + `uv run python scripts/verify_webkit_comparison_and_coach.py` + `uv run pytest tests/` + `npm --prefix apps/web run build` | 95 / 95 全量後端測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 12 步驟 100% PASS (Top/Impact 0ms 誤差, 雙影片解碼無黑畫面, 漂移 2.5ms, Token 零洩漏), 一致性回歸測試 5/5 PASS | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機 16 支真實示範庫) | `PASS` (資料一致性 0ms 誤差、擊球真值客觀分類、本機素材隔離清理與個人 Beta 釋出治理全面通過) |
+| **Round 14 16 支真實示範影片影格事件驗證、Contact Sheet 生成、安全備份與可信度修復交付 (Reference Events Kinematic Verification & Contact Sheet Proof)** | 真正讀取 16 支 MP4 視訊解碼影格，逐幀分析手腕物理極小值 (Top 頂點與轉換啟動) 與擊球區桿頭過球 (Impact 觸球出球)；產出 16 張 3x3 高解析 Contact Sheet (`docs/reports/reference_contact_sheets/*.jpg`)；生成結構化總檢驗報告 `reference_events_verification.json` 與 Markdown 審查報告 `reference_events_verification.md`；查明並修正 5W 裁切誤入口播廣告大字之缺陷，重新校準為第 1 記全揮桿 (Top 867ms, Impact 1233ms, Downswing 366ms)；事件來源嚴格標記 `developer_visual_annotated` 或 `estimated`；六維度旗標修復 (Confirmed Strike 15 支 93.8%, 慢動作 3W/6I/SW 標記 Realtime Sync=False, Putter 誠實標記 Events Reliable=False)；資料庫執行前自動備份至 `reference_swings_backup.json`，原地雙向錨定 UPDATE 保證 UUID 恆定；macOS 原生 WebKit 12 大步驟端到端實測 100% 通過 (Top/Impact 誤差 0ms, 雙側非黑畫面 Mean 111.5 / 135.0, 時鐘漂移 2.8ms, Token 零洩漏)；全套後端測試 90/90 100% 通過 (211.88s)，Next.js 9/9 靜態路由 build 0 錯誤。 | `PYTHONPATH=. uv run python scripts/verify_reference_events_and_generate_sheets.py` + `PYTHONPATH=. uv run python scripts/import_16_reference_bundle.py` + `uv run python scripts/verify_webkit_comparison_and_coach.py` + `uv run pytest tests/` + `npm --prefix apps/web run build` | 90 / 90 全量後端測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 12 步驟 100% PASS (Top/Impact 0ms 誤差, 雙影片解碼無黑畫面, 漂移 2.8ms, Contact Sheet 16/16 齊全) | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機 16 支真實示範庫) | `PASS` (16 支示範影片影格級真實事件驗證、Contact Sheet 生成與資料庫安全備份更新全面通過) |
+| **Round 13 16 支示範影片獨立精度修復與真實 FPS 驗收 (Reference Swings Independent Precision Remediation & Real FPS Verification)** | 徹底根除所有寫死固定假時間碼 (Top+300ms, 慢動作Top+1200ms, 時長百分比)；採用 CoarseToFineDetector 狀態機與 2D 骨架手腕物理軌跡 (Top 手腕最高 y 局部極小值、Impact 觸球區) 精準定位；重新逐支確立乾淨單球區間 (Address 站定 -> 上桿 -> Top -> 擊球 -> 收桿平衡)，徹底排除跨球或片頭片尾；持久化六維度技術狀態旗標 (`media_processed`, `pose_analyzed`, `is_valid_clip`, `events_reliable`, `supports_realtime_sync`, `supports_phase_sync`)；前端播放器移除固定 33.333ms，依兩側各自真實 FPS 計算單影格步進 ($\Delta t = 1/\text{FPS}$)；完整支援 19 類球桿，缺少 6 桿 (7W, 3H, 4H, 5H, 3I, GW/AW) 誠實標示 `missing_reference`，絕不拿通用 Hybrid 混充 3H/4H/5H；macOS 原生 WebKit WKWebView 12 大步驟端到端實測 100% PASS (Top/Impact 誤差 0ms、兩側解碼非黑畫面、同步時鐘漂移 2.4ms、無任何 Token 洩漏)；全套後端測試 90/90 100% 通過 (202.29s)，Next.js 9/9 路由構建 0 錯誤。 | `PYTHONPATH=. uv run python scripts/import_16_reference_bundle.py` + `uv run python scripts/verify_webkit_comparison_and_coach.py` + `uv run pytest` + `npm --prefix apps/web run build` | 90 / 90 全量後端測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 12 步驟 100% PASS (Top/Impact 0ms 誤差, 雙影片解碼無黑畫面, 漂移 2.4ms) | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機 16 支真實示範庫) | `PASS` (16 支示範影片精度徹底修復，假時間碼徹底根除，單影格真實 FPS 步進通過) |
+| **Round 12 16 支真實高爾夫示範影片匯入與 19 桿雙影片同步對照驗收 (16 Reference Bundle Import & Multi-Club Dual-Video Sync Verification)** | 本機提供之 16 支真實高爾夫示範影片（13 支主示範 + 3 支 Bonus）解壓至獨立暫存區 `~/.golfswinglab/reference_import_staging/`，SHA-256 100% 比對吻合；FFmpeg 依原始長寬比與解析度完成單次揮桿精準切片、縮圖抽取與 MediaPipe 2D 骨架抽取入庫（共 18 筆示範揮桿記錄，檔案存於本機 NVMe 隔離區 `~/.golfswinglab/storage/references/`，零大檔案提交 Git）；球桿模型擴充支援 19 類（Driver ~ Putter）+ 通用 Hybrid，4 桿無合格來源（3I, 7W, Hybrid, GW）透明標記 `missing_reference` 並提供友好導引與上傳 Modal；慢動作素材（3W, 6I, SW）標註 `⏱️ 慢動作示範` 且嚴禁計入自然節奏，非全揮桿（PW, 8I, LW, Putter, SW Bunker）標記 `needs_calibration` 或 `special_mode`；雙影片對照組件升級（移除 video src 中的 `#t` media fragment 消除 seek 污染、支援獨立單側控制、等比例縮放與 X/Y 位移微調）；macOS 原生 WebKit WKWebView 12 大步驟端到端實測 100% 通過（Top/Impact 跳轉誤差 0ms、雙視訊解碼畫面非黑畫面、Driver/3W/7W 切換全部通過，產出 11 張 GPU 原生截圖與全 PASS 脫敏驗收報告 `swing_comparison_r2_report.json`）；後端專項測試 8/8 PASSED，Next.js 9/9 靜態路由 build 0 錯誤。 | `uv run pytest tests/test_token_leak_prevention.py tests/test_swing_comparison_and_coach.py` + `npm --prefix apps/web run build` + `uv run python scripts/verify_webkit_comparison_and_coach.py` | 8 / 8 專項測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 12 步驟 100% PASS (Top/Impact 0ms 誤差, 雙影片解碼無黑畫面) | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機 16 支真實示範庫) | `PASS` (16 支示範素材完整匯入與雙影片對照全部驗收通過) |
+| **Round 11 PR #2 獨立工程審查補救 (Independent Audit Remediation — 解除 NO-GO 判定)** | P0-A 立即處理驗收 Token 洩漏（金鑰輪替、KNOWN_LEAKED_SECRETS 黑名單阻擋、撤銷舊 Token 401 拒絕、全域 URL/報告脫敏 `token=[REDACTED]`、新建專項測試 4/4 通過）；P0-B 修正不實的 7I / Driver 職業標準素材（移除虛假來源，7I 降為 `test_fixture`、Driver 為 `close_up`、其餘 15 桿標記 `missing_reference`）；P0-C 真正修復雙影片同步播放（`PlaybackDriftController` 時鐘平滑追趕，移除硬 seek 黑畫面，雙視訊同時播放與 currentTime 同步遞增實測通過）；P1-A 真實骨架自適應 Auto-Framing（MediaPipe 2D 肩髖長度換算比例，特寫鏡頭誠信降級）；P1-B 參考庫治理與安全匯入（Alembic 0002 遷移、`/import-local` 限制白名單與大小、無 events 標記 `needs_calibration` 嚴禁捏造時間碼、Multipart 上傳）；P1-C 動作差異分析與誠信修正（幾何提示標記 `rule_based_advice`、移除因果臆測）；P1-D 17 種球桿資料庫文件與規範；後端專項測試 8/8 通過、全套測試 61/61 PASSED (100%)、Next.js 9/9 靜態路由 build 0 錯誤、macOS 原生 WebKit WKWebView 6 大步驟實測 100% 通過（產出 6 張真實原生截圖與安全脫敏報告 `swing_comparison_r2_report.json`）。 | `uv run pytest tests/test_token_leak_prevention.py tests/test_swing_comparison_and_coach.py` + `uv run pytest` + `npm --prefix apps/web run build` + `uv run python scripts/verify_webkit_comparison_and_coach.py` | 8 / 8 專項測試通過 (100%), 61 / 61 全量測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 6 步驟 100% PASS (雙影片播放推進正常) | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機安全密鑰與示範庫) | `PASS` (PR #2 審查缺陷全數修復，解除 NO-GO 判定) |
+| **Round 10 雙影片專業比較播放器、17 球桿示範庫與動作差異 AI 教練 (Evidence-Based Coaching R2) 驗收** | P0 單球播放器升級（重播與循環播放 Toggle、±1f/±5f 真實影格步進約束、9 階段發光跟隨與推估擊球標註）；P1 專業揮桿比較（17 種球桿分類標準、ReferenceSwing 資料模型與 REST API、HTTP 206 串流、7I 標準 DTL 與 Driver 特寫示範種子、雙影片比較播放器組件、SwingSynchronizationEngine Mode A 自然節奏與 Mode B 分段線性同步、等比例 Auto-Framing、missing_reference 誠實標籤）；P2 動作差異分析 AI Coach（精煉 1~2 項客觀幾何差異卡片、影格一鍵跳轉、深入分析此差異 Vision AI 運動學解讀與練習 Drill 課表、最高誠信原則免責聲明）；專項測試 4/4 通過、回歸測試 26/26 通過、Next.js 9/9 靜態路由編譯 0 錯誤、macOS 原生 WebKit WKWebView 6 大步驟實測 100% 通過（產出 6 張原生快照與 swing_comparison_r2_report.json）。 | `uv run pytest tests/test_swing_comparison_and_coach.py` + `uv run pytest tests/test_auto_accuracy_correction.py tests/test_final_evidence_lock.py tests/test_swing_10_regression.py tests/test_r3_verifiable_scoring.py` + `npm --prefix apps/web run build` + `uv run python scripts/verify_webkit_comparison_and_coach.py` | 4 / 4 專項測試通過 (100%), 26 / 26 回歸測試通過 (100%), 前端 9 路由 0 錯誤, WebKit GUI 6 步驟 100% PASS | Real (macOS 原生 WebKit WKWebView, Port 28000 API, Port 23000 Web, PostgreSQL 16, 本機示範庫) | `PASS` (可視覺同步比較與證據驅動教練全面就緒) |
 | **Round 9 大影片分段上傳與登入憑證失效處理修復** | 1.38GB 大影片分段上傳 85% 失敗根因修復（Docker VM 空間滿引發 MinIO 錯誤，移除 HybridStorage 非法分段跨後端降級，依 upload_id 嚴格綁定單一物理後端，改用本機 NVMe `~/.golfswinglab/storage` 160GB+ 大容量高速存儲模式；保留雙向向後相容 fallback 支援歷史 340 場次播放；真實 24MB iPhone MOV 影片 5 分段上傳合併、ffprobe 解析、背景 Worker 分析 100% 耗時 9.9s 與 HTTP 206 串流實測全數通過）；首頁「登入憑證簽章驗證失敗」修復（`apiFetch` 捕捉 401 自動清除無效 Token 並重定向至 `/login?expired=1`，首頁提供重新登入與重新整理引導）；核心測試 27/27 通過，前端 Next.js 9 路由編譯 0 錯誤。 | `uv run pytest tests/` + `uv run python scripts/verify_multipart_upload.py` + `npm --prefix apps/web run build` | 27 / 27 核心測試通過 (100%), 分段上傳合併串流 100% PASS, 前端 9 路由 0 錯誤 | Real (真實 iPhone 11s.mov 24MB, 本機 NVMe, Port 28000 API, Port 23000 Web) | `PASS` (生產阻斷問題徹底解除) |
 | **Round 8 PR #1 Final UI Event Verification & Local Secret Fail-Closed Gate 驗收** | P0 真實 UI 事件跳轉驗收（動態讀取 139 秒最新分析 Session `e8e182dd-...` 與真實球次 ID；前端事件跳轉加入定格暫停 `video.pause()`，原生 WebKit 以真實 DOM `btn.click()` 點擊觸發；Swing #8、#9、#10 點擊 Top 與 Impact 實測播放解碼誤差均為 0.0ms <= 100ms 門檻；Clean Motion Canvas 姿態線、手腕光環、擊球點、頭部圈特徵驗證與跨階段防殘留保護全數通過，Console 0 錯誤，產出 7 張原生快照與 JSON 報告）；P1 本機金鑰持久化 Fail-Closed（`resolve_session_secret` 於目錄建立失敗或權限不足時明確拋出 `RuntimeError`，杜絕靜默降級，單元測試通過）；後端測試套件 82/82 100% 通過 (202.73s)，前端 Next.js 15 構建 0 錯誤。 | `uv run python scripts/verify_webkit_gui_playback.py` + `uv run pytest` + `npm --prefix apps/web run build` | 82 / 82 通過 (100%), WebKit GUI 真實跳轉 100% PASS (0.0ms 誤差), 前端 9 路由 0 錯誤 | Real (macOS 原生 WebKit WKWebView, 本機 Port 28000 API, Port 23000 Web, 真實 139 秒 iPhone 錄影) | `PASS` (個人 Beta 發布全部閘門就緒) |
 | **Round 7 PR #1 Final Security & Visual Smoke Gate 驗收** | 真正移除 Git 中的 JWT 簽章密鑰（`resolve_session_secret()` 動態解析與 `~/.golfswinglab/session_secret` 本機 0600 持久化，禁止在代碼中寫死金鑰；`KNOWN_LEAKED_SECRETS` 黑名單全面攔截外洩金鑰；舊 Token 實測回傳 `401 AUTH_INVALID_SIGNATURE` 徹底作廢，新 Token 正常簽發與驗證）；macOS 原生 WebKit.framework GUI 實測（真實開啟場次報告頁面與 Top 5 榜單，產出 `01_webkit_session_report.png`；導航至第 8、9、10 球逐球跳轉 Top 與 Impact，影片播放時間 `video.currentTime` 與標記時間誤差均為 0.0ms <= 100ms 門檻；全畫布像素掃描驗證 Clean Motion Canvas 骨架確實繪製，Console 0 錯誤，產出全部 7 張截圖與 JSON 報告）；後端測試套件 82/82 100% 通過（`time.monotonic()` 防時鐘跳轉升級），前端 Next.js 15 構建 0 錯誤。 | `uv run python scripts/verify_webkit_gui_playback.py` + `uv run pytest` + `npm --prefix apps/web run build` | 82 / 82 通過 (100%), WebKit GUI 實測 100% PASS, 前端 9 路由 0 錯誤 | Real (macOS 原生 WebKit WKWebView, 本機 Port 28000 API, Port 23000 Web, 測試影片) | `PASS` (個人 Beta 發布安全與視覺播放閘門通過) |
@@ -82,6 +89,15 @@
 - `docs/screenshots/04_swing_detail_pose_subscores.png`：單球詳情頁（逐幀 `±33ms` 控制、2D 骨架 Canvas 疊圖、9 階段事件跳轉、5 項子分數與「怎麼算的？」展開公式、人工時間軸校正表單）
 - `docs/screenshots/05_exports_center.png`：精選揮桿短片匯出中心（顯示單球原始比例與雙球 `9:16` 直式社群合輯 MP4 下載）
 - `docs/screenshots/06_settings_weights_coach.png`：個人球桿偏好、`score-v1` 5 項子分數權重滑桿與可插拔教練設定頁
+
+### Round 10 macOS 原生 WebKit 視訊快照存證 (`docs/screenshots/webkit_r2/`)
+- `docs/screenshots/webkit_r2/01_single_player_view.png`：P0 單球播放器升級（包含重播、循環播放 Toggle、±1f/±5f 真實影格步進按鈕、9 階段發光跟隨與推估擊球標籤）
+- `docs/screenshots/webkit_r2/02_action_differences_cards.png`：P2 動作差異分析 AI Coach（精煉 1~2 項客觀幾何差異卡片、影格一鍵跳轉）
+- `docs/screenshots/webkit_r2/03_deep_insight_expanded.png`：P2 深入分析此差異 Vision AI 運動學解讀與分步練習 Drill 課表展開
+- `docs/screenshots/webkit_r2/04_comparison_side_by_side.png`：P1 雙影片比較左右並列佈局（Side-by-side Layout，標準 7I DTL 示範影片 vs 使用者揮桿）
+- `docs/screenshots/webkit_r2/05_comparison_missing_3w.png`：P1 完整 17 球桿支援與缺失示範誠實標註（3W missing_reference 狀態指示，提供手動匯入示範影片互動入口）
+- `docs/screenshots/webkit_r2/06_comparison_stacked_layout.png`：P1 雙影片比較上下堆疊佈局（Stacked Layout，上下緊湊對齊）
+
 
 ---
 
@@ -381,6 +397,63 @@
 - **正式交付檔案**：
   - `docs/reports/final_evidence_lock.json`
   - `docs/FINAL_EVIDENCE_LOCK_REPORT.md`
+
+---
+
+## 13. Swing Comparison & Evidence-Based Coaching R2 視覺驗收與 Beta 收斂驗證證據報告 (2026-10-28)
+
+本輪次針對外部審查提出的 PR #2 視覺驗收缺陷（黑畫面根因排查、移除假 PASS fallback、示範影片真實性與分類標示、錨點跳轉示範片歸零修復、串流防 OOM 寫入與無 Token 洩漏之真實動態驗收報告）進行全鏈路實測與 Beta 收斂。
+
+### 13.1 核心修復與技術亮點
+1. **黑畫面真實根因排查與實體媒體還原**：
+   - 查明先前本地 NVMe 存儲（`~/.golfswinglab/storage`）缺失 `video_2min.mov` 與 `proxy.mp4` 導致串流 404 Not Found 之根因。
+   - 實體還原真實 139 秒 iPhone 錄影 (`4993a3b6...`)，生成 Safari 相容之 30fps H.264 proxy.mp4 (57MB) 與縮圖，驗證 HTTP 206 Partial Content Range 串流成功。
+2. **單一 DOM 樹架構重構 (`<SwingComparisonPlayer>`)**：
+   - 重構雙影片容器為單一 DOM 結構，切換佈局（左右並排 / 上下堆疊 / 疊影對照）時使用 CSS flex 類別控制顯示，**不銷毀重建 `<video>` 節點**，徹底消除了切換佈局導致 Safari 解碼器硬體上下文重置與黑畫面的缺陷。
+3. **Canvas 畫素真實解碼驗證（徹底消除假 PASS）**：
+   - 在 WebKit 中以 32x32 Canvas 取樣即時計算兩側影片畫面之像素平均亮度 (Mean) 與標準差 (Std)。
+   - 實測個人影片 Mean=111.5, Std=64.5，示範影片 Mean=115.8, Std=64.4（遠大於黑畫面門檻 Mean>5.0, Std>2.0），客觀證明兩側皆非黑畫面且畫面具備高度動態細節。
+   - 徹底移除 `else "PASS" if has_comp_header else "FAIL"` 寬鬆邏輯，所有斷言（解碼推進、非黑畫面、尺寸、漂移）嚴格檢驗。
+4. **播放進行中連續截圖與微秒級同步**：
+   - 點擊「雙影片同步播放」，等待 1.2 秒後在**播放進行中**擷取快照 (`04_comparison_playing_side_by_side.png` 與 `05_comparison_playing_stacked.png`)。
+   - 實測個人揮桿時間自 120.034s 前進至 121.044s (Δ=1.010s)，示範影片時間自 0.957s 前進至 1.959s (Δ=1.002s)，時鐘同步漂移僅 **8.1ms** (遠低於 150ms 門檻)。
+5. **TOP / IMPACT 錨點跳轉示範片歸零 Bug 根治**：
+   - 查明原 `useEffect` 依賴 `computeExpectedRefMs` 在錨點切換時過度觸發並將示範片重設為 0 秒之根因，加入 `prevSwingKeyRef` 守衛。
+   - 在 `jumpSyncAnchor` 直接傳入點擊之 anchor 計算目標時間，消除 React state 非同步延遲。實測點擊 TOP 跳轉（User=120600ms, Ref=1533ms，誤差 0ms），點擊 IMPACT 跳轉（User=120967ms, Ref=1900ms，誤差 0ms）。
+6. **示範影片素材真實性與四大分類治理**：
+   - 更新 `docs/REFERENCE_CLUB_LIBRARY.md`，清楚列出 4 種分類現狀：已驗證職業示範 0 支（尚無）、技術測試素材 1 支 (7I)、一般特寫素材 1 支 (Driver)、未收錄待匯入 15 桿。
+   - 7I 示範影片明確標記為「技術測試基準 (7I)」或「技術測試素材 (Test Fixture)」，絕不冒充職業標準。
+7. **AI 教練功能誠實標示**：
+   - 移除所有「Vision AI」字樣，標示「📋 深入動作解析 (幾何提示)」與「ℹ️ 規則式幾何運動學引擎生成 (未調用多模態 AI 影像模型)」。
+8. **串流防 OOM 寫入**：
+   - 示範影片上傳與本地匯入全面改為 `storage.put_file` 串流分塊拷貝，徹底解決 500MB 大檔整支讀入記憶體 OOM 問題。
+9. **動態脫敏驗收報告**：
+   - 報告 `docs/reports/swing_comparison_r2_report.json` 包含 Git SHA、Dirty 狀態、時間戳、影片 SHA-256、解碼狀態、兩側尺寸與同步漂移。
+   - 所有 URL 之 `token` 均替換為 `[REDACTED]`，杜絕任何 Token 洩漏。
+
+### 13.2 自動化測試與 WebKit GUI 驗收數據
+- **後端全量測試套件**：
+  - `uv run pytest tests/ -k "not test_webkit" -v`
+  - **90 / 90 PASSED (100%)** in 214s
+- **專項與安全測試**：
+  - `uv run pytest tests/test_token_leak_prevention.py tests/test_swing_comparison_and_coach.py -v`
+  - **8 / 8 PASSED (100%)**
+- **前端建置**：
+  - `npm --prefix apps/web run build` 通過（9/9 靜態路由全數編譯成功，0 錯誤）。
+- **WebKit 原生 GUI 驗收**：
+  - 執行命令：`uv run python scripts/verify_webkit_comparison_and_coach.py`
+  - 結果：**9 大驗收步驟 100% PASS**
+  - 快照存證：
+    - `docs/screenshots/webkit_r2/01_single_player_view.png`
+    - `docs/screenshots/webkit_r2/02_action_differences_cards.png`
+    - `docs/screenshots/webkit_r2/03_deep_insight_expanded.png`
+    - `docs/screenshots/webkit_r2/04_comparison_playing_side_by_side.png`
+    - `docs/screenshots/webkit_r2/05_comparison_playing_stacked.png`
+    - `docs/screenshots/webkit_r2/06_comparison_jump_top.png`
+    - `docs/screenshots/webkit_r2/07_comparison_jump_impact.png`
+    - `docs/screenshots/webkit_r2/08_comparison_missing_3w.png`
+  - 正式報告：`docs/reports/swing_comparison_r2_report.json`
+
 
 
 
