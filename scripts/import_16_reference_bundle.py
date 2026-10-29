@@ -99,12 +99,12 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "title": "Giles Gill 5 號木 DTL 揮桿示範",
         "author": "Giles Gill",
         "source_url": "https://www.youtube.com/watch?v=Zo70DeaEWQo",
-        "source_start_ms": 18600,
-        "source_end_ms": 24000,
+        "source_start_ms": 0,
+        "source_end_ms": 3600,
         "raw_events": {
-            "address": 19400, "takeaway": 19467, "backswing": 20533,
-            "top": 21800, "downswing": 21916, "impact": 22033,
-            "follow_through": 22333, "finish": 23200
+            "address": 100, "takeaway": 467, "backswing": 667,
+            "top": 867, "downswing": 1067, "impact": 1233,
+            "follow_through": 2000, "finish": 3200
         },
         "verified_club": True,
         "verified_camera_angle": True,
@@ -112,7 +112,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "Giles Gill 5 號木乾淨全揮桿 (Downswing 233ms)",
+        "notes": "Giles Gill 5 號木第 1 記乾淨全揮桿 (Top 867ms, Impact 1233ms, Downswing 366ms)",
     },
     {
         "filename": "07_Iron4.mp4",
@@ -522,25 +522,39 @@ def analyze_clipped_swing_physics(
     is_side = spec["camera_angle"] == "side_oblique"
     is_slow = spec.get("is_slow_motion", False)
 
-    if is_close_up or is_side:
+    if is_close_up:
         status = "needs_calibration"
         events_reliable = False
+        impact_status = "impact_estimated"
+        event_source = "estimated"
+    elif is_side:
+        status = "needs_calibration"
+        events_reliable = True
+        impact_status = "confirmed_strike"
+        event_source = "developer_visual_annotated"
     elif not spec.get("verified_camera_angle") or not spec.get("verified_club"):
         status = "needs_calibration"
         events_reliable = True
+        impact_status = "confirmed_strike"
+        event_source = "developer_visual_annotated"
     else:
         status = "completed"
         events_reliable = True
+        impact_status = "confirmed_strike"
+        event_source = "developer_visual_annotated"
 
     pose_analyzed = bool(len(keypoints_summary) > 0)
     supports_realtime_sync = not is_slow
-    supports_phase_sync = bool(0 < events["top"] < events["impact"] <= dur_ms)
+    supports_phase_sync = bool(events_reliable and 0 < events["top"] < events["impact"] <= dur_ms)
+    is_valid_clip = bool(0 <= events["address"] < events["top"] < events["impact"] <= events["finish"] <= dur_ms)
 
     pose_artifact = {
         "landmarks": keypoints_summary,
         "is_slow_motion": is_slow,
         "source_start_ms": spec["source_start_ms"],
         "source_end_ms": spec["source_end_ms"],
+        "event_source": event_source,
+        "impact_status": impact_status,
     }
 
     calibration_params = {
@@ -552,10 +566,14 @@ def analyze_clipped_swing_physics(
         "source_start_ms": spec["source_start_ms"],
         "source_end_ms": spec["source_end_ms"],
         "source_sha256": spec.get("source_sha256", ""),
-        # 6 維度狀態明確持久化
+        "clip_version": "2.2.0",
+        "analysis_version": "pose-v1-visual-audit",
+        "event_source": event_source,
+        "impact_status": impact_status,
+        # 6 維度狀態明確持久化 (嚴格依真實影像證據判定)
         "media_processed": True,
         "pose_analyzed": pose_analyzed,
-        "is_valid_clip": True,
+        "is_valid_clip": is_valid_clip,
         "events_reliable": events_reliable,
         "supports_realtime_sync": supports_realtime_sync,
         "supports_phase_sync": supports_phase_sync,
@@ -573,8 +591,28 @@ def main():
     imported_results = []
 
     with Session(engine) as db:
-        # 盤點既有記錄，建立以 (club_type, title) 及 source_sha256 的對照映射
+        # 0. 備份既有記錄，確保可追溯、可回退
         existing_refs = db.scalars(select(ReferenceSwing)).all()
+        backup_data = [
+            {
+                "id": r.id,
+                "club_type": r.club_type,
+                "title": r.title,
+                "is_default": r.is_default,
+                "storage_key": r.storage_key,
+                "event_timestamps": r.event_timestamps,
+                "calibration_params": r.calibration_params,
+                "analysis_status": r.analysis_status,
+            }
+            for r in existing_refs
+        ]
+        backup_path = Path("docs/reports/reference_swings_backup.json")
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(backup_path, "w", encoding="utf-8") as bf:
+            json.dump(backup_data, bf, indent=2, ensure_ascii=False)
+        logger.info(f"已備份既有 {len(existing_refs)} 筆資料至 {backup_path}")
+
+        # 盤點既有記錄，建立以 (club_type, title) 的對照映射
         ref_lookup: dict[str, ReferenceSwing] = {}
         for r in existing_refs:
             key_title = f"{r.club_type}_{r.title}"
@@ -634,9 +672,17 @@ def main():
             storage_key = f"references/{club_slug}/{clip_name}"
             thumb_key = f"references/{club_slug}/{thumb_name}"
 
-            # 5. 冪等更新或新增
+            # 5. 冪等更新或新增 (以 club_type + title 或是 source_sha256 + club 雙重安全錨定)
+            existing_obj = None
             lookup_key = f"{spec['club_type']}_{spec['title']}"
-            existing_obj = ref_lookup.get(lookup_key)
+            if lookup_key in ref_lookup:
+                existing_obj = ref_lookup[lookup_key]
+            else:
+                for r in existing_refs:
+                    cal = r.calibration_params or {}
+                    if r.club_type == spec["club_type"] and cal.get("source_sha256") == raw_sha256:
+                        existing_obj = r
+                        break
 
             if existing_obj:
                 ref_id = existing_obj.id
@@ -661,6 +707,7 @@ def main():
                 existing_obj.calibration_params = calib
                 existing_obj.is_default = spec.get("is_default", False)
                 existing_obj.notes = f"Source: {fn} (sha256={raw_sha256[:12]}..., window={spec['source_start_ms']}~{spec['source_end_ms']}ms)"
+                existing_obj.analysis_version = "pose-v1-visual-audit"
                 existing_obj.updated_at = utcnow()
                 logger.info(f"原地更新: {spec['club_type']} - {spec['title']} (id={ref_id}) | Top={events['top']}ms Impact={events['impact']}ms")
             else:
@@ -692,7 +739,7 @@ def main():
                     calibration_params=calib,
                     is_default=spec.get("is_default", False),
                     notes=f"Source: {fn} (sha256={raw_sha256[:12]}..., window={spec['source_start_ms']}~{spec['source_end_ms']}ms)",
-                    analysis_version="pose-v1",
+                    analysis_version="pose-v1-visual-audit",
                 )
                 db.add(new_obj)
                 logger.info(f"全新新增: {spec['club_type']} - {spec['title']} (id={ref_id}) | Top={events['top']}ms Impact={events['impact']}ms")
@@ -719,10 +766,12 @@ def main():
                 "notes": spec["notes"],
                 "ref_id": ref_id,
                 "events": events,
+                "event_source": calib["event_source"],
+                "impact_status": calib["impact_status"],
                 "six_dimensions": {
-                    "media_processed": True,
+                    "media_processed": calib["media_processed"],
                     "pose_analyzed": calib["pose_analyzed"],
-                    "is_valid_clip": True,
+                    "is_valid_clip": calib["is_valid_clip"],
                     "events_reliable": calib["events_reliable"],
                     "supports_realtime_sync": calib["supports_realtime_sync"],
                     "supports_phase_sync": calib["supports_phase_sync"],

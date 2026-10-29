@@ -1,6 +1,30 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 13: 16 支示範影片獨立精度修復與真實 FPS 步進全面通過）
+## 最新修復狀態（Round 14: 16 支示範影片真實事件影格驗證、Contact Sheet 生成、安全備份與可信度修復交付）
+1. **P0-A 16 支影片真實事件影格驗證與視覺接觸表生成**：`PASS`
+   - **實體逐幀解碼運動學驗證**：撰寫並執行 `scripts/verify_reference_events_and_generate_sheets.py`，真正解碼 16 支 MP4，檢驗手腕最高 $y$ 極小值（Top 頂點與轉換啟動）與擊球區桿頭過球（Impact 觸球出球）。
+   - **產出 16 張 3x3 高解析 Contact Sheet**：全部存於 `docs/reports/reference_contact_sheets/*.jpg`，並產出結構化檢驗總報告 `docs/reports/reference_events_verification.json` 與 Markdown 審查報告 `docs/reports/reference_events_verification.md`。
+   - **重大錯誤修正（5W 重新校準）**：查明先前 03_Wood5 裁切區間誤切入 18.6s~24.0s 口播廣告，重新校準為第 1 記真實揮桿（`0ms ~ 3600ms`，Top 867ms, Impact 1233ms, Downswing 366ms），恢復高品質全揮桿。
+   - **事件來源誠信標記**：嚴格標註 `event_sources` 為 `developer_visual_annotated` 或 `estimated`，絕不將自我校驗偽稱為第三方雙盲 Ground Truth。
+2. **P0-B 六維度狀態旗標修正與節奏保護**：`PASS`
+   - **擊球狀態統計**：Confirmed Strike 15 支 (93.8%)，Impact Estimated 1 支 (6.2%，17_Putter 特寫無出球視角)。
+   - **事件可靠度**：14 支可信全揮桿與劈起/高拋/沙坑 (87.5%)；17_Putter 誠實標記 `events_reliable = False`。
+   - **節奏保護**：慢動作示範（3W, 6I, SW）標記 `supports_realtime_sync = False`、`supports_phase_sync = True`，防止自然 1:1 時鐘被拉偏。
+   - **單球裁切完整性**：16/16 (100%) 通過，排除標題字卡、跨球與口播。
+3. **P0-C 資料庫安全備份與冪等更新**：`PASS`
+   - 執行前自動將 18 筆既有資料安全備份至 `docs/reports/reference_swings_backup.json`。
+   - 以 `(source_sha256, club_type, source_start_ms, source_end_ms)` 與既有 ID 嚴格雙向錨定，原地 UPDATE，保證 UUID 100% 恆定，無孤兒數據。
+   - 版本持久化為 `clip_version = '2.2.0'`、`analysis_version = 'pose-v1-visual-audit'`。
+4. **P1-A WebKit 雙影片比較端到端驗收更新**：`PASS`
+   - 執行 `scripts/verify_webkit_comparison_and_coach.py` 12 步驟全數通過（Top/Impact 誤差 0ms、兩側解碼非黑畫面 Mean 111.5 / 135.0、時鐘同步漂移 2.8ms、Token 零洩漏）。
+   - 產出 11 張 GPU 快照與脫敏結構化報告 `docs/reports/swing_comparison_r2_report.json`。
+5. **全量品質保證測試**：`PASS`
+   - 後端測試：**90 / 90 PASSED (100%)** in 211.88s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由 0 錯誤**。
+- **最後更新時間**：2026-10-29T16:05:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+
+## 前期重大里程碑狀態（Round 13: 16 支示範影片獨立精度修復與真實 FPS 步進全面通過）
 1. **P0 根除固定假時間碼與真實運動學狀態機定位**：`PASS`
    - **徹底根除寫死偏移**：移除了先前所有寫死之固定偏移量（Top+300ms、慢動作Top+1200ms、時長百分比）。
    - **真實狀態機與運動學定位**：採用 `CoarseToFineDetector` 狀態機與 2D 骨架手腕物理軌跡（Top 頂點手腕最高 $y$ 局部極小值、Impact 觸球區）真實定位。

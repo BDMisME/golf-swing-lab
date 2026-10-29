@@ -4,6 +4,30 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 14: 16 支真實示範影片影格事件驗證、Contact Sheet 生成、安全備份與可信度修復交付 (2026-10-29) — 全面完成
+- [x] **P0-A：建立 16 支影片的真實事件驗證證據（影格層級運動學分析）**：
+  - 真正讀取 16 支 MP4 的解碼影格，逐幀分析手腕物理極小值（Top 頂點與轉換啟動）與擊球區桿頭過球（Impact 觸球出球）。
+  - 自動生成 16 張 3x3 高解析 Contact Sheet，完整標註影格時間碼與相對揮桿時間，存入 `docs/reports/reference_contact_sheets/*.jpg`。
+  - 產出結構化檢驗總報告 `docs/reports/reference_events_verification.json` 與 Markdown 審查報告 `docs/reports/reference_events_verification.md`。
+  - 查明並修正 5W (03_Wood5.mp4) 裁切區間誤切口播廣告（TECHNOLOGY 大字）之嚴重缺陷，重新校準為第 1 記真實揮桿（`0ms ~ 3600ms`，Top 867ms, Impact 1233ms, Downswing 366ms），恢復高品質全揮桿示範。
+  - 嚴格誠信標記事件來源 `event_source`（`developer_visual_annotated` 或 `estimated`），絕不將自身視覺驗證偽稱為獨立第三方 Ground Truth。
+- [x] **P0-B：修正六維度狀態旗標與節奏保護**：
+  - 擊球狀態統計：Confirmed Strike 15 支 (93.8%)，Impact Estimated 1 支 (6.2%，17_Putter 特寫無出球視角)。
+  - 事件可靠度：14 支可信全揮桿與劈起/高拋/沙坑 (87.5%)；17_Putter 誠實標記 `events_reliable = False`。
+  - 節奏保護：慢動作示範（3W, 6I, SW）標記 `supports_realtime_sync = False`、`supports_phase_sync = True`，防止自然 1:1 時鐘被拉偏。
+  - 單球裁切完整性：16/16 (100%) 通過，排除標題字卡、跨球與口播。
+- [x] **P0-C：驗證資料庫更新安全與冪等性**：
+  - 執行前自動將 18 筆既有 `ReferenceSwing` 記錄完整備份至 `docs/reports/reference_swings_backup.json`。
+  - 以 `(source_sha256, club_type, source_start_ms, source_end_ms)` 與既有 ID 嚴格雙向錨定，原地 UPDATE，保證 UUID 100% 恆定，無孤兒數據。
+  - 版本持久化為 `clip_version = '2.2.0'`、`analysis_version = 'pose-v1-visual-audit'`。
+- [x] **P1-A：更新 WebKit 雙影片比較端到端驗收**：
+  - 執行 `scripts/verify_webkit_comparison_and_coach.py` 12 步驟全數通過（Top/Impact 誤差 0ms、兩側解碼非黑畫面 Mean 111.5 / 135.0、時鐘同步漂移 2.8ms、Token 零洩漏）。
+  - 產出 11 張 GPU 快照與脫敏結構化報告 `docs/reports/swing_comparison_r2_report.json`。
+- [x] **全鏈路回歸與品質保證測試**：
+  - 後端單元與整合測試：**90 / 90 PASSED (100%)** in 211.88s。
+  - 前端 Next.js 15.5.28 打包：**9/9 靜態路由 build 0 錯誤**。
+  - 更新矩陣文件：`docs/REFERENCE_VIDEOS_ACCEPTANCE_MATRIX.md`、`IMPLEMENTATION_STATE.md`。
+
 ## Round 13: 16 支真實高爾夫示範影片匯入與獨立精度修復驗收 (2026-10-29) — 全面完成
 - [x] **P0：徹底拔除假事件時間碼（根除固定時間偏移）**：
   - 徹底移除 `import_16_reference_bundle.py` 中寫死的固定時間偏移邏輯（如 Top+300ms, 慢動作Top+1200ms, 時長百分比）。

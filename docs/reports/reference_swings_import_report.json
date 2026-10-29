@@ -1,5 +1,5 @@
 {
-  "imported_at": "2026-10-29T05:08:20.418424+00:00",
+  "imported_at": "2026-10-29T07:54:21.328509+00:00",
   "total_imported": 16,
   "results": [
     {
@@ -31,6 +31,8 @@
         "follow_through": 2079,
         "finish": 3581
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -69,6 +71,8 @@
         "follow_through": 3700,
         "finish": 5200
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -87,26 +91,28 @@
       "author": "Giles Gill",
       "source_url": "https://www.youtube.com/watch?v=Zo70DeaEWQo",
       "source_sha256": "8215dc64ce25e9ad6a809a03b748b143a40498511598840fca5c1db438ab86ab",
-      "clip_duration_ms": 5400,
-      "source_start_ms": 18600,
-      "source_end_ms": 24000,
+      "clip_duration_ms": 3600,
+      "source_start_ms": 0,
+      "source_end_ms": 3600,
       "is_slow_motion": false,
       "verified_club": true,
       "verified_camera_angle": true,
       "analysis_status": "completed",
       "is_default": true,
-      "notes": "Giles Gill 5 號木乾淨全揮桿 (Downswing 233ms)",
+      "notes": "Giles Gill 5 號木第 1 記乾淨全揮桿 (Top 867ms, Impact 1233ms, Downswing 366ms)",
       "ref_id": "13c3c637-3717-4c69-84f3-669782afc35d",
       "events": {
-        "address": 800,
-        "takeaway": 867,
-        "backswing": 1933,
-        "top": 3200,
-        "downswing": 3316,
-        "impact": 3433,
-        "follow_through": 3733,
-        "finish": 4600
+        "address": 100,
+        "takeaway": 467,
+        "backswing": 667,
+        "top": 867,
+        "downswing": 1067,
+        "impact": 1233,
+        "follow_through": 2000,
+        "finish": 3200
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -145,6 +151,8 @@
         "follow_through": 3182,
         "finish": 4250
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -183,6 +191,8 @@
         "follow_through": 2087,
         "finish": 3155
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -221,6 +231,8 @@
         "follow_through": 4600,
         "finish": 7267
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -259,6 +271,8 @@
         "follow_through": 2067,
         "finish": 3133
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -297,6 +311,8 @@
         "follow_through": 1850,
         "finish": 3185
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -335,6 +351,8 @@
         "follow_through": 1867,
         "finish": 3200
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -373,6 +391,8 @@
         "follow_through": 2205,
         "finish": 2806
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -411,6 +431,8 @@
         "follow_through": 3187,
         "finish": 3320
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -449,6 +471,8 @@
         "follow_through": 1852,
         "finish": 1986
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -487,13 +511,15 @@
         "follow_through": 4102,
         "finish": 4500
       },
+      "event_source": "estimated",
+      "impact_status": "impact_estimated",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
         "is_valid_clip": true,
         "events_reliable": false,
         "supports_realtime_sync": true,
-        "supports_phase_sync": true
+        "supports_phase_sync": false
       }
     },
     {
@@ -525,6 +551,8 @@
         "follow_through": 2067,
         "finish": 2667
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -563,6 +591,8 @@
         "follow_through": 1709,
         "finish": 2443
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
@@ -601,11 +631,13 @@
         "follow_through": 1286,
         "finish": 1453
       },
+      "event_source": "developer_visual_annotated",
+      "impact_status": "confirmed_strike",
       "six_dimensions": {
         "media_processed": true,
         "pose_analyzed": true,
         "is_valid_clip": true,
-        "events_reliable": false,
+        "events_reliable": true,
         "supports_realtime_sync": true,
         "supports_phase_sync": true
       }

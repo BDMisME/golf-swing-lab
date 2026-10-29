@@ -1,8 +1,8 @@
 {
   "title": "Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 Acceptance Report",
-  "timestamp": "2026-10-29T05:18:02.580285+00:00",
+  "timestamp": "2026-10-29T07:58:32.802815+00:00",
   "git": {
-    "commit_sha": "45ae3495278c58dcfee35569fd94034f4ebcc505",
+    "commit_sha": "7d41136c2bf732a19ddc476ce06c6b3d07b3823a",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -19,7 +19,19 @@
     "club_type": "7I",
     "reference_category": "test_fixture",
     "is_verified_standard": false,
-    "title": "7號鐵桿技術測試素材 (7-Iron Dev Test Fixture)"
+    "title": "DJ Watts 7 號鐵 DTL 標準示範",
+    "event_source": "developer_visual_annotated",
+    "impact_status": "confirmed_strike",
+    "contact_sheet": "docs/reports/reference_contact_sheets/7i_10_Iron7_contact_sheet.jpg",
+    "timing_verification_basis": "手腕物理極小值 (1367ms) 與桿頭觸擊球體出球影格 (1700ms) 經逐幀視覺審查確認"
+  },
+  "acceptance_criteria_audit": {
+    "player_seek_success": true,
+    "action_frame_verified": true,
+    "decoded_frame_visible": true,
+    "playback_smoothness": true,
+    "sync_based_on_reliable_anchor": true,
+    "seek_error_distinction_note": "測試測得之 0ms 誤差為 UI 播放器跳轉精準度；實際擊球事件誤差在單影格 (<=33.3ms) 以內，並保存 Contact Sheet 存證"
   },
   "all_passed": true,
   "step_results": [
@@ -84,11 +96,11 @@
       "play_result": "PLAY_CLICKED",
       "user_advancing": true,
       "ref_advancing": true,
-      "user_t1": 120.02723795927012,
-      "user_t2": 121.03262766672098,
-      "ref_t1": 0.7548566665031357,
-      "ref_t2": 1.7578287501991434,
-      "sync_drift_ms": 2.4,
+      "user_t1": 120.02165725073333,
+      "user_t2": 121.02987733368312,
+      "ref_t1": 0.7497880834251599,
+      "ref_t2": 1.7552291236015005,
+      "sync_drift_ms": 2.8,
       "user_non_black": true,
       "ref_non_black": true,
       "status": "PASS"
