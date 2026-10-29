@@ -198,6 +198,9 @@ class ReferenceSwingResponse(BaseModel):
     events_reliable: bool = True
     supports_realtime_sync: bool = True
     supports_phase_sync: bool = True
+    # 擊球確認度與事件來源 (真實影像證據分類)
+    impact_status: str | None = None
+    event_source: str | None = None
 
 
 class ReferenceCatalogItem(BaseModel):
@@ -300,6 +303,8 @@ def _to_response_item(item: ReferenceSwing) -> ReferenceSwingResponse:
         events_reliable=events_reliable,
         supports_realtime_sync=supports_realtime_sync,
         supports_phase_sync=supports_phase_sync,
+        impact_status=calib.get("impact_status"),
+        event_source=calib.get("event_source"),
     )
 
 

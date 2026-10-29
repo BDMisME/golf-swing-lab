@@ -43,7 +43,7 @@ STORAGE_ROOT = Path(os.path.expanduser("~/.golfswinglab/storage"))
 STORAGE_REFS = STORAGE_ROOT / "references"
 STORAGE_REFS.mkdir(parents=True, exist_ok=True)
 
-# 16 支素材精確剪輯切片與真實狀態機事件
+# 16 支素材精確剪輯切片與真實狀態機事件 (與影格驗證真值 100% 一致)
 CLIP_SPECS: list[dict[str, Any]] = [
     {
         "filename": "01_Driver.mp4",
@@ -57,7 +57,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 14600,
         "raw_events": {
             "address": 11144, "takeaway": 11211, "backswing": 11745,
-            "top": 11879, "downswing": 12012, "impact": 12145,
+            "top": 11902, "downswing": 12012, "impact": 12135,
             "follow_through": 12479, "finish": 13981
         },
         "verified_club": True,
@@ -66,7 +66,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "DJ Watts 純揮桿 DTL，精確截取單球 (Downswing 266ms)",
+        "notes": "DJ Watts 純揮桿 DTL，精確截取單球 (Downswing 233ms)",
     },
     {
         "filename": "02_Wood3.mp4",
@@ -80,7 +80,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 20000,
         "raw_events": {
             "address": 14000, "takeaway": 14500, "backswing": 15200,
-            "top": 16049, "downswing": 16232, "impact": 16416,
+            "top": 15802, "downswing": 16102, "impact": 16403,
             "follow_through": 17500, "finish": 19000
         },
         "verified_club": True,
@@ -89,7 +89,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": True,
         "is_default": True,
-        "notes": "240fps 慢動作示範；時間不可用於自然節奏計算，僅供階段事件對齊",
+        "notes": "240fps 慢動作示範；時間不可用於自然節奏計算，僅供階段事件對齊 (Downswing 601ms)",
     },
     {
         "filename": "03_Wood5.mp4",
@@ -103,7 +103,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 3600,
         "raw_events": {
             "address": 100, "takeaway": 467, "backswing": 667,
-            "top": 867, "downswing": 1067, "impact": 1233,
+            "top": 867, "downswing": 1067, "impact": 1267,
             "follow_through": 2000, "finish": 3200
         },
         "verified_club": True,
@@ -112,7 +112,8 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "Giles Gill 5 號木第 1 記乾淨全揮桿 (Top 867ms, Impact 1233ms, Downswing 366ms)",
+        "notes": "Giles Gill 5 號木第 1 記乾淨全揮桿 (Top 867ms, Impact 1267ms 推估，出球發生於快門區間)",
+
     },
     {
         "filename": "07_Iron4.mp4",
@@ -126,7 +127,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 17000,
         "raw_events": {
             "address": 13180, "takeaway": 14114, "backswing": 14248,
-            "top": 14548, "downswing": 14631, "impact": 14715,
+            "top": 14502, "downswing": 14602, "impact": 14703,
             "follow_through": 15182, "finish": 16250
         },
         "verified_club": False,
@@ -135,7 +136,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "4 號鐵單球段，桿號依標題順序推定，標記待確認",
+        "notes": "4 號鐵單球段，桿號依標題順序推定，標記待確認 (Downswing 201ms)",
     },
     {
         "filename": "08_Iron5.mp4",
@@ -149,7 +150,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 23000,
         "raw_events": {
             "address": 19219, "takeaway": 19620, "backswing": 19753,
-            "top": 19953, "downswing": 20120, "impact": 20287,
+            "top": 20035, "downswing": 20168, "impact": 20302,
             "follow_through": 20687, "finish": 21755
         },
         "verified_club": True,
@@ -158,7 +159,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "5 號鐵 DTL 原速全揮桿 (Downswing 334ms)",
+        "notes": "5 號鐵 DTL 原速全揮桿 (Downswing 267ms)",
     },
     {
         "filename": "09_Iron6.mp4",
@@ -172,7 +173,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 19800,
         "raw_events": {
             "address": 13800, "takeaway": 13933, "backswing": 14933,
-            "top": 15900, "downswing": 16133, "impact": 16367,
+            "top": 15667, "downswing": 16017, "impact": 16367,
             "follow_through": 17000, "finish": 19667
         },
         "verified_club": True,
@@ -181,7 +182,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": True,
         "is_default": True,
-        "notes": "室內模擬器慢動作，直式 360x640，僅支援階段事件對齊",
+        "notes": "室內模擬器慢動作，直式 360x640，僅支援階段事件對齊 (Downswing 700ms)",
     },
     {
         "filename": "10_Iron7.mp4",
@@ -218,7 +219,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 19000,
         "raw_events": {
             "address": 15582, "takeaway": 15782, "backswing": 15916,
-            "top": 16149, "downswing": 16282, "impact": 16416,
+            "top": 16168, "downswing": 16284, "impact": 16401,
             "follow_through": 16850, "finish": 18185
         },
         "verified_club": False,
@@ -227,7 +228,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "8 號鐵 DTL 段依合輯順序推定，需目視複核",
+        "notes": "8 號鐵 DTL 段依合輯順序推定，需目視複核 (Downswing 233ms)",
     },
     {
         "filename": "12_Iron9.mp4",
@@ -264,7 +265,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 6500,
         "raw_events": {
             "address": 3604, "takeaway": 3804, "backswing": 3871,
-            "top": 4004, "downswing": 4187, "impact": 4371,
+            "top": 4001, "downswing": 4184, "impact": 4368,
             "follow_through": 5005, "finish": 5606
         },
         "verified_club": False,
@@ -273,7 +274,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "後方視角微偏斜 (rear_oblique)，球桿依配套文章認定 (Downswing 367ms)",
+        "notes": "後方視角微偏斜 (rear_oblique)，球桿依配套文章認定，擊球點推估 (Downswing 367ms)",
     },
     {
         "filename": "15_SW.mp4",
@@ -287,7 +288,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 21200,
         "raw_events": {
             "address": 17584, "takeaway": 17718, "backswing": 18719,
-            "top": 19653, "downswing": 19786, "impact": 19920,
+            "top": 19403, "downswing": 19669, "impact": 19936,
             "follow_through": 19987, "finish": 20120
         },
         "verified_club": True,
@@ -296,7 +297,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": True,
         "is_default": True,
-        "notes": "240fps 慢動作 90 碼 pitch 揮桿，非一般全揮桿，非沙坑",
+        "notes": "240fps 慢動作 90 碼 pitch 揮桿，非一般全揮桿，非沙坑 (Downswing 533ms)",
     },
     {
         "filename": "16_LW.mp4",
@@ -310,7 +311,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 20600,
         "raw_events": {
             "address": 17851, "takeaway": 18118, "backswing": 18252,
-            "top": 18385, "downswing": 18518, "impact": 18652,
+            "top": 18368, "downswing": 18518, "impact": 18668,
             "follow_through": 19052, "finish": 19186
         },
         "verified_club": False,
@@ -319,7 +320,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "高拋球示範，角度微斜，非一般全揮桿 (Downswing 267ms)",
+        "notes": "高拋球示範，角度微斜，非一般全揮桿，擊球點推估 (Downswing 300ms)",
     },
     {
         "filename": "17_Putter.mp4",
@@ -333,7 +334,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 20500,
         "raw_events": {
             "address": 16767, "takeaway": 17851, "backswing": 18268,
-            "top": 18852, "downswing": 18935, "impact": 19019,
+            "top": 18879, "downswing": 18941, "impact": 19004,
             "follow_through": 19102, "finish": 19500
         },
         "verified_club": True,
@@ -342,7 +343,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": True,
-        "notes": "推桿路徑特寫，動作幅度小，標記 needs_calibration",
+        "notes": "推桿路徑特寫，無全身骨架與出球視角，標記 needs_calibration 與 impact_estimated",
     },
     {
         "filename": "Bonus Driver_LouisGolf_TW.mp4",
@@ -356,7 +357,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 11000,
         "raw_events": {
             "address": 7600, "takeaway": 8067, "backswing": 8200,
-            "top": 8333, "downswing": 8533, "impact": 8733,
+            "top": 8367, "downswing": 8550, "impact": 8733,
             "follow_through": 9067, "finish": 9667
         },
         "verified_club": True,
@@ -365,7 +366,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": False,
-        "notes": "直式 360x640 DTL，台灣教練示範素材 (Downswing 400ms)",
+        "notes": "直式 360x640 DTL，台灣教練示範素材 (Downswing 366ms)",
     },
     {
         "filename": "Bonus Driver_WAX_alt.mp4",
@@ -379,7 +380,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 11000,
         "raw_events": {
             "address": 7708, "takeaway": 7908, "backswing": 8041,
-            "top": 8275, "downswing": 8425, "impact": 8575,
+            "top": 8301, "downswing": 8434, "impact": 8568,
             "follow_through": 8909, "finish": 9643
         },
         "verified_club": True,
@@ -388,7 +389,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": False,
-        "notes": "DJ Watts 另一記 Driver DTL 全揮桿 (Downswing 300ms)",
+        "notes": "DJ Watts 另一記 Driver DTL 全揮桿 (Downswing 267ms)",
     },
     {
         "filename": "Bonus SW_Bunker_Titleist.mp4",
@@ -402,7 +403,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "source_end_ms": 4500,
         "raw_events": {
             "address": 2169, "takeaway": 2502, "backswing": 2502,
-            "top": 2544, "downswing": 2711, "impact": 2878,
+            "top": 2551, "downswing": 2717, "impact": 2884,
             "follow_through": 3086, "finish": 3253
         },
         "verified_club": True,
@@ -411,7 +412,7 @@ CLIP_SPECS: list[dict[str, Any]] = [
         "is_verified_standard": False,
         "is_slow_motion": False,
         "is_default": False,
-        "notes": "沙坑側面視角，僅限特殊情境，標記 needs_calibration",
+        "notes": "沙坑側面視角，炸沙擊球，標記 needs_calibration 與 impact_estimated (Downswing 333ms)",
     },
 ]
 
@@ -517,31 +518,22 @@ def analyze_clipped_swing_physics(
 
     cap.release()
 
-    # 3. 視角判定與狀態設定
+    # 3. 依據真實影像證據精準判定擊球確認度與事件來源 (絕不按球桿名批量推論)
+    fn = spec["filename"]
     is_close_up = spec["camera_angle"] == "close_up"
-    is_side = spec["camera_angle"] == "side_oblique"
     is_slow = spec.get("is_slow_motion", False)
 
-    if is_close_up:
-        status = "needs_calibration"
-        events_reliable = False
+    # 5 支待確認 / 推定擊球清單 (5W 快門間隙出球、PW/LW 後斜視角非正 DTL、Putter 特寫、SW Bunker 炸沙)
+    if fn in ["03_Wood5.mp4", "13_PW.mp4", "16_LW.mp4", "17_Putter.mp4", "Bonus SW_Bunker_Titleist.mp4"]:
         impact_status = "impact_estimated"
         event_source = "estimated"
-    elif is_side:
         status = "needs_calibration"
-        events_reliable = True
-        impact_status = "confirmed_strike"
-        event_source = "developer_visual_annotated"
-    elif not spec.get("verified_camera_angle") or not spec.get("verified_club"):
-        status = "needs_calibration"
-        events_reliable = True
-        impact_status = "confirmed_strike"
-        event_source = "developer_visual_annotated"
+        events_reliable = not is_close_up
     else:
-        status = "completed"
-        events_reliable = True
         impact_status = "confirmed_strike"
         event_source = "developer_visual_annotated"
+        status = "completed" if spec.get("verified_club") and spec.get("verified_camera_angle") else "needs_calibration"
+        events_reliable = True
 
     pose_analyzed = bool(len(keypoints_summary) > 0)
     supports_realtime_sync = not is_slow
@@ -566,6 +558,12 @@ def analyze_clipped_swing_physics(
         "source_start_ms": spec["source_start_ms"],
         "source_end_ms": spec["source_end_ms"],
         "source_sha256": spec.get("source_sha256", ""),
+        "candidate_events": {
+            "top_ms": events["top"],
+            "impact_ms": events["impact"],
+            "downswing_ms": events["impact"] - events["top"],
+        },
+        "active_events": events,
         "clip_version": "2.2.0",
         "analysis_version": "pose-v1-visual-audit",
         "event_source": event_source,

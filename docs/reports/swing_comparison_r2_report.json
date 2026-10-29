@@ -1,8 +1,8 @@
 {
   "title": "Golf Swing Lab — Swing Comparison & Evidence-Based Coaching R2 Acceptance Report",
-  "timestamp": "2026-10-29T07:58:32.802815+00:00",
+  "timestamp": "2026-10-29T08:42:39.486111+00:00",
   "git": {
-    "commit_sha": "7d41136c2bf732a19ddc476ce06c6b3d07b3823a",
+    "commit_sha": "18a26aa89dd90ee385c80801f9c58ae90bbc3f7e",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -96,11 +96,11 @@
       "play_result": "PLAY_CLICKED",
       "user_advancing": true,
       "ref_advancing": true,
-      "user_t1": 120.02165725073333,
-      "user_t2": 121.02987733368312,
-      "ref_t1": 0.7497880834251599,
-      "ref_t2": 1.7552291236015005,
-      "sync_drift_ms": 2.8,
+      "user_t1": 120.01820370893174,
+      "user_t2": 121.02934000004433,
+      "ref_t1": 0.7462797074378132,
+      "ref_t2": 1.7548910418053865,
+      "sync_drift_ms": 2.5,
       "user_non_black": true,
       "ref_non_black": true,
       "status": "PASS"

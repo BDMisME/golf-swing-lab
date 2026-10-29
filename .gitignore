@@ -56,3 +56,8 @@ dist_mac/
 # Scratch and temporary debug scripts
 scratch/
 
+# Reference contact sheets & local database backups (never commit third-party frames or local DB dumps)
+docs/reports/reference_contact_sheets/
+docs/reports/reference_swings_backup.json
+docs/reports/*backup*.json
+

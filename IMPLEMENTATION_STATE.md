@@ -1,6 +1,32 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 14: 16 支示範影片真實事件影格驗證、Contact Sheet 生成、安全備份與可信度修復交付）
+## 最新修復狀態（Round 15: PR #2 資料一致性、真值擊球確認、本機素材隔離與個人 Beta 釋出治理）
+1. **P0-1 驗證時間碼單一事實來源寫回資料庫**：`PASS`
+   - **徹底消除報告與資料庫時間碼漂移**：建立單一權威事實來源字典 `STRIKE_EVIDENCE_MAP`，將審查確認之 Top 與 Impact 錨點直接綁定為 active events，並在 `scripts/verify_reference_events_and_generate_sheets.py` 中 100% 寫回 PostgreSQL。
+   - **完全保留原始 Candidate Events**：`calibration_params["candidate_events"]` 忠實記錄初始粗估值，`calibration_params["active_events"]` 與 `event_timestamps` 100% 同步且誤差為 **0ms**。
+   - **資料庫筆數與 ID 恆定**：示範影片記錄恆定為 18 筆（16 支新 bundle + 2 支既有 fixture），維持原有 UUID，無重複記錄或垃圾資料膨脹。
+   - **自動化一致性回歸測試**：撰寫 `tests/test_reference_events_consistency.py`（5 項專案測試），逐支核驗 16 支影片之 DB、報告與 `/api/reference-swings`，測試結果 **5 / 5 PASSED (100%)**。
+2. **P0-2 擊球確認真值分類與 5W 快門間隙診斷**：`PASS`
+   - **移除按球桿名批量推論邏輯**：嚴格依真實影像證據判定，16 支影片分類為：
+     - `confirmed_strike`（11 支，68.8%）：桿頭過球與小白球飛出瞬間清晰可見（01_Driver, 02_Wood3, 07_Iron4, 08_Iron5, 09_Iron6, 10_Iron7, 11_Iron8, 12_Iron9, 15_SW, Bonus Driver TW, Bonus Driver WAX）。
+     - `impact_estimated`（5 支，31.2%）：5W (快門間隙出球)、13_PW (後斜非正 DTL)、16_LW (後斜高拋非全揮桿)、17_Putter (特寫無全身)、Bonus SW Bunker (炸沙擊球)。
+     - `unresolved`：0 支。
+   - **03_Wood5.mp4 專項影格診斷**：實測解碼 Frame 37 (1233ms) 桿身在腰部下桿中段，Frame 38 (1267ms) 桿頭接近球位，Frame 39 (1300ms) 球已飛出。確認擊球發生於 30fps 快門間隙，時間碼校正為 Frame 38 (1267ms)，標記為 `impact_estimated`，徹底排除假 confirmed。
+   - **Contact Sheet 文字標籤反映真實狀態**：第 8 格清晰標註 `8. [CONFIRMED_STRIKE]` 或 `8. [IMPACT_ESTIMATED]`。
+3. **P0-3 隔離本機素材與 Git 追蹤清理**：`PASS`
+   - **本機永久安全備份**：16 張 Contact Sheet JPG 已安全備份至 `~/.golfswinglab/reference_contact_sheets/`，資料庫備份保存於 `~/.golfswinglab/backups/reference_swings_backup.json`，絕不遺失。
+   - **Git 追蹤清理與忽略**：以 `git rm --cached` 移除 `docs/reports/reference_contact_sheets/*.jpg` 與 `docs/reports/reference_swings_backup.json`，並更新 `.gitignore`。
+   - **PR 分支歷史評估**：嚴格禁止 Force Push 與 Hard Reset，在最新 Commit 中乾淨移除追蹤；評估既有歷史 Commit 殘留素材僅佔用數 MB，不影響程式碼運作，建議合併時在 GitHub 採用 **Squash and merge**，將整個 PR 壓縮為單一乾淨 Commit 進入 main。
+4. **WebKit 原生 GUI 雙影片比較端到端驗收**：`PASS`
+   - 執行 `scripts/verify_webkit_comparison_and_coach.py` 12 步驟全數通過（Top/Impact 誤差 0ms、兩側解碼非黑畫面 Mean 111.5 / 135.0、時鐘同步漂移僅 2.5ms、Token 零洩漏）。
+5. **全量品質保證驗收**：`PASS`
+   - 後端測試套件：**95 / 95 PASSED (100%)** in 200.41s。
+   - 前端打包：Next.js 15.5.28 **9/9 靜態路由 0 錯誤**。
+- **最後更新時間**：2026-10-29T16:48:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+- **合併判定**：**READY FOR PERSONAL BETA MERGE**（請使用者於 GitHub PR #2 點選 Squash and merge）。
+
+## 前期重大里程碑狀態（Round 14: 16 支示範影片真實事件影格驗證、Contact Sheet 生成、安全備份與可信度修復交付）
 1. **P0-A 16 支影片真實事件影格驗證與視覺接觸表生成**：`PASS`
    - **實體逐幀解碼運動學驗證**：撰寫並執行 `scripts/verify_reference_events_and_generate_sheets.py`，真正解碼 16 支 MP4，檢驗手腕最高 $y$ 極小值（Top 頂點與轉換啟動）與擊球區桿頭過球（Impact 觸球出球）。
    - **產出 16 張 3x3 高解析 Contact Sheet**：全部存於 `docs/reports/reference_contact_sheets/*.jpg`，並產出結構化檢驗總報告 `docs/reports/reference_events_verification.json` 與 Markdown 審查報告 `docs/reports/reference_events_verification.md`。

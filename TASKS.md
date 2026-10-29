@@ -4,6 +4,29 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 15: PR #2 資料一致性、真值擊球確認、本機素材隔離與個人 Beta 釋出治理 (2026-10-29) — 全面完成
+- [x] **P0-1：讓驗證時間碼真正寫回資料庫（Single Source of Truth 一致性治理）**：
+  - 建立單一不可漂移權威事實來源字典 `STRIKE_EVIDENCE_MAP`，將審查確認之 Top 與 Impact 錨點直接綁定為 active events，在 `scripts/verify_reference_events_and_generate_sheets.py` 中 100% 寫回 PostgreSQL。
+  - 完全保留原始 Candidate Events 於 `calibration_params["candidate_events"]`；`calibration_params["active_events"]` 與 `event_timestamps` 100% 同步且誤差為 **0ms**。
+  - 資料庫筆數與 ID 恆定為 18 筆（16 支新 bundle + 2 支既有 fixture），維持原有 UUID，無重複記錄或垃圾資料膨脹。
+  - 撰寫自動化一致性回歸測試 `tests/test_reference_events_consistency.py`（5 項專案測試），逐支核驗 16 支影片之 DB、報告與 `/api/reference-swings`，測試結果 **5 / 5 PASSED (100%)**。
+- [x] **P0-2：修正假的 confirmed_strike 與 5W 快門間隙診斷**：
+  - 移除按球桿名批量推論邏輯，嚴格依真實影像證據判定：
+    - `confirmed_strike`（11 支，68.8%）：桿頭過球與小白球飛出瞬間清晰可見（01_Driver, 02_Wood3, 07_Iron4, 08_Iron5, 09_Iron6, 10_Iron7, 11_Iron8, 12_Iron9, 15_SW, Bonus Driver TW, Bonus Driver WAX）。
+    - `impact_estimated`（5 支，31.2%）：5W (快門間隙出球)、13_PW (後斜非正 DTL)、16_LW (後斜高拋非全揮桿)、17_Putter (特寫無全身)、Bonus SW Bunker (炸沙擊球)。
+    - `unresolved`：0 支。
+  - 03_Wood5.mp4 專項影格診斷：實測解碼 Frame 37 (1233ms) 桿身在腰部下桿中段，Frame 38 (1267ms) 桿頭接近球位，Frame 39 (1300ms) 球已飛出。確認擊球發生於 30fps 快門間隙，時間碼校正為 Frame 38 (1267ms)，標記為 `impact_estimated`，徹底排除假 confirmed。
+  - Contact Sheet 文字標籤反映真實狀態：第 8 格清晰標註 `8. [CONFIRMED_STRIKE]` 或 `8. [IMPACT_ESTIMATED]`。
+- [x] **P0-3：隔離本機素材與 Git 追蹤清理**：
+  - 本機永久安全備份：16 張 Contact Sheet JPG 已安全備份至 `~/.golfswinglab/reference_contact_sheets/`，資料庫備份保存於 `~/.golfswinglab/backups/reference_swings_backup.json`，絕不遺失。
+  - Git 追蹤清理與忽略：以 `git rm --cached` 移除 `docs/reports/reference_contact_sheets/*.jpg` 與 `docs/reports/reference_swings_backup.json`，並更新 `.gitignore`。
+  - PR 分支歷史評估：嚴格禁止 Force Push 與 Hard Reset，在最新 Commit 中乾淨移除追蹤；評估既有歷史 Commit 殘留素材僅佔用數 MB，不影響程式碼運作，建議合併時在 GitHub 採用 **Squash and merge**，將整個 PR 壓縮為單一乾淨 Commit 進入 main。
+- [x] **全鏈路驗收與釋出準備**：
+  - WebKit 原生 GUI 端到端驗收：12 步驟 100% 全數通過，時鐘同步漂移僅 2.5ms，Token 零洩漏。
+  - 後端單元與整合測試：**95 / 95 PASSED (100%)** in 200.41s。
+  - 前端 Next.js 15.5.28 建置：**9/9 靜態路由 build 0 錯誤**。
+  - 釋出判定：**READY FOR PERSONAL BETA MERGE**（請使用者於 GitHub PR #2 點選 Squash and merge）。
+
 ## Round 14: 16 支真實示範影片影格事件驗證、Contact Sheet 生成、安全備份與可信度修復交付 (2026-10-29) — 全面完成
 - [x] **P0-A：建立 16 支影片的真實事件驗證證據（影格層級運動學分析）**：
   - 真正讀取 16 支 MP4 的解碼影格，逐幀分析手腕物理極小值（Top 頂點與轉換啟動）與擊球區桿頭過球（Impact 觸球出球）。
