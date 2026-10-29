@@ -4,6 +4,24 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 16: PR #2 最終合併前素材清理與 Git 差異純淨化 (2026-10-29) — 全面完成
+- [x] **P0：移除仍然追蹤的示範媒體與未授權再散布快照**：
+  - 本機永久備份：`assets/reference_videos/` 內 12 個檔案安全備份至 `~/.golfswinglab/assets_reference_videos_backup/`；15 張 WebKit 快照備份至 `~/.golfswinglab/webkit_r2_screenshots/`。
+  - Git 索引追蹤清理：執行 `git rm --cached` 移除 12 個二進制示範素材檔案與 `docs/screenshots/webkit_r2/` 15 張截圖，從發行差異中徹底排除未授權再散布影像。
+  - 更新 `.gitignore` 防止再次提交。
+  - 驗證 `git diff main assets/ docs/screenshots/webkit_r2/` 輸出為空，發行差異純淨化。
+- [x] **P0：防護腳本在無內建 MP4 時安全跳過**：
+  - 更新 `scripts/seed_reference_library.py`，當工作目錄不存在內建 MP4 時，明確日誌輸出並安全跳過（Exit Code 0）。
+- [x] **P0：本機 Storage 與 16 支示範影片串流播放驗證**：
+  - 核驗本機 `~/.golfswinglab/storage/references/` 下 16 支正式示範影片 100% 存在且大小健全。
+  - 實測 7I、Driver、3W 的 HTTP 206 Partial Content Range 串流皆正常。
+- [x] **P1：鎖定精度成果與全量品質保證驗收**：
+  - 資料庫、API 與報告維持 0ms 漂移一致性（回歸測試 5/5 PASSED）。
+  - 後端測試套件：**95 / 95 PASSED (100%)** in 220.91s。
+  - 前端 Next.js 15.5.28 建置：**9/9 靜態路由 build 0 錯誤**。
+  - WebKit 原生 GUI 端到端驗收：12/12 步驟 100% 全數通過（時鐘同步漂移僅 2.9ms，Token 零洩漏）。
+  - 釋出判定：**READY FOR PERSONAL BETA MERGE**（請使用者於 GitHub PR #2 點選 Squash and merge）。
+
 ## Round 15: PR #2 資料一致性、真值擊球確認、本機素材隔離與個人 Beta 釋出治理 (2026-10-29) — 全面完成
 - [x] **P0-1：讓驗證時間碼真正寫回資料庫（Single Source of Truth 一致性治理）**：
   - 建立單一不可漂移權威事實來源字典 `STRIKE_EVIDENCE_MAP`，將審查確認之 Top 與 Impact 錨點直接綁定為 active events，在 `scripts/verify_reference_events_and_generate_sheets.py` 中 100% 寫回 PostgreSQL。

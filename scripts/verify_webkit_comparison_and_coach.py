@@ -36,7 +36,10 @@ from apps.api.config import get_settings
 
 SCREENSHOT_DIR = REPO_ROOT / "docs/screenshots/webkit_r2"
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+LOCAL_SCREENSHOT_DIR = Path(os.path.expanduser("~/.golfswinglab/webkit_r2_screenshots"))
+LOCAL_SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 REPORT_PATH = REPO_ROOT / "docs/reports/swing_comparison_r2_report.json"
+
 REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
@@ -181,7 +184,10 @@ class WebKitComparisonAuditor(AppKit.NSObject):
                 rep = AppKit.NSBitmapImageRep.imageRepsWithData_(tiff)[0]
                 png = rep.representationUsingType_properties_(AppKit.NSBitmapImageFileTypePNG, None)
                 png.writeToFile_atomically_(str(out_path), True)
+                local_path = LOCAL_SCREENSHOT_DIR / f"{name}.png"
+                png.writeToFile_atomically_(str(local_path), True)
                 print(f"  [SNAPSHOT] 真實 WebKit 截圖已儲存: {out_path.name}")
+
             done[0] = True
 
         self.webview.takeSnapshotWithConfiguration_completionHandler_(config, handler)

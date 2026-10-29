@@ -216,10 +216,13 @@ def seed():
                 for k, v in item_7i_data.items():
                     setattr(existing_7i, k, v)
                 logger.info("已更新 7I 技術測試素材真實標註")
+        else:
+            logger.info("assets/reference_videos/ref_7i_dtl_standard.mp4 不存在，安全跳過 7I 技術測試素材種子")
 
         # 2. 匯入 Driver 桿頭特寫示範影片（真實來源：Pexels 6541451，標註非 DTL 視角限制）
         ref_driver_path = Path("assets/reference_videos/ref_driver_closeup.mp4")
         if ref_driver_path.exists():
+
             raw_drv = ref_driver_path.read_bytes()
             sha_drv = hashlib.sha256(raw_drv).hexdigest()
             fps_drv, dur_drv, w_drv, h_drv = probe_file(ref_driver_path)
@@ -277,9 +280,12 @@ def seed():
                 for k, v in item_drv_data.items():
                     setattr(existing_drv, k, v)
                 logger.info("已更新 Driver 擊球特寫素材真實標註")
+        else:
+            logger.info("assets/reference_videos/ref_driver_closeup.mp4 不存在，安全跳過 Driver 擊球特寫素材種子")
 
         db.commit()
         logger.info("示範揮桿資料庫種子完成！")
+
 
 
 if __name__ == "__main__":

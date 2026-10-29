@@ -1,6 +1,28 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 15: PR #2 資料一致性、真值擊球確認、本機素材隔離與個人 Beta 釋出治理）
+## 最新修復狀態（Round 16: PR #2 最終合併前素材清理與 Git 差異純淨化）
+1. **P0 移除依然追蹤的示範媒體與截圖**：`PASS`
+   - **本機永久安全保留**：將 `assets/reference_videos/` 內 12 個檔案（含 2 支舊測試 MP4 與 10 張縮圖）完整備份至 `~/.golfswinglab/assets_reference_videos_backup/`；將包含使用者/第三方原片影格的 15 張 WebKit 快照備份至 `~/.golfswinglab/webkit_r2_screenshots/`。
+   - **自 Git 追蹤乾淨移除**：執行 `git rm --cached` 移除這 12 個媒體檔案與 `docs/screenshots/webkit_r2/` 全部 15 張截圖，從 PR 發行差異中徹底排除未授權再散布影像。
+   - **防護規則持久化**：更新 `.gitignore` 加入 `assets/reference_videos/*.mp4`, `*.jpg`, `*.png` 與 `docs/screenshots/webkit_r2/`，杜絕再次提交。
+   - **發行差異純淨化**：實測 `git diff main assets/ docs/screenshots/webkit_r2/` 輸出為空（差異完全為 0），PR 合併至 main 時零二進制冗餘素材。
+2. **P0 腳本無素材安全跳過防護**：`PASS`
+   - 更新 `scripts/seed_reference_library.py`，當工作目錄不存在內建 MP4 時，明確日誌輸出並優雅跳過（Exit Code 0），不影響 Docker 部署或無素材環境執行。
+3. **P0 本機 Storage 與串流播放驗證**：`PASS`
+   - 核驗本機 `~/.golfswinglab/storage/references/` 下 16 支正式示範影片 100% 存在且大小健全。
+   - 透過 API 實測 7I、Driver、3W 的 HTTP 206 Partial Content Range 串流，均回傳 HTTP 206 OK。
+4. **P1 精度成果與資料庫一致性百分之百鎖定**：`PASS`
+   - 資料庫、API 與報告維持 0ms 漂移一致性（`tests/test_reference_events_consistency.py` 5/5 PASSED）。
+   - 11 支 `confirmed_strike`（來源標記 `developer_visual_annotated`）、5 支 `impact_estimated`（含 03_Wood5 30fps 快門間隙出球 Frame 38 1267ms 診斷結論）、0 支 `unresolved`。
+5. **全量品質保證驗收**：`PASS`
+   - 後端測試套件：**95 / 95 PASSED (100%)** in 220.91s。
+   - 前端 Next.js 15.5.28 建置：**9/9 靜態路由 0 錯誤**。
+   - WebKit 原生 GUI 端到端實測：12/12 步驟全數通過（時鐘同步漂移僅 2.9ms，Top/Impact 誤差 0ms，雙側非黑畫面 Mean 111.5 / 135.0，Token 零洩漏）。
+- **最後更新時間**：2026-10-29T17:35:00+08:00
+- **當前分支**：`feat/swing-comparison-and-evidence-coach`
+- **合併判定**：**READY FOR PERSONAL BETA MERGE**（請使用者於 GitHub PR #2 點選 Squash and merge，嚴禁自行合併 main）。
+
+## 前期重大里程碑狀態（Round 15: PR #2 資料一致性、真值擊球確認、本機素材隔離與個人 Beta 釋出治理）
 1. **P0-1 驗證時間碼單一事實來源寫回資料庫**：`PASS`
    - **徹底消除報告與資料庫時間碼漂移**：建立單一權威事實來源字典 `STRIKE_EVIDENCE_MAP`，將審查確認之 Top 與 Impact 錨點直接綁定為 active events，並在 `scripts/verify_reference_events_and_generate_sheets.py` 中 100% 寫回 PostgreSQL。
    - **完全保留原始 Candidate Events**：`calibration_params["candidate_events"]` 忠實記錄初始粗估值，`calibration_params["active_events"]` 與 `event_timestamps` 100% 同步且誤差為 **0ms**。
