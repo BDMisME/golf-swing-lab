@@ -4,6 +4,39 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 18: Golf Swing Lab R3 — 離線量化姿勢教練與慢動作雙影片比較 (2026-10-30) — 全面完成
+- [x] **P0：全面關閉外部 LLM 請求（統一離線安全守衛）**：
+  - 後端核心設定統一新增 `enable_external_llm: bool = False`（支援環境變數 `GSL_ENABLE_EXTERNAL_LLM=false`）。
+  - `packages/analysis/coach.py` 中 `OpenAICompatibleCoachProvider` 與 `GeminiCoachProvider` 注入強制離線攔截，未開啟時一律安全回退為 `RuleBasedCoachProvider`，杜絕任何對外網路請求。
+  - `generate_deep_vision_insight` 強制退回規則式運動學解讀，不呼叫外部多模態 Vision API。
+  - 後端 `/api/settings` 回傳離線教練狀態標籤；前端設定頁即時反映「本機離線模式（無外部 LLM 請求）」。
+  - 專項測試 `tests/test_offline_llm_guard.py`（6 項情境包含全域關閉、無金鑰、Mock 契約測試）**6 / 6 PASSED (100%)**。
+- [x] **P1：雙影片同步慢動作播放器全面升級**：
+  - 速度切換矩陣：支援 `0.25× 超慢`, `0.5× 慢放 (預設)`, `0.75× 慢速`, `1.0× 原速`，附「↺ 回復 1.0×」快捷鍵。
+  - 切換速度不中斷：動態調整 `playbackRate`，不暫停、不重載、不跳回 0 秒、不重設 pan/zoom、不遺失 Top/Impact 對齊、保留重播循環。
+  - 雙模式分離：雙影片同步模式（Play 同步推進、時鐘平滑追趕）vs 獨立檢視模式（單側獨立播放/縮放/平移，自動停用漂移校正），並提供「🔗 一鍵回到雙影片同步」。
+  - 一鍵停格比對：「🎯 Top 停格比對」與「💥 Impact 停格比對」，一鍵精準跳轉至兩側頂點與擊球瞬間並暫停。
+  - 骨架標記開關：「🦴 骨架標記：開啟 / 隱藏」按鈕，自由切換 Clean Motion Canvas 疊圖與真實解碼純畫面。
+  - 畫面防拉伸：全面採用 `object-contain`，配合雙側獨立 Zoom/Pan，保護原始相機比例。
+- [x] **P2：離線量化姿勢比較表與一鍵慢放跳轉**：
+  - 建立量化比較引擎 `packages/analysis/posture_comparison.py`，涵蓋 4 大階段 8 項可觀測運動學指標：
+    - Address: 軀幹前傾角 (`spine_tilt_deg`)、雙手手腕基準高度 (`wrist_setup_y`)
+    - Top: 頂點前傾維持角 (`top_spine_tilt_deg`)、頭部相對位移比例 (`top_head_sway_ratio`)
+    - Impact: 擊球瞬間前傾變化 (`impact_spine_delta_deg`)、上下桿節奏比 (`tempo_ratio`)
+    - Finish: 收桿軀幹直立角 (`finish_spine_deg`)、收桿平衡晃動比 (`finish_sway_ratio`)
+  - 後端提供 `GET /api/swings/{swing_id}/posture-comparison` 端點，回傳結構化度量差異、信心度與 Drill。
+  - 前端表格即時呈現動作階段、檢測項目、我的數值、示範數值、差異、可信度與「▶ 慢放跳轉」按鈕。
+  - 點擊「▶ 慢放跳轉」自動將雙影片精準定位至該階段時間碼並以 0.5x 慢動作播放。
+- [x] **P3：Priority Fix 唯一改善重點與 Drill 練習**：
+  - 依幾何差異與信心度演算法智慧選定**唯一最優先改善焦點**（Priority Fix），避免資訊超載。
+  - 提供具體「體感口訣」、「三步驟 Drill 練習」與「下次檢測量化目標」。
+  - 嚴格誠信原則：絕不捏造或推估雷達物理量（球速、桿頭速度、飛行距離、甜蜜點、桿面角、3D 角度）。
+- [x] **自動化 WebKit 端到端驗收與品質保證**：
+  - 撰寫 `scripts/verify_webkit_r3_slowmo_and_coach.py`，原生 WebKit 6 大步驟端到端實測 **6 / 6 PASSED (100%)**。
+  - 產出脫敏驗收報告 `docs/reports/swing_comparison_r3_report.json` 與 9 張原生 GPU 截圖（存於 `~/.golfswinglab/webkit_r3_screenshots/`）。
+  - Next.js 15.5.28 正式建置通過（9/9 靜態路由 0 錯誤）。
+  - 全套後端測試套件全數通過。
+
 ## Round 17: PR #2 正式授權合併、Mac 原生 App 更新與 Personal Beta 正式部署 (2026-10-30) — 全面完成
 - [x] **正式授權安全核對與 Squash and Merge PR #2**：
   - 專案負責人明確授權執行，完成 GitHub PR 狀態與 Base/Head 核對。

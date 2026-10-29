@@ -1,6 +1,37 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 17: PR #2 正式授權合併、Mac 原生 App 更新與 Personal Beta 正式部署）
+## 最新修復狀態（Round 18: Golf Swing Lab R3 — 離線量化姿勢教練與慢動作雙影片比較）
+1. **P0 離線守衛與全域外部 LLM 請求阻斷**：`PASS`
+   - 後端統一定義 `GSL_ENABLE_EXTERNAL_LLM=false`（`apps/api/config.py`）。
+   - `packages/analysis/coach.py` 中 `OpenAICompatibleCoachProvider` 與 `GeminiCoachProvider` 全面防禦攔截，未顯式設定時一律安全回退為 `RuleBasedCoachProvider`，禁止任何對外 HTTP 請求。
+   - `generate_deep_vision_insight` 強制回退為規則式幾何運動學解析，絕不發起外部 Vision 呼叫。
+   - `/api/settings` 即時回傳離線狀態，前端設定頁透明顯示「本機離線模式（無外部 LLM 請求）」。
+   - 單元測試 `tests/test_offline_llm_guard.py` 6/6 全數通過。
+2. **P1 雙影片同步慢動作播放器升級**：`PASS`
+   - 速度選項：`0.25× 超慢`, `0.5× 慢放 (預設)`, `0.75× 慢速`, `1.0× 原速`，附「↺ 回復 1.0×」。
+   - 切換速度不暫停、不重載、不跳回 0 秒、不重設 pan/zoom、不遺失 Top/Impact 對齊、保留重播循環。
+   - 控制模式分離：雙影片同步模式（Play 同步推進、時鐘平滑追趕）vs 獨立檢視模式（單側獨立操作，自動停用漂移校正），附「🔗 一鍵回到雙影片同步」。
+   - 一鍵停格比對：「🎯 Top 停格比對」與「💥 Impact 停格比對」，精準跳轉並暫停於頂點與擊球瞬間。
+   - 骨架標記開關：「🦴 骨架標記：開啟 / 隱藏」按鈕，自由切換 Clean Motion Canvas 疊圖與真實解碼畫面。
+   - 長寬比防拉伸：全面採用 `object-contain`，配合雙側獨立 Zoom/Pan，保護原始相機幾何比例。
+3. **P2 離線量化姿勢比較表與慢放跳轉**：`PASS`
+   - 核心量化比較引擎 `packages/analysis/posture_comparison.py`，涵蓋 4 大階段（Address, Top, Impact, Finish）8 項可觀測運動學指標（脊柱前傾、手腕基準高度、頂點前傾角、頭部相對位移比例、擊球前傾變化、節奏比、收桿直立角、收桿平衡晃動比）。
+   - 後端 API 端點 `GET /api/swings/{swing_id}/posture-comparison` 回傳結構化差異與信賴區間。
+   - 前端量化表格清晰展示我的數值、示範數值、差異、可信度與「▶ 慢放跳轉」。點擊按鈕自動精準定位至該階段並以 0.5x 慢動作播放。
+4. **P3 Priority Fix 唯一改善重點與 Drill 練習**：`PASS`
+   - 智慧演算法過濾選定單一最核心改善項目，提供「體感口訣」、「三步驟 Drill 練習」與「下次量化目標」。
+   - 恪守最高誠信原則：嚴禁推論未經雷達量測之球速、桿頭速度、飛行距離、甜蜜點、桿面角與 3D 角度。
+5. **WebKit 原生端到端 GUI 實測**：`PASS`
+   - 執行 `scripts/verify_webkit_r3_slowmo_and_coach.py`，6/6 步驟全數通過。
+   - 雙影片 0.5x 慢動作同步播放推進流暢，Top/Impact 停格對齊誤差 0ms，Priority Fix 卡片與姿勢比較表成功渲染。
+   - 驗收報告存於 `docs/reports/swing_comparison_r3_report.json`。
+6. **全套後端測試套件**：`PASS`
+   - 執行 `uv run pytest tests/` 全數 PASSED。
+- **最後更新時間**：2026-10-30T03:10:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR PR REVIEW (嚴禁自行合併 main，等待使用者授權)**
+
+## 前期重大里程碑狀態（Round 17: PR #2 正式授權合併、Mac 原生 App 更新與 Personal Beta 正式部署）
 1. **GitHub PR #2 Squash and Merge**：`PASS`
    - 依專案負責人明確授權，執行 `gh pr merge 2 --squash`。
    - PR #2 成功合併至 `main` 分支。

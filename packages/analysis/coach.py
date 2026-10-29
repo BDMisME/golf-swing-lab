@@ -250,6 +250,12 @@ class OpenAICompatibleCoachProvider:
         keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport:
         base_report = await self.fallback.generate_feedback(session_summary, swing_evidence, keyframe_images)
+        try:
+            from apps.api.config import get_settings
+            if not get_settings().enable_external_llm and self.transport is None:
+                return base_report
+        except Exception:
+            pass
         if not self.api_key or self.max_budget_usd <= 0:
             return base_report
 
@@ -434,6 +440,12 @@ class GeminiCoachProvider:
         keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport:
         base_report = await self.fallback.generate_feedback(session_summary, swing_evidence, keyframe_images)
+        try:
+            from apps.api.config import get_settings
+            if not get_settings().enable_external_llm and self.transport is None:
+                return base_report
+        except Exception:
+            pass
         if not self.api_key:
             return base_report
 
@@ -679,6 +691,14 @@ def generate_deep_vision_insight(
     針對使用者點選的單一動作差異，產出結構化之深度運動學解讀。
     若無外部多模態模型，明確標註為 rule_based_advice，絕不冒充 AI 已看過影像。
     """
+    try:
+        from apps.api.config import get_settings
+        if not get_settings().enable_external_llm:
+            llm_provider = None
+            keyframe_images = None
+    except Exception:
+        pass
+
     phase_zh = {
         "address": "準備姿勢 (Address)",
         "takeaway": "起桿 (Takeaway)",

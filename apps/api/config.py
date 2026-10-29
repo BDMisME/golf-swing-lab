@@ -128,6 +128,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
     llm_max_budget_usd: float = 100.0
+    enable_external_llm: bool = Field(
+        default_factory=lambda: (
+            os.environ.get("GSL_ENABLE_EXTERNAL_LLM", "false").strip().lower() in ("true", "1", "yes")
+        ),
+        description="是否啟用外部 LLM 呼叫。R3 預設為 False（強制離線模式，絕不向外部發起請求）",
+    )
 
     # 若為 true，API 在無獨立 worker 或單一容器架構中自動於背景線程處理任務
     inline_worker_fallback: bool = True

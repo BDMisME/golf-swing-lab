@@ -45,9 +45,11 @@ from apps.api.models import (
     User,
     UserSetting,
     Video,
+    ReferenceSwing,
 )
 from apps.api.routers.audit import router as audit_router
 from apps.api.routers.reference_swings import router as reference_swings_router
+from packages.analysis.posture_comparison import compute_quantitative_posture_comparison
 from apps.api.schemas import (
     CreateExportRequest,
     CreateManualSwingRequest,
@@ -1544,6 +1546,49 @@ def get_swing_detail(
     return _serialize_segment(db, seg, include_detail=True)
 
 
+@app.get("/api/swings/{swing_id}/posture-comparison")
+def get_swing_posture_comparison(
+    swing_id: str,
+    ref_id: str | None = Query(None, description="特定示範揮桿 ID"),
+    club_type: str | None = Query(None, description="球桿分類篩選"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    R3: 離線量化姿勢比較端點 (Offline Quantitative Posture Comparison)
+    回傳 4 大階段（Address, Top, Impact, Finish）客觀可解釋的 2D 骨架與運動學差異。
+    """
+    seg = db.get(SwingSegment, swing_id)
+    if not seg:
+        raise APIError(404, "SWING_NOT_FOUND", "找不到指定的揮桿片段")
+    verify_owner(db, current_user, seg.owner_id, "swing_segment", seg.id)
+
+    ref = None
+    if ref_id:
+        ref = db.get(ReferenceSwing, ref_id)
+    if not ref:
+        target_club = club_type or "7I"
+        ref = db.scalar(
+            select(ReferenceSwing)
+            .where(ReferenceSwing.club_type == target_club)
+            .order_by(desc(ReferenceSwing.is_default))
+        )
+    if not ref:
+        ref = db.scalar(select(ReferenceSwing).order_by(desc(ReferenceSwing.is_default)))
+
+    ref_dict = {
+        "id": ref.id if ref else "",
+        "club_type": ref.club_type if ref else "7I",
+        "title": ref.title if ref else "",
+        "event_timestamps": ref.event_timestamps if ref else {},
+        "calibration_params": ref.calibration_params if ref else {},
+        "pose_artifact": ref.pose_artifact if ref else {},
+    }
+    user_serialized = _serialize_segment(db, seg, include_detail=True)
+    report = compute_quantitative_posture_comparison(user_serialized, ref_dict)
+    return report.model_dump()
+
+
 @app.post("/api/swings/{swing_id}/deep-insight")
 def get_swing_deep_insight(
     swing_id: str,
@@ -1818,7 +1863,7 @@ async def get_session_report(
     }
 
     coach_provider: GolfCoachProvider
-    if provider_type == "gemini" and api_key:
+    if s_cfg.enable_external_llm and provider_type == "gemini" and api_key:
         chosen_model = (
             (user_setting.llm_model.strip() if user_setting and user_setting.llm_model else None)
             or s_cfg.gemini_model
@@ -1828,7 +1873,7 @@ async def get_session_report(
             api_key=api_key,
             model=chosen_model,
         )
-    elif provider_type == "openai-compatible" and api_key:
+    elif s_cfg.enable_external_llm and provider_type == "openai-compatible" and api_key:
         coach_provider = OpenAICompatibleCoachProvider(
             api_key=api_key,
             base_url=(user_setting.llm_base_url if user_setting else s_cfg.llm_base_url),
@@ -1839,7 +1884,8 @@ async def get_session_report(
         coach_provider = RuleBasedCoachProvider()
 
     regenerate = request.query_params.get("regenerate") in ("true", "1")
-    cache_key = f"{sess.id}:{len(serialized_swings)}:{provider_type}"
+    active_provider = provider_type if s_cfg.enable_external_llm else "none"
+    cache_key = f"{sess.id}:{len(serialized_swings)}:{active_provider}"
 
     if not regenerate and cache_key in _COACH_REPORT_CACHE:
         coach_report_data = _COACH_REPORT_CACHE[cache_key]
@@ -2047,6 +2093,8 @@ def get_user_settings(
         "llm_model": st.llm_model,
         "has_llm_api_key": bool(st.llm_api_key_secret or get_settings().llm_api_key),
         "llm_consent_frames": st.llm_consent_frames,
+        "enable_external_llm": get_settings().enable_external_llm,
+        "coach_mode": "offline" if not get_settings().enable_external_llm else "external_allowed",
     }
 
 

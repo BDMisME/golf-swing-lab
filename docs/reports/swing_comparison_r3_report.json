@@ -1,0 +1,139 @@
+{
+  "title": "Golf Swing Lab — R3 Offline Coach & Slow-Mo Comparison Acceptance Report",
+  "timestamp": "2026-10-29T19:02:37.404522+00:00",
+  "git": {
+    "commit_sha": "2d9b83637297b6cd0042213dc264d47eb6631b7b",
+    "is_dirty": true
+  },
+  "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
+  "video_metadata": {
+    "video_id": "39608133-6f60-42aa-9fb3-a20326a3a94a",
+    "video_name": "2分鐘.mov",
+    "sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
+    "duration_ms": 139053,
+    "resolution": "1080x1920",
+    "proxy_resolution": "360x640"
+  },
+  "acceptance_criteria_audit": {
+    "p0_offline_guard_active": true,
+    "p1_default_slow_motion_05x": true,
+    "p1_ultra_slow_motion_025x": true,
+    "p1_reset_speed_10x": true,
+    "p1_independent_mode_drift_disabled": true,
+    "p1_return_to_sync_mode": true,
+    "p1_freeze_anchor_buttons": true,
+    "p1_skeleton_toggle": true,
+    "p2_quantitative_posture_table_4_phases": true,
+    "p2_metric_jump_and_slow_play": true,
+    "p3_priority_fix_card_and_drill": true,
+    "zero_hallucination_guarantee": true
+  },
+  "all_passed": true,
+  "step_results": [
+    {
+      "step": "step1_default_slowmo_and_offline_badge",
+      "info": {
+        "hasOfflineBadge": true,
+        "hasSlowMoSection": true,
+        "hasDefault05x": true,
+        "hasFreezeBtns": true,
+        "hasSkeletonBtn": true
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step2_slowmo_025x_playback",
+      "rates_info": {
+        "userRate": 0.25,
+        "refRate": 0.25,
+        "userPaused": false,
+        "refPaused": false,
+        "userTime": 119.24832835422367,
+        "refTime": 0.02002871170127821
+      },
+      "user_advancing": true,
+      "ref_advancing": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step3_reset_speed_10x",
+      "rates_info": {
+        "userRate": 1,
+        "refRate": 1
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step4_independent_mode_and_return_sync",
+      "has_ind_badge": true,
+      "has_return_btn": true,
+      "has_sync_badge": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step5_skeleton_and_freeze_buttons",
+      "top_frozen": true,
+      "user_top_exact": true,
+      "skeleton_toggle_res": "TOGGLED: 🦴 骨架標記：開啟 -> 🦴 骨架標記：開啟",
+      "status": "PASS"
+    },
+    {
+      "step": "step6_quantitative_posture_table_and_priority_fix",
+      "table_info": {
+        "hasSectionTitle": true,
+        "hasPriorityFix": true,
+        "hasDrill": true,
+        "hasDisclaimer": true,
+        "rowCount": 8,
+        "hasSlowJumpBtn": true
+      },
+      "jump_result": "JUMP_CLICKED",
+      "playback_after_jump": {
+        "userRate": 0.5,
+        "refRate": 0.46,
+        "userPaused": false,
+        "refPaused": false,
+        "userTime": 119.84263114508953
+      },
+      "status": "PASS"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "r3_01_default_slowmo_and_offline_badge",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_01_default_slowmo_and_offline_badge.png"
+    },
+    {
+      "name": "r3_02_slowmo_025x_playing",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_02_slowmo_025x_playing.png"
+    },
+    {
+      "name": "r3_03_speed_reset_10x",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_03_speed_reset_10x.png"
+    },
+    {
+      "name": "r3_04_independent_mode_active",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_04_independent_mode_active.png"
+    },
+    {
+      "name": "r3_05_returned_to_sync_mode",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_05_returned_to_sync_mode.png"
+    },
+    {
+      "name": "r3_06_top_freeze_alignment",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_06_top_freeze_alignment.png"
+    },
+    {
+      "name": "r3_07_skeleton_toggled",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_07_skeleton_toggled.png"
+    },
+    {
+      "name": "r3_08_quantitative_posture_table",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_08_quantitative_posture_table.png"
+    },
+    {
+      "name": "r3_09_metric_jump_slowmo_playback",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_09_metric_jump_slowmo_playback.png"
+    }
+  ]
+}
