@@ -4,6 +4,29 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 17: PR #2 正式授權合併、Mac 原生 App 更新與 Personal Beta 正式部署 (2026-10-30) — 全面完成
+- [x] **正式授權安全核對與 Squash and Merge PR #2**：
+  - 專案負責人明確授權執行，完成 GitHub PR 狀態與 Base/Head 核對。
+  - 成功執行 `gh pr merge 2 --squash`，合併至 main。
+  - GitHub Merge Commit SHA：`8e369b47c841b6c286a8905fc15b5a98300b75de`。
+  - 本機 main 同步至該 Commit，工作樹乾淨零二進制殘留。
+- [x] **重新編譯與安裝 Mac 原生桌面 App**：
+  - 執行 `scripts/build_mac_app.sh`，以 `clang` 編譯原生 arm64 Mach-O launcher。
+  - 封裝並安裝至 `/Applications/Golf Swing Lab.app`。
+  - 驗證 codesign 簽名與 LaunchServices 註冊成功。
+- [x] **Reference Library 18 筆示範庫全面驗核**：
+  - 執行 `scripts/verify_18_reference_swings.py` 逐筆驗證資料庫與本機儲存庫。
+  - 18 筆示範檔案全數存在、`ffprobe` 100% 成功解碼（0 缺失、0 解碼錯誤）。
+  - 16 支正式示範：11 支 `confirmed_strike`（`developer_visual_annotated`），5 支 `impact_estimated`（`estimated`），0 支 `unresolved`。
+  - 2 支舊有 fixture：`confirmed_strike`（`fixture_default`）。
+  - 18 筆示範影片皆具備可靠自然時間同步能力（`impact_ms > top_ms`）。
+- [x] **全量服務構建與端到端實測**：
+  - Next.js 15.5.28 正式建置通過（9/9 靜態路由）。
+  - FastAPI (port 28000) 與 Next.js (port 23000) 正常服務中，`/healthz` 與 `/readyz` 100% 通過。
+  - WebKit 原生 GUI 端到端驗收 12/12 步驟全數通過（時鐘同步漂移 2.6ms，Top/Impact 誤差 0ms，雙側解碼非黑畫面，Token 零洩漏）。
+  - 後端測試套件：**95 / 95 PASSED (100%)** in 216.56s。
+- [x] **正式交付狀態**：**GOLF SWING LAB R2 — PERSONAL BETA DEPLOYED**。
+
 ## Round 16: PR #2 最終合併前素材清理與 Git 差異純淨化 (2026-10-29) — 全面完成
 - [x] **P0：移除仍然追蹤的示範媒體與未授權再散布快照**：
   - 本機永久備份：`assets/reference_videos/` 內 12 個檔案安全備份至 `~/.golfswinglab/assets_reference_videos_backup/`；15 張 WebKit 快照備份至 `~/.golfswinglab/webkit_r2_screenshots/`。

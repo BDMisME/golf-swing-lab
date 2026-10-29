@@ -1,6 +1,38 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 16: PR #2 最終合併前素材清理與 Git 差異純淨化）
+## 最新修復狀態（Round 17: PR #2 正式授權合併、Mac 原生 App 更新與 Personal Beta 正式部署）
+1. **GitHub PR #2 Squash and Merge**：`PASS`
+   - 依專案負責人明確授權，執行 `gh pr merge 2 --squash`。
+   - PR #2 成功合併至 `main` 分支。
+   - GitHub Merge Commit SHA：`8e369b47c841b6c286a8905fc15b5a98300b75de`。
+   - 本機 `main` 分支已完全同步至最新 HEAD，零二進制媒體殘留進入歷史。
+2. **Mac 原生 App 重新編譯與安裝**：`PASS`
+   - 執行 `scripts/build_mac_app.sh`，使用 `clang` 編譯原生 arm64 Mach-O 二進制 Launcher (`GolfSwingLab`)。
+   - 封裝並安裝至 `/Applications/Golf Swing Lab.app`。
+   - 通過 macOS Ad-hoc codesign 驗證與 LaunchServices 註冊。
+3. **Reference Library 18 筆資料與檔案完整性核對**：`PASS`
+   - 執行 `scripts/verify_18_reference_swings.py` 逐筆驗證資料庫與儲存庫。
+   - 18 筆示範檔案全數存在、`ffprobe` 100% 成功解碼（0 缺失、0 解碼錯誤）。
+   - 16 支正式 bundle 中：11 支 `confirmed_strike`（來源 `developer_visual_annotated`），5 支 `impact_estimated`（來源 `estimated`），0 支 `unresolved`。
+   - 2 支既有 fixture 為 `confirmed_strike`（`fixture_default`）。
+   - 18 筆示範皆具備可靠同步錨點（`impact_ms > top_ms`）。
+   - 產出詳細驗證報告 `docs/reports/reference_library_18_verification.json`。
+4. **前端與後端服務驗收**：`PASS`
+   - Next.js 15.5.28 正式建置通過（9/9 靜態路由編譯無誤）。
+   - 後端 FastAPI (port 28000) 與前端 Next.js (port 23000) 最新 main 程式碼熱啟動，`/healthz` 與 `/readyz` 100% 通過。
+5. **WebKit 原生 GUI 端到端驗收**：`PASS`
+   - 執行 `scripts/verify_webkit_comparison_and_coach.py`，12/12 步驟全數通過（PASS）。
+   - 雙影片同步播放時鐘漂移僅 2.6ms（遠低於 150ms 閾值），Top/Impact 跳轉精準度誤差 0ms。
+   - 左右並排與上下堆疊兩側均非黑畫面（User mean 111.5, Ref mean 135.0）。
+   - 驗收報告 `docs/reports/swing_comparison_r2_report.json` 脫敏完成，Token 零洩漏。
+6. **全套後端測試套件**：`PASS`
+   - 執行 `uv run pytest tests/`：**95 / 95 PASSED (100%)** in 216.56s。
+- **最後更新時間**：2026-10-30T02:12:00+08:00
+- **當前分支**：`main`
+- **當前 Commit**：`8e369b47c841b6c286a8905fc15b5a98300b75de`
+- **正式判定**：**GOLF SWING LAB R2 — PERSONAL BETA DEPLOYED**
+
+## 前期重大里程碑狀態（Round 16: PR #2 最終合併前素材清理與 Git 差異純淨化）
 1. **P0 移除依然追蹤的示範媒體與截圖**：`PASS`
    - **本機永久安全保留**：將 `assets/reference_videos/` 內 12 個檔案（含 2 支舊測試 MP4 與 10 張縮圖）完整備份至 `~/.golfswinglab/assets_reference_videos_backup/`；將包含使用者/第三方原片影格的 15 張 WebKit 快照備份至 `~/.golfswinglab/webkit_r2_screenshots/`。
    - **自 Git 追蹤乾淨移除**：執行 `git rm --cached` 移除這 12 個媒體檔案與 `docs/screenshots/webkit_r2/` 全部 15 張截圖，從 PR 發行差異中徹底排除未授權再散布影像。
