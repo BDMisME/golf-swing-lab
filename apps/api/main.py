@@ -1247,6 +1247,13 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
     event_map = {e.event_name: e.time_ms for e in events}
 
     video_row = db.get(Video, seg.video_id)
+    vw = video_row.width if video_row else 0
+    vh = video_row.height if video_row else 0
+    vrot = (video_row.rotation or 0) if video_row else 0
+    if vrot in (90, 270, -90, -270) and vw > 0 and vh > 0:
+        vw, vh = vh, vw
+    aspect_val = round(vw / vh, 4) if (vw > 0 and vh > 0) else None
+
     cov_val = score.coverage if score else 0.0
     q_meta = (artifact.quality_metadata if artifact and artifact.quality_metadata else {}) or {}
     r_flags = seg.review_flags_json or []
@@ -1261,6 +1268,10 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
         "id": seg.id,
         "video_id": seg.video_id,
         "session_id": video_row.session_id if video_row else "",
+        "video_width": vw,
+        "video_height": vh,
+        "video_rotation": vrot,
+        "aspect_ratio": aspect_val,
         "sequence_no": seg.sequence_no,
         "start_ms": seg.start_ms,
         "end_ms": seg.end_ms,
@@ -1588,14 +1599,26 @@ def get_swing_posture_comparison(
             .order_by(desc(ReferenceSwing.is_default), desc(ReferenceSwing.imported_at))
         )
 
+    ref_calib = dict(ref.calibration_params or {}) if ref else {}
+    ref_w = ref_calib.get("video_width") or 0
+    ref_h = ref_calib.get("video_height") or 0
+    ref_rot = ref_calib.get("video_rotation") or 0
+    if ref_rot in (90, 270, -90, -270) and ref_w > 0 and ref_h > 0:
+        ref_w, ref_h = ref_h, ref_w
+    ref_aspect = ref_calib.get("aspect_ratio") or (round(ref_w / ref_h, 4) if (ref_w > 0 and ref_h > 0) else None)
+
     ref_dict = {
         "id": ref.id if ref else "",
         "club_type": target_club or "7I",
         "title": ref.title if ref else "",
         "camera_angle": ref.camera_angle if ref else "DTL",
         "event_timestamps": ref.event_timestamps if ref else {},
-        "calibration_params": ref.calibration_params if ref else {},
+        "calibration_params": ref_calib,
         "pose_artifact": ref.pose_artifact if ref else {},
+        "video_width": ref_w,
+        "video_height": ref_h,
+        "video_rotation": ref_rot,
+        "aspect_ratio": ref_aspect,
     }
     user_serialized = _serialize_segment(db, seg, include_detail=True)
     report = compute_quantitative_posture_comparison(user_serialized, ref_dict)

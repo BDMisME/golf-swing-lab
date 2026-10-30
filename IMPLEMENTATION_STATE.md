@@ -1,6 +1,39 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 19: Golf Swing Lab R3 — Real Pose Evidence & Offline Integrity 修復）
+## 最新修復狀態（Round 20: Golf Swing Lab R3 — Final Geometry Integrity & Merge Gate）
+1. **P0-A 2D 影像長寬比等比例校正（Isotropic Coordinate Space）**：`PASS`
+   - 重構 `packages/analysis/posture_comparison.py`，全面實作等比例影像座標系轉換：
+     $$x_{\text{iso}} = x_{\text{norm}} \cdot \frac{W_{\text{display}}}{H_{\text{display}}} = x_{\text{norm}} \cdot A, \quad y_{\text{iso}} = y_{\text{norm}}$$
+   - 徹底根除 iPhone 直式（如 1080×1920, $A=0.5625$）與示範影片橫式（如 640×360, $A=1.7778$）之間直接使用歸一化座標造成高達 $20^\circ \sim 30^\circ$ 的幾何拉伸失真（實測相同 30° 前傾動作，未校正前角度差距高達 $27.75^\circ$，校正後真實差距降至 $<0.1^\circ$）。
+   - 支援 iPhone 影片旋轉 Metadata（90° / 270°）自動交換寬高，動態解析真實顯示長寬比。
+   - 尺度不變性（Scale Invariance）：實測 1080×1920 與 540×960（相同長寬比）在等比例座標系下前傾角與位移比誤差為 $0.00^\circ$。
+   - 軀幹長度正規化：所有位移與距離皆在等比例座標系下以雙肩中點至雙髖中點歐氏長度無量綱化，嚴禁未標定之公分或英吋。
+   - 缺少寬高或長寬比資訊時，系統優雅降級為 `status="insufficient_evidence"`、`delta=None`，絕不崩潰或妄斷差異。
+2. **P0-B 跨長寬比與解析度幾何不變性專項測試**：`PASS`
+   - `tests/test_quantitative_posture_comparison.py` 新增 4 項專項幾何測試：
+     - `test_cross_aspect_ratio_invariance_portrait_vs_landscape`: 直式 iPhone vs 橫式示範真實前傾角一致性驗證。
+     - `test_resolution_scaling_invariance`: 1080×1920 vs 540×960 尺度不變性驗證。
+     - `test_rotation_metadata_dimension_swap`: 1920×1080 帶 rotation: 90/270 自動對調直式驗證。
+     - `test_missing_resolution_graceful_handling`: 缺少長寬比時優雅降級驗證。
+3. **P0-C 時序邊界與事件互斥收緊**：`PASS`
+   - Top 與 Impact 互斥約束：實作 `forbidden_times`，Top 不得借用 Impact 影格，Impact 亦不得借用 Top 影格。單一影格影片中，Impact 找不到獨立影格時誠實回報缺少證據，絕不捏造相同姿勢。
+   - 移除所有假時間偏移：缺少 Top 或 Impact 時間碼時，絕不私自使用固定偏移（如 +333ms, +1200ms），相關指標誠實標記為 `insufficient_evidence`。
+   - 證據精確追蹤：`user_evidence` 與 `ref_evidence` 嚴格記錄選用影格時間碼與事件標註時間之誤差 `frame_time_error_ms`。
+4. **P1-A 量化可信度與元資料揭露**：`PASS`
+   - 報告元資料注入 `geometry_calibration` 物件（記錄雙方解析度、長寬比、座標系標籤與長寬比校正免責聲明）。
+   - 理論常模明確標註為「實驗性參考區間（非專業認證標準）」。
+5. **P1-B 前端 UI 幾何校正提示**：`PASS`
+   - `SwingComparisonPlayer.tsx` 整合 `geometry_calibration`，頂部即時呈現「📐 2D 影像長寬比等比例校正已啟用（Isotropic Coordinate Space）」徽章與雙方長寬比數值展示。
+6. **P1-C 端到端全量驗證與 WebKit 實測**：`PASS`
+   - 專項測試：`tests/test_quantitative_posture_comparison.py` 17 / 17 PASSED (100%)。
+   - 全套後端測試套件：**121 / 121 PASSED (100%)** in 210.96s。
+   - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+   - macOS 原生 WebKit WKWebView 6 大步驟實測全數通過（PASS），產出真實截圖與報告 `docs/reports/swing_comparison_r3_report.json`。
+- **最後更新時間**：2026-10-30T18:05:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR PR REVIEW (嚴禁自行合併 main，等待使用者授權)**
+
+## 前期重大里程碑狀態（Round 19: Golf Swing Lab R3 — Real Pose Evidence & Offline Integrity 修復）
 1. **P0-A 真實 Pose 幾何量測與假常數徹底拔除**：`PASS`
    - 重構 `packages/analysis/posture_comparison.py`，徹底移除所有寫死假常數（`ref_addr_tilt=40.0`, `ref_spine_delta=1.8`, `ref_head_top_pct=3.5`, `ref_tempo=3.0`, `user_hip_clear=11.5`, `ref_hip_clear=14.0`, `ref_finish_score=95.0` 等）。
    - 純粹從雙方真實關鍵影格（`keyframes_json` / `landmarks`）計算，包含雙肩中點、雙髖中點、手腕中點、頭部鼻尖。

@@ -4,6 +4,30 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 20: Golf Swing Lab R3 — Final Geometry Integrity & Merge Gate (2026-10-30) — 全面完成
+- [x] **P0-A：2D 影像長寬比等比例校正（Isotropic Coordinate Space）**：
+  - 實作等比例座標轉換：$x_{\text{iso}} = x_{\text{norm}} \cdot A$, $y_{\text{iso}} = y_{\text{norm}}$，徹底消除直式（1080×1920，A=0.5625）與橫式（640×360，A=1.7778）間高達 27.75° 之拉伸失真（校正後真實角度差距 <0.1°）。
+  - 自動偵測與處理 90°/270° 旋轉 Metadata，正確交換寬高。
+  - 尺度不變性（Scale Invariance）：1080×1920 vs 540×960（相同長寬比）前傾角與位移比 100% 一致（誤差 0.00°）。
+  - 軀幹長度正規化：所有距離均在等比例座標系下以雙肩雙髖中點歐氏長度無量綱化，嚴禁未標定公分或英吋。
+  - 缺少長寬比資訊時優雅降級為 `status="insufficient_evidence"`、`delta=None`。
+- [x] **P0-B：跨長寬比與解析度幾何不變性專項測試**：
+  - `tests/test_quantitative_posture_comparison.py` 新增 4 項專項測試（跨比例、尺度不變性、旋轉長寬對調、缺少解析度降級），全數通過。
+- [x] **P0-C：時序邊界與事件互斥收緊**：
+  - Top 與 Impact 互斥：實作 `forbidden_times`，禁止共用影格；單一影格影片中 Impact 找不到獨立影格誠實標記為缺少證據。
+  - 移除所有假時間偏移：缺少 Top 或 Impact 時間碼時不使用固定偏移（+333ms/+1200ms），標記為 `insufficient_evidence`。
+  - 證據追蹤：`user_evidence` 與 `ref_evidence` 記錄 `frame_time_error_ms`。
+- [x] **P1-A：量化可信度與元資料揭露**：
+  - 報告注入 `geometry_calibration` 物件（記錄寬高、長寬比、座標系標籤與免責聲明）。
+  - 理論常模明確標註為「實驗性參考區間（非專業認證標準）」。
+- [x] **P1-B：前端 UI 幾何校正提示**：
+  - `SwingComparisonPlayer.tsx` 顯示「📐 2D 影像長寬比等比例校正已啟用（Isotropic Coordinate Space）」徽章與長寬比數值展示。
+- [x] **P1-C：端到端全量驗證與 WebKit 實測**：
+  - 後端專項測試：17 / 17 PASSED (100%)。
+  - 全套測試套件：**121 / 121 PASSED (100%)** in 210.96s。
+  - Next.js 15.5.28 正式建置：9 / 9 靜態路由編譯無誤 (0 錯誤)。
+  - WebKit 原生 GUI 6 大步驟 100% 通過（`swing_comparison_r3_report.json`）。
+
 ## Round 19: Golf Swing Lab R3 — Real Pose Evidence & Offline Integrity 修復 (2026-10-30) — 全面完成
 - [x] **P0-A：真實 Pose 幾何量測與假常數徹底拔除**：
   - 徹底移除 `posture_comparison.py` 所有寫死常數（`ref_addr_tilt=40.0`, `ref_spine_delta=1.8`, `ref_head_top_pct=3.5`, `ref_tempo=3.0`, `user_hip_clear=11.5`, `ref_hip_clear=14.0`, `ref_finish_score=95.0` 等）。

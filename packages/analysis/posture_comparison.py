@@ -2,13 +2,26 @@
 packages/analysis/posture_comparison.py
 =======================================
 Golf Swing Lab R3 — 離線真實量化姿勢比較引擎 (Real Pose Offline Posture Comparison)
-嚴格遵循最高誠信原則（Truthfulness & Anti-Hallucination）：
-1. 僅使用雙方實際解碼之 2D 骨架關鍵點（MediaPipe 2D Landmarks），由真實軀幹長度 (Torso Length) 進行無量綱尺度正規化。
-2. 嚴禁使用任何寫死常數假裝為示範球員數值（如 ref_addr_tilt=40.0, ref_tempo=3.0, ref_finish=95.0 等）。
-3. 缺少任何一方 Pose、關鍵點可見度不足 (<0.35) 或鏡頭視角不相容時，一律誠實標示為 N/A 與 insufficient_evidence / not_comparable，絕不胡亂湊數。
-4. 若示範影片為慢動作素材，嚴禁將播放秒數推算為示範 Tempo，示範 Tempo 明確標記為 N/A (慢動作素材)。
-5. 提供獨立「理論參考常模」欄位，標明依據，與示範球員實際量測數值嚴格分離。
-6. Priority Fix 僅在具備充足證據與真實顯著差異時產生；資料不足時絕不編造動作缺點或假 Drill。
+恪守最高誠信原則（Truthfulness & Anti-Hallucination）：
+1. 影像座標等比例長寬比校正（Isotropic Aspect Ratio Correction）：
+   - MediaPipe / YOLO 歸一化座標 x_norm, y_norm 分別被影像寬度與高度正規化至 [0, 1]。
+   - 若直接計算 atan2(abs(dx), dy)，在直式 (9:16) 與橫式 (16:9) 影片間會產生高達 20°~30° 的人為拉伸失真。
+   - 本引擎將所有座標轉換至以高度為尺標的等比例 2D 平面座標系：
+     x_iso = x_norm * (Display_Width / Display_Height) = x_norm * aspect_ratio
+     y_iso = y_norm
+     所有角度 atan2(abs(dx_iso), dy_iso)、歐氏距離與軀幹長度均在該物理等比例座標系下計算。
+2. 嚴格收緊事件關鍵影格邊界約束：
+   - Address、Top、Impact、Finish 各自擁有獨立事件證據與時間碼，嚴禁使用固定偏移 (+1200ms, +333ms) 捏造事件。
+   - Top 絕對不可使用 Impact 影格冒充；Impact 亦不可使用 Top 影格冒充。
+   - 精確追蹤影格選用時間與事件標註時間之誤差 (frame_time_error_ms)。
+3. 嚴禁寫死常數：
+   - 示範球員數值 (ref_value) 100% 來自示範影片真實骨架；缺少或不足時誠實輸出 None / N/A。
+   - 理論常模獨立標明為「實驗性參考區間（非專業認證標準）」，不冒充專業認證真理。
+4. 示範慢動作素材保護：
+   - 慢動作示範影片嚴禁推算假 Tempo，明確標示為 N/A (慢動作素材不提供假Tempo)。
+5. 視角與幾何相容性檢查：
+   - 非標準 DTL 視角標記 not_comparable；缺少寬高比資訊時標記 insufficient_evidence。
+   - Priority Fix 唯有在幾何相容、長寬比校正齊全且具實質顯著差異時方可產出，無異常時誠實回報無顯著差異。
 """
 
 from __future__ import annotations
@@ -30,12 +43,14 @@ class PostureMetricComparison(BaseModel):
     delta: float | None
     delta_display: str
     unit: str
-    general_benchmark_range: str  # 理論常模與說明（獨立欄位，不可冒充示範球員數值）
+    general_benchmark_range: str  # 實驗性參考區間（獨立欄位，不可冒充示範球員數值）
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     is_reliable: bool = True
     is_comparable: bool = True
     status: str = "optimal"  # optimal | moderate_diff | significant_diff | insufficient_evidence | not_comparable
     evaluation_text: str
+    geometry_coord_system: str = "isotropic_height_normalized"
+    event_accuracy_ms: int | None = None
     user_evidence: dict[str, Any] = Field(default_factory=dict)
     ref_evidence: dict[str, Any] = Field(default_factory=dict)
     target_jump_ms: int
@@ -56,19 +71,24 @@ class QuantitativePostureReport(BaseModel):
     retest_metric_target: str | None = None
     priority_fix: dict[str, Any] | None = None
     camera_compatibility: dict[str, Any] = Field(default_factory=dict)
+    geometry_calibration: dict[str, Any] = Field(default_factory=dict)
     disclaimer: str = (
         "【最高誠信原則說明】本報告所有數值均為 2D DTL 單相機平面幾何量測，"
-        "已由軀幹長度正規化；非 3D 空間絕對座標，不推測未量測之球速、距離或桿面角。"
+        "已由畫面長寬比等比例校正（Isotropic Aspect Ratio Correction）並由受測者軀幹長度正規化；"
+        "非 3D 空間絕對座標，不推測未量測之球速、距離或桿面角。長寬比校正僅消除影像像素縮放失真，"
+        "不消除相機放置高度、透視視角或鏡頭畸變差異。"
     )
     truthfulness_notice: str = (
         "【最高誠信原則說明】本報告所有數值均為 2D DTL 單相機平面幾何量測，"
-        "已由軀幹長度正規化；非 3D 空間絕對座標，不推測未量測之球速、距離或桿面角。"
+        "已由畫面長寬比等比例校正（Isotropic Aspect Ratio Correction）並由受測者軀幹長度正規化；"
+        "非 3D 空間絕對座標，不推測未量測之球速、距離或桿面角。長寬比校正僅消除影像像素縮放失真，"
+        "不消除相機放置高度、透視視角或鏡頭畸變差異。"
     )
     is_offline_mode: bool = True
 
 
 # =========================================================================
-# 輔助計算函數：純幾何運動學計算（無任何寫死常態替代值）
+# 輔助計算函數：純幾何運動學計算與等比例座標轉換
 # =========================================================================
 
 def _safe_float(val: Any) -> float | None:
@@ -95,10 +115,84 @@ def _get_lm_xyv(pt: Any) -> tuple[float, float, float] | None:
     return (x, y, v if v is not None else 0.5)
 
 
-def _midpoint_xyv(lm_dict: dict[str, Any], k1: str, k2: str) -> tuple[float, float, float] | None:
-    """計算兩個關鍵點之中點座標與可見度。"""
-    p1 = _get_lm_xyv(lm_dict.get(k1))
-    p2 = _get_lm_xyv(lm_dict.get(k2))
+def _extract_display_dimensions_and_aspect(
+    swing: dict[str, Any],
+) -> tuple[int | None, int | None, float | None]:
+    """
+    從揮桿資料字典提取影像顯示寬高與長寬比 (Aspect Ratio = Display Width / Display Height)。
+    自動處理 90°/270° 旋轉 Metadata 交換長寬。
+    """
+    if not isinstance(swing, dict):
+        return None, None, None
+
+    direct_aspect = _safe_float(swing.get("aspect_ratio"))
+    calib = swing.get("calibration_params") or {}
+    q_meta = swing.get("quality_metadata") or {}
+    vid_meta = swing.get("video") or {}
+
+    w = (
+        _safe_float(swing.get("video_width"))
+        or _safe_float(calib.get("video_width"))
+        or _safe_float(vid_meta.get("width"))
+        or _safe_float(q_meta.get("video_width"))
+    )
+    h = (
+        _safe_float(swing.get("video_height"))
+        or _safe_float(calib.get("video_height"))
+        or _safe_float(vid_meta.get("height"))
+        or _safe_float(q_meta.get("video_height"))
+    )
+    rot = (
+        _safe_float(swing.get("video_rotation"))
+        or _safe_float(calib.get("video_rotation"))
+        or _safe_float(vid_meta.get("rotation"))
+        or 0.0
+    )
+
+    if w and h and w > 0 and h > 0:
+        w_int = int(round(w))
+        h_int = int(round(h))
+        rot_int = int(round(rot))
+        if rot_int in (90, 270, -90, -270):
+            w_int, h_int = h_int, w_int
+        aspect = round(w_int / h_int, 4)
+        return w_int, h_int, aspect
+
+    if direct_aspect and direct_aspect > 0:
+        return None, None, round(direct_aspect, 4)
+
+    return None, None, None
+
+
+def _make_isotropic_landmarks(
+    lm_dict: dict[str, Any] | None,
+    aspect_ratio: float | None,
+) -> dict[str, tuple[float, float, float]] | None:
+    """
+    將 MediaPipe / YOLO 歸一化 [0, 1] 關鍵點轉換為以影像高度為基準的等比例 (Isotropic) 2D 座標。
+    x_iso = x_norm * (W / H) = x_norm * aspect_ratio
+    y_iso = y_norm
+    若缺少長寬比資訊，回傳 None（標記幾何資訊不足，不推算 2D 差異）。
+    """
+    if not lm_dict or not aspect_ratio or aspect_ratio <= 0:
+        return None
+    iso_dict: dict[str, tuple[float, float, float]] = {}
+    for k, v in lm_dict.items():
+        if isinstance(v, dict):
+            pt = _get_lm_xyv(v)
+            if pt is not None:
+                iso_dict[k] = (pt[0] * aspect_ratio, pt[1], pt[2])
+    return iso_dict if iso_dict else None
+
+
+def _midpoint_xyv(
+    lm_dict: dict[str, tuple[float, float, float]],
+    k1: str,
+    k2: str,
+) -> tuple[float, float, float] | None:
+    """計算兩個等比例關鍵點之中點座標與可見度。"""
+    p1 = lm_dict.get(k1)
+    p2 = lm_dict.get(k2)
     if not p1 and not p2:
         return None
     if p1 and not p2:
@@ -115,8 +209,8 @@ def _midpoint_xyv(lm_dict: dict[str, Any], k1: str, k2: str) -> tuple[float, flo
     return (mx, my, mv)
 
 
-def _compute_torso_length(lm_dict: dict[str, Any]) -> tuple[float | None, float]:
-    """計算雙肩中點至雙髖中點之 2D 歐氏長度 (作為正規化尺標)。"""
+def _compute_torso_length(lm_dict: dict[str, tuple[float, float, float]]) -> tuple[float | None, float]:
+    """計算雙肩中點至雙髖中點在等比例座標系下之 2D 歐氏長度 (作為正規化尺標)。"""
     sh = _midpoint_xyv(lm_dict, "left_shoulder", "right_shoulder")
     hp = _midpoint_xyv(lm_dict, "left_hip", "right_hip")
     if not sh or not hp:
@@ -130,8 +224,8 @@ def _compute_torso_length(lm_dict: dict[str, Any]) -> tuple[float | None, float]
     return dist, conf
 
 
-def _compute_spine_tilt_deg(lm_dict: dict[str, Any]) -> tuple[float | None, float]:
-    """計算肩中點與髖中點連線相對於垂直線之 2D DTL 前傾角度。"""
+def _compute_spine_tilt_deg(lm_dict: dict[str, tuple[float, float, float]]) -> tuple[float | None, float]:
+    """計算肩中點與髖中點連線在等比例座標系下相對於垂直線之 2D DTL 前傾角度。"""
     sh = _midpoint_xyv(lm_dict, "left_shoulder", "right_shoulder")
     hp = _midpoint_xyv(lm_dict, "left_hip", "right_hip")
     if not sh or not hp:
@@ -145,13 +239,15 @@ def _compute_spine_tilt_deg(lm_dict: dict[str, Any]) -> tuple[float | None, floa
     return angle, conf
 
 
-def _compute_wrist_height_ratio(lm_dict: dict[str, Any], torso_len: float) -> tuple[float | None, float]:
-    """計算雙手手腕中點相對於雙髖中點之垂直高度比 (% of torso)。"""
+def _compute_wrist_height_ratio(
+    lm_dict: dict[str, tuple[float, float, float]],
+    torso_len: float,
+) -> tuple[float | None, float]:
+    """計算雙手手腕中點相對於雙髖中點在等比例座標系下之垂直高度比 (% of torso)。"""
     wr = _midpoint_xyv(lm_dict, "left_wrist", "right_wrist")
     hp = _midpoint_xyv(lm_dict, "left_hip", "right_hip")
     if not wr or not hp or torso_len <= 0.04:
         return None, 0.0
-    # 影像 y 向下，手腕在髖部下方時 (wr[1] > hp[1])，垂直位移為負值
     vert_delta = hp[1] - wr[1]
     ratio = (vert_delta / torso_len) * 100.0
     conf = min(wr[2], hp[2])
@@ -159,13 +255,13 @@ def _compute_wrist_height_ratio(lm_dict: dict[str, Any], torso_len: float) -> tu
 
 
 def _compute_head_displacement_pct(
-    addr_lms: dict[str, Any],
-    target_lms: dict[str, Any],
+    addr_lms: dict[str, tuple[float, float, float]],
+    target_lms: dict[str, tuple[float, float, float]],
     torso_len: float,
 ) -> tuple[float | None, float]:
-    """計算目標階段頭部 (nose) 相對站姿頭部之 2D 歐氏位移比例 (% of torso)。"""
-    n1 = _get_lm_xyv(addr_lms.get("nose"))
-    n2 = _get_lm_xyv(target_lms.get("nose"))
+    """計算目標階段頭部 (nose) 相對站姿頭部在等比例座標系下之 2D 歐氏位移比例 (% of torso)。"""
+    n1 = addr_lms.get("nose")
+    n2 = target_lms.get("nose")
     if not n1 or not n2 or torso_len <= 0.04:
         return None, 0.0
     dx = n2[0] - n1[0]
@@ -177,16 +273,15 @@ def _compute_head_displacement_pct(
 
 
 def _compute_hip_clearance_pct(
-    addr_lms: dict[str, Any],
-    impact_lms: dict[str, Any],
+    addr_lms: dict[str, tuple[float, float, float]],
+    impact_lms: dict[str, tuple[float, float, float]],
     torso_len: float,
 ) -> tuple[float | None, float]:
-    """計算擊球瞬間相較準備姿勢時雙髖中點在 DTL 平面的水平/深度位移比 (% of torso)。"""
+    """計算擊球瞬間相較準備姿勢時雙髖中點在等比例座標系下之 2D 平面位移比 (% of torso)。"""
     hp1 = _midpoint_xyv(addr_lms, "left_hip", "right_hip")
     hp2 = _midpoint_xyv(impact_lms, "left_hip", "right_hip")
     if not hp1 or not hp2 or torso_len <= 0.04:
         return None, 0.0
-    # 在 DTL 視角中，髖部向後清除（保持骨盆深度）表現為 X 軸或 Y 軸的位移
     dx = hp2[0] - hp1[0]
     dy = hp2[1] - hp1[1]
     dist = math.sqrt(dx * dx + dy * dy)
@@ -196,40 +291,76 @@ def _compute_hip_clearance_pct(
 
 
 # =========================================================================
-# 影格檢索：從使用者 keyframes 與示範影片 landmarks 中精確查找
+# 影格檢索：嚴格時序邊界與事件對齊（P0-C）
 # =========================================================================
 
 def _find_user_landmarks_for_phase(
     keyframes: list[dict[str, Any]],
-    target_time_ms: int,
-    max_tolerance_ms: int = 350,
-) -> tuple[dict[str, Any] | None, int | None, float]:
-    """從使用者 keyframes_json 找到最接近目標時間碼的真實 landmarks。"""
-    if not keyframes:
-        return None, None, 0.0
+    target_time_ms: int | None,
+    phase_name: str,
+    min_time_ms: int | None = None,
+    max_time_ms: int | None = None,
+    forbidden_times: set[int] | None = None,
+    max_tolerance_ms: int = 250,
+) -> tuple[dict[str, Any] | None, int | None, float, int | None]:
+    """
+    從使用者 keyframes_json 找到最接近目標時間碼且符合階段時序邊界的真實 landmarks。
+    回傳: (landmarks_dict, frame_time_ms, pose_confidence, frame_time_error_ms)
+    """
+    if not keyframes or target_time_ms is None or target_time_ms <= 0:
+        return None, None, 0.0, None
+
+    forbidden = forbidden_times or set()
     best_kf = None
     best_diff = float("inf")
+
     for kf in keyframes:
-        t = kf.get("time_ms")
-        if t is None:
+        t_val = kf.get("time_ms")
+        if t_val is None:
             continue
-        diff = abs(int(t) - target_time_ms)
+        try:
+            t = int(t_val)
+        except (ValueError, TypeError):
+            continue
+
+        if t in forbidden:
+            continue
+        if min_time_ms is not None and t < min_time_ms:
+            continue
+        if max_time_ms is not None and t > max_time_ms:
+            continue
+
+        diff = abs(t - target_time_ms)
         if diff < best_diff:
             best_diff = diff
             best_kf = kf
-    if best_kf and best_diff <= max_tolerance_ms:
+
+    if best_kf is not None and best_diff <= max_tolerance_ms:
         lms = best_kf.get("landmarks") or best_kf.get("keypoints") or {}
         conf = float(best_kf.get("pose_confidence", 0.8))
-        return lms, int(best_kf.get("time_ms", target_time_ms)), conf
-    return None, None, 0.0
+        f_time = int(best_kf.get("time_ms", target_time_ms))
+        return lms, f_time, conf, int(best_diff)
+
+    return None, None, 0.0, None
 
 
 def _find_ref_landmarks_for_phase(
     ref_pose_artifact: dict[str, Any],
-    target_time_ms: int,
-    max_tolerance_ms: int = 350,
-) -> tuple[dict[str, Any] | None, int | None, float]:
-    """從示範影片 pose_artifact['landmarks'] 找到最接近目標時間碼的真實 landmarks。"""
+    target_time_ms: int | None,
+    phase_name: str,
+    min_time_ms: int | None = None,
+    max_time_ms: int | None = None,
+    forbidden_times: set[int] | None = None,
+    max_tolerance_ms: int = 250,
+) -> tuple[dict[str, Any] | None, int | None, float, int | None]:
+    """
+    從示範影片 pose_artifact 找到最接近目標時間碼且符合階段時序邊界的真實 landmarks。
+    回傳: (landmarks_dict, frame_time_ms, pose_confidence, frame_time_error_ms)
+    """
+    if not ref_pose_artifact or target_time_ms is None or target_time_ms <= 0:
+        return None, None, 0.0, None
+
+    forbidden = forbidden_times or set()
     lms_dict = ref_pose_artifact.get("landmarks")
     if isinstance(lms_dict, dict) and lms_dict:
         best_k = None
@@ -237,25 +368,41 @@ def _find_ref_landmarks_for_phase(
         for k_str, val in lms_dict.items():
             try:
                 t = int(k_str)
-                diff = abs(t - target_time_ms)
-                if diff < best_diff:
-                    best_diff = diff
-                    best_k = k_str
-            except ValueError:
+            except (ValueError, TypeError):
                 continue
-        if best_k and best_diff <= max_tolerance_ms:
-            # 評估示範關鍵點之平均可見度
+
+            if t in forbidden:
+                continue
+            if min_time_ms is not None and t < min_time_ms:
+                continue
+            if max_time_ms is not None and t > max_time_ms:
+                continue
+
+            diff = abs(t - target_time_ms)
+            if diff < best_diff:
+                best_diff = diff
+                best_k = k_str
+
+        if best_k is not None and best_diff <= max_tolerance_ms:
             pts = lms_dict[best_k]
             vis_list = [p.get("visibility", 1.0) for p in pts.values() if isinstance(p, dict)]
             avg_vis = float(sum(vis_list) / len(vis_list)) if vis_list else 0.9
-            return pts, int(best_k), avg_vis
+            return pts, int(best_k), avg_vis, int(best_diff)
 
-    # 亦支援若 ref 包含 keyframes 列表格式
+    # 亦支援 keyframes 列表格式
     kfs = ref_pose_artifact.get("keyframes")
     if isinstance(kfs, list) and kfs:
-        return _find_user_landmarks_for_phase(kfs, target_time_ms, max_tolerance_ms)
+        return _find_user_landmarks_for_phase(
+            kfs,
+            target_time_ms=target_time_ms,
+            phase_name=phase_name,
+            min_time_ms=min_time_ms,
+            max_time_ms=max_time_ms,
+            forbidden_times=forbidden,
+            max_tolerance_ms=max_tolerance_ms,
+        )
 
-    return None, None, 0.0
+    return None, None, 0.0, None
 
 
 # =========================================================================
@@ -268,7 +415,7 @@ def compute_quantitative_posture_comparison(
 ) -> QuantitativePostureReport:
     """
     依據使用者揮桿與參考示範揮桿之真實 2D MediaPipe Pose 關鍵點與時間碼，
-    計算 4 大階段客觀量化姿勢比較清單。
+    經由等比例長寬比校正（Isotropic Aspect Ratio Correction）計算 4 大階段客觀量化姿勢比較清單。
     嚴禁任何假造數據，無資料時明確標註 N/A 與 insufficient_evidence。
     """
     user_id = str(user_swing.get("id") or user_swing.get("segment_id") or "")
@@ -286,9 +433,28 @@ def compute_quantitative_posture_comparison(
             metrics=[],
             priority_fix_summary=f"目前尚無 {club_type} 的專業示範影片，請手動匯入或切換其他球桿。",
             camera_compatibility={"is_compatible": False, "reason": "缺少示範影片"},
+            geometry_calibration={"is_aspect_corrected": False, "reason": "缺少示範影片"},
         )
 
-    # 2. 相機視角與狀態可靠度檢查 (P0-A #6)
+    # 2. 幾何長寬比解析 (P0-A)
+    u_w, u_h, u_aspect = _extract_display_dimensions_and_aspect(user_swing)
+    r_w, r_h, r_aspect = _extract_display_dimensions_and_aspect(ref_swing)
+    is_aspect_corrected = bool(u_aspect and r_aspect and u_aspect > 0 and r_aspect > 0)
+
+    geometry_calib_info = {
+        "is_aspect_corrected": is_aspect_corrected,
+        "user_resolution": f"{u_w}x{u_h}" if (u_w and u_h) else "unknown",
+        "user_aspect_ratio": u_aspect,
+        "ref_resolution": f"{r_w}x{r_h}" if (r_w and r_h) else "unknown",
+        "ref_aspect_ratio": r_aspect,
+        "coordinate_system": "isotropic_height_normalized" if is_aspect_corrected else "uncalibrated_anisotropic",
+        "disclaimer": (
+            "已完成 2D 影像長寬比等比例校正。請注意：長寬比校正僅消除影像像素座標之縮放失真，"
+            "不等於消除相機俯仰角、透視景深與鏡頭畸變差異。"
+        ),
+    }
+
+    # 3. 相機視角與狀態可靠度檢查
     ref_camera = str(ref_swing.get("camera_angle") or "DTL")
     user_camera = str(user_swing.get("camera_angle") or "DTL")
     ref_calib = ref_swing.get("calibration_params") or {}
@@ -311,37 +477,96 @@ def compute_quantitative_posture_comparison(
         ),
     }
 
-    # 3. 提取事件時間碼
+    # 4. 提取真實事件時間碼（嚴禁捏造時間碼，缺少即為 None - P0-C）
     user_events = {e.get("event_name"): int(e.get("time_ms", 0)) for e in (user_swing.get("events") or [])}
-    user_start_ms = int(user_swing.get("start_ms", 0))
-    user_addr_ms = user_events.get("address") or user_start_ms
-    user_top_ms = user_events.get("top") or (user_start_ms + 1200)
-    user_impact_ms = user_events.get("impact_estimated") or user_events.get("impact") or (user_top_ms + 333)
-    user_finish_ms = user_events.get("finish") or (user_impact_ms + 800)
+    u_addr_ms = user_events.get("address")
+    u_top_ms = user_events.get("top")
+    u_impact_ms = user_events.get("impact_estimated") or user_events.get("impact")
+    u_finish_ms = user_events.get("finish")
 
     ref_events = ref_swing.get("event_timestamps") or {}
-    ref_addr_ms = int(ref_events.get("address", 0))
-    ref_top_ms = int(ref_events.get("top", 0))
-    ref_impact_ms = int(ref_events.get("impact", 0))
-    ref_finish_ms = int(ref_events.get("finish", 0))
+    r_addr_ms = int(ref_events["address"]) if "address" in ref_events else None
+    r_top_ms = int(ref_events["top"]) if "top" in ref_events else None
+    r_impact_ms = int(ref_events["impact"]) if "impact" in ref_events else None
+    r_finish_ms = int(ref_events["finish"]) if "finish" in ref_events else None
 
-    # 4. 提取關鍵點
+    # 5. 檢索關鍵點並受限於時序邊界（P0-C: Top 不冒充 Impact，Impact 不冒充 Top）
     user_kf = (user_swing.get("pose_artifact") or {}).get("keyframes_json") or user_swing.get("keyframes") or []
     ref_pa = ref_swing.get("pose_artifact") or {}
 
-    u_addr_lms, u_addr_t, u_addr_conf = _find_user_landmarks_for_phase(user_kf, user_addr_ms)
-    u_top_lms, u_top_t, u_top_conf = _find_user_landmarks_for_phase(user_kf, user_top_ms)
-    u_imp_lms, u_imp_t, u_imp_conf = _find_user_landmarks_for_phase(user_kf, user_impact_ms)
-    u_fin_lms, u_fin_t, u_fin_conf = _find_user_landmarks_for_phase(user_kf, user_finish_ms)
+    # Address
+    u_addr_lms, u_addr_t, u_addr_conf, u_addr_err = _find_user_landmarks_for_phase(
+        user_kf, u_addr_ms, "address", max_time_ms=u_top_ms, max_tolerance_ms=250
+    )
+    r_addr_lms, r_addr_t, r_addr_conf, r_addr_err = _find_ref_landmarks_for_phase(
+        ref_pa, r_addr_ms, "address", max_time_ms=r_top_ms, max_tolerance_ms=250
+    )
 
-    r_addr_lms, r_addr_t, r_addr_conf = _find_ref_landmarks_for_phase(ref_pa, ref_addr_ms)
-    r_top_lms, r_top_t, r_top_conf = _find_ref_landmarks_for_phase(ref_pa, ref_top_ms)
-    r_imp_lms, r_imp_t, r_imp_conf = _find_ref_landmarks_for_phase(ref_pa, ref_impact_ms)
-    r_fin_lms, r_fin_t, r_fin_conf = _find_ref_landmarks_for_phase(ref_pa, ref_finish_ms)
+    # Top（必須在 address 之後，impact 之前）
+    u_top_lms, u_top_t, u_top_conf, u_top_err = _find_user_landmarks_for_phase(
+        user_kf, u_top_ms, "top",
+        min_time_ms=u_addr_t,
+        max_time_ms=(u_impact_ms - 30) if u_impact_ms else None,
+        max_tolerance_ms=180,
+    )
+    r_top_lms, r_top_t, r_top_conf, r_top_err = _find_ref_landmarks_for_phase(
+        ref_pa, r_top_ms, "top",
+        min_time_ms=r_addr_t,
+        max_time_ms=(r_impact_ms - 30) if r_impact_ms else None,
+        max_tolerance_ms=180,
+    )
 
-    # 計算正規化軀幹長度
-    u_torso_len, u_torso_conf = _compute_torso_length(u_addr_lms) if u_addr_lms else (None, 0.0)
-    r_torso_len, r_torso_conf = _compute_torso_length(r_addr_lms) if r_addr_lms else (None, 0.0)
+    # Impact（必須在 top 之後，且禁止使用 top 影格）
+    forbidden_u_imp = {u_top_t} if u_top_t is not None else set()
+    forbidden_r_imp = {r_top_t} if r_top_t is not None else set()
+    u_imp_lms, u_imp_t, u_imp_conf, u_imp_err = _find_user_landmarks_for_phase(
+        user_kf, u_impact_ms, "impact",
+        min_time_ms=(u_top_ms + 30) if u_top_ms else None,
+        max_time_ms=u_finish_ms,
+        forbidden_times=forbidden_u_imp,
+        max_tolerance_ms=180,
+    )
+    r_imp_lms, r_imp_t, r_imp_conf, r_imp_err = _find_ref_landmarks_for_phase(
+        ref_pa, r_impact_ms, "impact",
+        min_time_ms=(r_top_ms + 30) if r_top_ms else None,
+        max_time_ms=r_finish_ms,
+        forbidden_times=forbidden_r_imp,
+        max_tolerance_ms=180,
+    )
+
+    # Finish（必須在 impact 之後，且禁止使用 top/impact 影格）
+    forbidden_u_fin = {t for t in (u_top_t, u_imp_t) if t is not None}
+    forbidden_r_fin = {t for t in (r_top_t, r_imp_t) if t is not None}
+    u_fin_lms, u_fin_t, u_fin_conf, u_fin_err = _find_user_landmarks_for_phase(
+        user_kf, u_finish_ms, "finish",
+        min_time_ms=u_imp_t,
+        forbidden_times=forbidden_u_fin,
+        max_tolerance_ms=300,
+    )
+    r_fin_lms, r_fin_t, r_fin_conf, r_fin_err = _find_ref_landmarks_for_phase(
+        ref_pa, r_finish_ms, "finish",
+        min_time_ms=r_imp_t,
+        forbidden_times=forbidden_r_fin,
+        max_tolerance_ms=300,
+    )
+
+    # 6. 等比例長寬比校正轉換 (P0-A)
+    u_addr_iso = _make_isotropic_landmarks(u_addr_lms, u_aspect)
+    u_top_iso = _make_isotropic_landmarks(u_top_lms, u_aspect)
+    u_imp_iso = _make_isotropic_landmarks(u_imp_lms, u_aspect)
+    u_fin_iso = _make_isotropic_landmarks(u_fin_lms, u_aspect)
+
+    r_addr_iso = _make_isotropic_landmarks(r_addr_lms, r_aspect)
+    r_top_iso = _make_isotropic_landmarks(r_top_lms, r_aspect)
+    r_imp_iso = _make_isotropic_landmarks(r_imp_lms, r_aspect)
+    r_fin_iso = _make_isotropic_landmarks(r_fin_lms, r_aspect)
+
+    # 計算等比例軀幹長度
+    u_torso_len, u_torso_conf = _compute_torso_length(u_addr_iso) if u_addr_iso else (None, 0.0)
+    r_torso_len, r_torso_conf = _compute_torso_length(r_addr_iso) if r_addr_iso else (None, 0.0)
+
+    # 是否為慢動作示範
+    is_ref_slow_mo = bool(ref_calib.get("is_slow_motion", False))
 
     comparisons: list[PostureMetricComparison] = []
 
@@ -365,6 +590,7 @@ def compute_quantitative_posture_comparison(
         is_slow_mo_ref: bool = False,
         slow_mo_note: str = "",
         direction_cue: tuple[str, str] = ("偏低", "偏高"),
+        requires_geometry: bool = True,
     ) -> PostureMetricComparison:
         """安全建構單項量化姿勢比對物件。若任一方缺失，明確設置為不可比。"""
         # 示範是否為慢動作素材
@@ -376,9 +602,13 @@ def compute_quantitative_posture_comparison(
 
         u_val_display = (val_format + unit_suffix).format(u_val) if u_val is not None else "N/A"
 
+        # 幾何校正完整性檢查
+        geometry_ok = is_aspect_corrected if requires_geometry else True
+
         # 檢查是否可比
         is_comparable = (
             is_angle_compatible
+            and geometry_ok
             and (u_val is not None)
             and (r_val is not None)
             and (u_conf >= 0.35)
@@ -394,6 +624,9 @@ def compute_quantitative_posture_comparison(
         if not is_angle_compatible:
             status = "not_comparable"
             eval_text = f"相機視角不相容（示範為 {ref_camera}，非標準 DTL），不推算 2D 平面幾何差異。"
+        elif not geometry_ok:
+            status = "insufficient_evidence"
+            eval_text = "缺少影片解析度或長寬比資訊，無法進行等比例影像座標校正，不推算 2D 差異。"
         elif not is_comparable:
             status = "insufficient_evidence"
             missing_who = []
@@ -401,7 +634,7 @@ def compute_quantitative_posture_comparison(
                 missing_who.append("使用者揮桿")
             if r_val is None or r_conf < 0.35:
                 missing_who.append("示範影片" if not is_slow_mo_ref else "示範Tempo(慢動作無真實時長)")
-            eval_text = f"缺少{'與'.join(missing_who)}之可靠關鍵點，未具備充分觀測證據，不計算差異。"
+            eval_text = f"缺少{'與'.join(missing_who)}之可靠關鍵點或時間碼，未具備充分觀測證據，不計算差異。"
         else:
             delta = round(u_val - r_val, 2)
             delta_display = f"{delta:+.1f}" + unit_suffix if "°" in unit_suffix or "%" in unit_suffix else f"{delta:+.2f}"
@@ -419,11 +652,15 @@ def compute_quantitative_posture_comparison(
                 eval_text = f"較示範選手明顯{cue} {abs_d:.1f}{unit_suffix}，為本階段核心結構差異。"
 
         target_jump_map = {
-            "address": user_addr_ms,
-            "top": user_top_ms,
-            "impact": user_impact_ms,
-            "finish": user_finish_ms,
+            "address": u_addr_t or u_addr_ms or 0,
+            "top": u_top_t or u_top_ms or 0,
+            "impact": u_imp_t or u_impact_ms or 0,
+            "finish": u_fin_t or u_finish_ms or 0,
         }
+
+        u_err = u_ev.get("frame_time_error_ms")
+        r_err = r_ev.get("frame_time_error_ms")
+        acc_ms = max(u_err or 0, r_err or 0) if (u_err is not None or r_err is not None) else None
 
         return PostureMetricComparison(
             id=id_,
@@ -443,9 +680,11 @@ def compute_quantitative_posture_comparison(
             is_comparable=is_comparable,
             status=status,
             evaluation_text=eval_text,
+            geometry_coord_system="isotropic_height_normalized" if geometry_ok else "uncalibrated_anisotropic",
+            event_accuracy_ms=acc_ms,
             user_evidence=u_ev,
             ref_evidence=r_ev,
-            target_jump_ms=target_jump_map.get(phase, user_addr_ms),
+            target_jump_ms=target_jump_map.get(phase, 0),
             target_jump_phase=phase,
             recommended_speed=0.25 if phase in ("top", "impact") else 0.5,
         )
@@ -453,8 +692,8 @@ def compute_quantitative_posture_comparison(
     # =========================================================================
     # 階段 1：Address 準備姿勢
     # =========================================================================
-    u_addr_tilt, u_at_conf = _compute_spine_tilt_deg(u_addr_lms) if u_addr_lms else (None, 0.0)
-    r_addr_tilt, r_at_conf = _compute_spine_tilt_deg(r_addr_lms) if r_addr_lms else (None, 0.0)
+    u_addr_tilt, u_at_conf = _compute_spine_tilt_deg(u_addr_iso) if u_addr_iso else (None, 0.0)
+    r_addr_tilt, r_at_conf = _compute_spine_tilt_deg(r_addr_iso) if r_addr_iso else (None, 0.0)
     comparisons.append(make_metric(
         id_="address_spine_tilt",
         phase="address",
@@ -463,19 +702,29 @@ def compute_quantitative_posture_comparison(
         unit="deg_2d",
         u_val=round(u_addr_tilt, 1) if u_addr_tilt is not None else None,
         u_conf=u_at_conf,
-        u_ev={"time_ms": u_addr_t, "formula": "atan2(|shoulder_mid.x - hip_mid.x|, hip_mid.y - shoulder_mid.y)"},
+        u_ev={
+            "frame_time_ms": u_addr_t, "event_time_ms": u_addr_ms, "frame_time_error_ms": u_addr_err,
+            "video_width": u_w, "video_height": u_h, "aspect_ratio": u_aspect,
+            "landmark_source": "user_keyframes_json" if u_addr_lms else "none",
+            "formula": "atan2(|sh_iso.x - hp_iso.x|, hp_iso.y - sh_iso.y)"
+        },
         r_val=round(r_addr_tilt, 1) if r_addr_tilt is not None else None,
         r_conf=r_at_conf,
-        r_ev={"time_ms": r_addr_t, "formula": "atan2(|shoulder_mid.x - hip_mid.x|, hip_mid.y - shoulder_mid.y)"},
-        benchmark="36.0° ~ 44.0° (DTL 後方視角標準站姿前傾常模)",
+        r_ev={
+            "frame_time_ms": r_addr_t, "event_time_ms": r_addr_ms, "frame_time_error_ms": r_addr_err,
+            "video_width": r_w, "video_height": r_h, "aspect_ratio": r_aspect,
+            "landmark_source": "ref_pose_artifact" if r_addr_lms else "none",
+            "formula": "atan2(|sh_iso.x - hp_iso.x|, hp_iso.y - sh_iso.y)"
+        },
+        benchmark="36.0° ~ 44.0° (實驗性參考區間，非認證標準)",
         optimal_tol=4.0,
         moderate_tol=8.0,
         unit_suffix="°",
         direction_cue=("偏直立", "偏過深前傾"),
     ))
 
-    u_wrist_h, u_wh_conf = _compute_wrist_height_ratio(u_addr_lms, u_torso_len or 0.25) if u_addr_lms else (None, 0.0)
-    r_wrist_h, r_wh_conf = _compute_wrist_height_ratio(r_addr_lms, r_torso_len or 0.25) if r_addr_lms else (None, 0.0)
+    u_wrist_h, u_wh_conf = _compute_wrist_height_ratio(u_addr_iso, u_torso_len or 0.25) if u_addr_iso else (None, 0.0)
+    r_wrist_h, r_wh_conf = _compute_wrist_height_ratio(r_addr_iso, r_torso_len or 0.25) if r_addr_iso else (None, 0.0)
     comparisons.append(make_metric(
         id_="address_wrist_height",
         phase="address",
@@ -484,11 +733,21 @@ def compute_quantitative_posture_comparison(
         unit="torso_pct",
         u_val=round(u_wrist_h, 1) if u_wrist_h is not None else None,
         u_conf=u_wh_conf,
-        u_ev={"time_ms": u_addr_t, "formula": "(hip_mid.y - wrist_mid.y) / torso_len * 100"},
+        u_ev={
+            "frame_time_ms": u_addr_t, "event_time_ms": u_addr_ms, "frame_time_error_ms": u_addr_err,
+            "video_width": u_w, "video_height": u_h, "aspect_ratio": u_aspect,
+            "landmark_source": "user_keyframes_json" if u_addr_lms else "none",
+            "formula": "(hp_iso.y - wr_iso.y) / torso_len_iso * 100"
+        },
         r_val=round(r_wrist_h, 1) if r_wrist_h is not None else None,
         r_conf=r_wh_conf,
-        r_ev={"time_ms": r_addr_t, "formula": "(hip_mid.y - wrist_mid.y) / torso_len * 100"},
-        benchmark="-12.0% ~ +8.0% 身長 (雙手自然垂懸於下巴鉛垂線下方)",
+        r_ev={
+            "frame_time_ms": r_addr_t, "event_time_ms": r_addr_ms, "frame_time_error_ms": r_addr_err,
+            "video_width": r_w, "video_height": r_h, "aspect_ratio": r_aspect,
+            "landmark_source": "ref_pose_artifact" if r_addr_lms else "none",
+            "formula": "(hp_iso.y - wr_iso.y) / torso_len_iso * 100"
+        },
+        benchmark="-12.0% ~ +8.0% 身長 (實驗性參考區間，非認證標準)",
         optimal_tol=5.0,
         moderate_tol=10.0,
         unit_suffix="%",
@@ -498,8 +757,8 @@ def compute_quantitative_posture_comparison(
     # =========================================================================
     # 階段 2：Top 上桿頂點
     # =========================================================================
-    u_top_tilt, u_tt_conf = _compute_spine_tilt_deg(u_top_lms) if u_top_lms else (None, 0.0)
-    r_top_tilt, r_tt_conf = _compute_spine_tilt_deg(r_top_lms) if r_top_lms else (None, 0.0)
+    u_top_tilt, u_tt_conf = _compute_spine_tilt_deg(u_top_iso) if u_top_iso else (None, 0.0)
+    r_top_tilt, r_tt_conf = _compute_spine_tilt_deg(r_top_iso) if r_top_iso else (None, 0.0)
     u_top_ret = abs(u_top_tilt - u_addr_tilt) if (u_top_tilt is not None and u_addr_tilt is not None) else None
     r_top_ret = abs(r_top_tilt - r_addr_tilt) if (r_top_tilt is not None and r_addr_tilt is not None) else None
     comparisons.append(make_metric(
@@ -510,19 +769,27 @@ def compute_quantitative_posture_comparison(
         unit="deg_2d",
         u_val=round(u_top_ret, 1) if u_top_ret is not None else None,
         u_conf=min(u_tt_conf, u_at_conf),
-        u_ev={"addr_time_ms": u_addr_t, "top_time_ms": u_top_t, "formula": "|top_spine_deg - addr_spine_deg|"},
+        u_ev={
+            "frame_time_ms": u_top_t, "event_time_ms": u_top_ms, "frame_time_error_ms": u_top_err,
+            "addr_frame_time_ms": u_addr_t, "aspect_ratio": u_aspect,
+            "formula": "|top_spine_iso_deg - addr_spine_iso_deg|"
+        },
         r_val=round(r_top_ret, 1) if r_top_ret is not None else None,
         r_conf=min(r_tt_conf, r_at_conf),
-        r_ev={"addr_time_ms": r_addr_t, "top_time_ms": r_top_t, "formula": "|top_spine_deg - addr_spine_deg|"},
-        benchmark="≤ 4.0° (頂點良好維持軀幹前傾，不早起提昇)",
+        r_ev={
+            "frame_time_ms": r_top_t, "event_time_ms": r_top_ms, "frame_time_error_ms": r_top_err,
+            "addr_frame_time_ms": r_addr_t, "aspect_ratio": r_aspect,
+            "formula": "|top_spine_iso_deg - addr_spine_iso_deg|"
+        },
+        benchmark="≤ 4.0° (實驗性參考區間，非認證標準)",
         optimal_tol=2.5,
         moderate_tol=5.0,
         unit_suffix="°",
-        direction_cue=("維持更穩", "抬起變化較大"),
+        direction_cue=("前傾維持更佳", "前傾提早流失"),
     ))
 
-    u_top_head, u_th_conf = _compute_head_displacement_pct(u_addr_lms, u_top_lms, u_torso_len or 0.25) if (u_addr_lms and u_top_lms) else (None, 0.0)
-    r_top_head, r_th_conf = _compute_head_displacement_pct(r_addr_lms, r_top_lms, r_torso_len or 0.25) if (r_addr_lms and r_top_lms) else (None, 0.0)
+    u_top_head, u_th_conf = _compute_head_displacement_pct(u_addr_iso, u_top_iso, u_torso_len or 0.25) if (u_addr_iso and u_top_iso) else (None, 0.0)
+    r_top_head, r_th_conf = _compute_head_displacement_pct(r_addr_iso, r_top_iso, r_torso_len or 0.25) if (r_addr_iso and r_top_iso) else (None, 0.0)
     comparisons.append(make_metric(
         id_="top_head_displacement",
         phase="top",
@@ -531,59 +798,75 @@ def compute_quantitative_posture_comparison(
         unit="torso_pct",
         u_val=round(u_top_head, 1) if u_top_head is not None else None,
         u_conf=min(u_th_conf, u_torso_conf),
-        u_ev={"addr_time_ms": u_addr_t, "top_time_ms": u_top_t, "formula": "dist(nose_top, nose_addr) / torso_len * 100"},
+        u_ev={
+            "frame_time_ms": u_top_t, "event_time_ms": u_top_ms, "frame_time_error_ms": u_top_err,
+            "addr_frame_time_ms": u_addr_t, "aspect_ratio": u_aspect,
+            "formula": "dist(nose_top_iso, nose_addr_iso) / torso_len_iso * 100"
+        },
         r_val=round(r_top_head, 1) if r_top_head is not None else None,
         r_conf=min(r_th_conf, r_torso_conf),
-        r_ev={"addr_time_ms": r_addr_t, "top_time_ms": r_top_t, "formula": "dist(nose_top, nose_addr) / torso_len * 100"},
-        benchmark="≤ 8.0% 身長 (上桿蓄力時軸心頭部穩定無大幅側移)",
-        optimal_tol=3.5,
-        moderate_tol=7.0,
+        r_ev={
+            "frame_time_ms": r_top_t, "event_time_ms": r_top_ms, "frame_time_error_ms": r_top_err,
+            "addr_frame_time_ms": r_addr_t, "aspect_ratio": r_aspect,
+            "formula": "dist(nose_top_iso, nose_addr_iso) / torso_len_iso * 100"
+        },
+        benchmark="≤ 8.0% 身長 (實驗性參考區間，非認證標準)",
+        optimal_tol=3.0,
+        moderate_tol=6.0,
         unit_suffix="%",
-        direction_cue=("更少晃動", "側移晃動較大"),
+        direction_cue=("頭部更為穩定", "頭部浮動過大"),
     ))
 
     # =========================================================================
-    # 階段 3：Downswing / Impact 擊球瞬間
+    # 階段 3：Impact 擊球瞬間
     # =========================================================================
-    u_imp_tilt, u_it_conf = _compute_spine_tilt_deg(u_imp_lms) if u_imp_lms else (None, 0.0)
-    r_imp_tilt, r_it_conf = _compute_spine_tilt_deg(r_imp_lms) if r_imp_lms else (None, 0.0)
+    u_imp_tilt, u_it_conf = _compute_spine_tilt_deg(u_imp_iso) if u_imp_iso else (None, 0.0)
+    r_imp_tilt, r_it_conf = _compute_spine_tilt_deg(r_imp_iso) if r_imp_iso else (None, 0.0)
     u_imp_ret = abs(u_imp_tilt - u_addr_tilt) if (u_imp_tilt is not None and u_addr_tilt is not None) else None
     r_imp_ret = abs(r_imp_tilt - r_addr_tilt) if (r_imp_tilt is not None and r_addr_tilt is not None) else None
     comparisons.append(make_metric(
         id_="impact_spine_delta",
         phase="impact",
         phase_zh="擊球瞬間 (Impact)",
-        name="擊球前傾角變化量",
+        name="擊球軀幹前傾維持變化",
         unit="deg_2d",
         u_val=round(u_imp_ret, 1) if u_imp_ret is not None else None,
         u_conf=min(u_it_conf, u_at_conf),
-        u_ev={"addr_time_ms": u_addr_t, "impact_time_ms": u_imp_t, "formula": "|impact_spine_deg - addr_spine_deg|"},
+        u_ev={
+            "frame_time_ms": u_imp_t, "event_time_ms": u_impact_ms, "frame_time_error_ms": u_imp_err,
+            "addr_frame_time_ms": u_addr_t, "aspect_ratio": u_aspect,
+            "formula": "|impact_spine_iso_deg - addr_spine_iso_deg|"
+        },
         r_val=round(r_imp_ret, 1) if r_imp_ret is not None else None,
         r_conf=min(r_it_conf, r_at_conf),
-        r_ev={"addr_time_ms": r_addr_t, "impact_time_ms": r_imp_t, "formula": "|impact_spine_deg - addr_spine_deg|"},
-        benchmark="≤ 4.5° (觸球瞬間維持準備姿勢角度，不提前拔起)",
+        r_ev={
+            "frame_time_ms": r_imp_t, "event_time_ms": r_impact_ms, "frame_time_error_ms": r_imp_err,
+            "addr_frame_time_ms": r_addr_t, "aspect_ratio": r_aspect,
+            "formula": "|impact_spine_iso_deg - addr_spine_iso_deg|"
+        },
+        benchmark="≤ 5.0° (實驗性參考區間，非認證標準)",
         optimal_tol=2.5,
         moderate_tol=5.0,
         unit_suffix="°",
-        direction_cue=("維持更穩", "角度變化偏大"),
+        direction_cue=("前傾維持扎實", "觸球提早起立"),
     ))
 
-    # 節奏比 (Tempo Ratio)：若示範為慢動作影片，示範數值嚴格為 None
-    is_ref_slow_mo = bool(ref_calib.get("is_slow_motion", False)) or (ref_calib.get("supports_realtime_sync") is False)
+    # 上下桿節奏比（Tempo）
     u_tempo = None
     u_tempo_conf = 0.0
-    u_back_ms = user_top_ms - user_addr_ms
-    u_down_ms = user_impact_ms - user_top_ms
-    if u_back_ms > 200 and u_down_ms > 100:
-        u_tempo = round(u_back_ms / u_down_ms, 2)
-        u_tempo_conf = 0.85
+    if u_top_ms is not None and u_impact_ms is not None and u_addr_ms is not None:
+        u_back_ms = u_top_ms - u_addr_ms
+        u_down_ms = u_impact_ms - u_top_ms
+        if 300 <= u_back_ms <= 3000 and 120 <= u_down_ms <= 650:
+            u_tempo = round(u_back_ms / u_down_ms, 2)
+            u_tempo_conf = 0.85
 
     r_tempo = None
     r_tempo_conf = 0.0
-    if not is_ref_slow_mo and ref_top_ms > ref_addr_ms and ref_impact_ms > ref_top_ms:
-        r_back_ms = ref_top_ms - ref_addr_ms
-        r_down_ms = ref_impact_ms - ref_top_ms
-        if r_back_ms > 200 and r_down_ms > 100:
+    if not is_ref_slow_mo and r_top_ms is not None and r_impact_ms is not None and r_addr_ms is not None:
+        r_back_ms = r_top_ms - r_addr_ms
+        r_down_ms = r_impact_ms - r_top_ms
+        if 300 <= r_back_ms <= 3000 and 120 <= r_down_ms <= 650:
             r_tempo = round(r_back_ms / r_down_ms, 2)
             r_tempo_conf = 0.85
 
@@ -591,15 +874,24 @@ def compute_quantitative_posture_comparison(
         id_="swing_tempo_ratio",
         phase="impact",
         phase_zh="擊球瞬間 (Impact)",
-        name="上下桿時間節奏比",
+        name="上下桿節奏時間比",
         unit="ratio",
         u_val=u_tempo,
         u_conf=u_tempo_conf,
-        u_ev={"backswing_ms": u_back_ms, "downswing_ms": u_down_ms, "formula": "backswing_ms / downswing_ms"},
+        u_ev={
+            "event_top_ms": u_top_ms, "event_impact_ms": u_impact_ms, "event_addr_ms": u_addr_ms,
+            "backswing_ms": (u_top_ms - u_addr_ms) if (u_top_ms and u_addr_ms) else None,
+            "downswing_ms": (u_impact_ms - u_top_ms) if (u_impact_ms and u_top_ms) else None,
+            "formula": "backswing_ms / downswing_ms"
+        },
         r_val=r_tempo,
         r_conf=r_tempo_conf,
-        r_ev={"backswing_ms": ref_top_ms - ref_addr_ms, "downswing_ms": ref_impact_ms - ref_top_ms, "formula": "backswing_ms / downswing_ms"},
-        benchmark="2.7:1 ~ 3.3:1 (標準高爾夫全揮桿約 3:1 節拍比)",
+        r_ev={
+            "event_top_ms": r_top_ms, "event_impact_ms": r_impact_ms, "event_addr_ms": r_addr_ms,
+            "is_slow_motion": is_ref_slow_mo,
+            "formula": "backswing_ms / downswing_ms"
+        },
+        benchmark="2.7:1 ~ 3.3:1 (實驗性參考區間，非認證標準)",
         optimal_tol=0.35,
         moderate_tol=0.70,
         val_format="{:.2f}",
@@ -607,11 +899,12 @@ def compute_quantitative_posture_comparison(
         is_slow_mo_ref=is_ref_slow_mo,
         slow_mo_note="N/A (慢動作素材不提供假Tempo)",
         direction_cue=("下桿轉換急促", "上桿過度緩慢"),
+        requires_geometry=False,  # 時間比不依賴空間座標長寬比
     ))
 
     # 擊球骨盆深度開放比
-    u_hip_clear, u_hc_conf = _compute_hip_clearance_pct(u_addr_lms, u_imp_lms, u_torso_len or 0.25) if (u_addr_lms and u_imp_lms) else (None, 0.0)
-    r_hip_clear, r_hc_conf = _compute_hip_clearance_pct(r_addr_lms, r_imp_lms, r_torso_len or 0.25) if (r_addr_lms and r_imp_lms) else (None, 0.0)
+    u_hip_clear, u_hc_conf = _compute_hip_clearance_pct(u_addr_iso, u_imp_iso, u_torso_len or 0.25) if (u_addr_iso and u_imp_iso) else (None, 0.0)
+    r_hip_clear, r_hc_conf = _compute_hip_clearance_pct(r_addr_iso, r_imp_iso, r_torso_len or 0.25) if (r_addr_iso and r_imp_iso) else (None, 0.0)
     comparisons.append(make_metric(
         id_="impact_hip_clearance",
         phase="impact",
@@ -620,11 +913,19 @@ def compute_quantitative_posture_comparison(
         unit="torso_pct",
         u_val=round(u_hip_clear, 1) if u_hip_clear is not None else None,
         u_conf=min(u_hc_conf, u_torso_conf),
-        u_ev={"addr_time_ms": u_addr_t, "impact_time_ms": u_imp_t, "formula": "dist(hip_imp, hip_addr) / torso_len * 100"},
+        u_ev={
+            "frame_time_ms": u_imp_t, "event_time_ms": u_impact_ms, "frame_time_error_ms": u_imp_err,
+            "addr_frame_time_ms": u_addr_t, "aspect_ratio": u_aspect,
+            "formula": "dist(hip_imp_iso, hip_addr_iso) / torso_len_iso * 100"
+        },
         r_val=round(r_hip_clear, 1) if r_hip_clear is not None else None,
         r_conf=min(r_hc_conf, r_torso_conf),
-        r_ev={"addr_time_ms": r_addr_t, "impact_time_ms": r_imp_t, "formula": "dist(hip_imp, hip_addr) / torso_len * 100"},
-        benchmark="8.0% ~ 18.0% 身長 (下桿順暢轉開左髖，保留雙手通道)",
+        r_ev={
+            "frame_time_ms": r_imp_t, "event_time_ms": r_impact_ms, "frame_time_error_ms": r_imp_err,
+            "addr_frame_time_ms": r_addr_t, "aspect_ratio": r_aspect,
+            "formula": "dist(hip_imp_iso, hip_addr_iso) / torso_len_iso * 100"
+        },
+        benchmark="8.0% ~ 18.0% 身長 (實驗性參考區間，非認證標準)",
         optimal_tol=4.0,
         moderate_tol=8.0,
         unit_suffix="%",
@@ -634,8 +935,8 @@ def compute_quantitative_posture_comparison(
     # =========================================================================
     # 階段 4：Finish 收桿平衡
     # =========================================================================
-    u_fin_tilt, u_ft_conf = _compute_spine_tilt_deg(u_fin_lms) if u_fin_lms else (None, 0.0)
-    r_fin_tilt, r_ft_conf = _compute_spine_tilt_deg(r_fin_lms) if r_fin_lms else (None, 0.0)
+    u_fin_tilt, u_ft_conf = _compute_spine_tilt_deg(u_fin_iso) if u_fin_iso else (None, 0.0)
+    r_fin_tilt, r_ft_conf = _compute_spine_tilt_deg(r_fin_iso) if r_fin_iso else (None, 0.0)
     comparisons.append(make_metric(
         id_="finish_spine_angle",
         phase="finish",
@@ -644,50 +945,52 @@ def compute_quantitative_posture_comparison(
         unit="deg_2d",
         u_val=round(u_fin_tilt, 1) if u_fin_tilt is not None else None,
         u_conf=u_ft_conf,
-        u_ev={"time_ms": u_fin_t, "formula": "spine_tilt_deg @ finish frame"},
+        u_ev={
+            "frame_time_ms": u_fin_t, "event_time_ms": u_finish_ms, "frame_time_error_ms": u_fin_err,
+            "aspect_ratio": u_aspect, "formula": "spine_tilt_iso_deg @ finish frame"
+        },
         r_val=round(r_fin_tilt, 1) if r_fin_tilt is not None else None,
         r_conf=r_ft_conf,
-        r_ev={"time_ms": r_fin_t, "formula": "spine_tilt_deg @ finish frame"},
-        benchmark="≤ 16.0° (收桿完全立起平衡，重心完全過渡至左腳)",
+        r_ev={
+            "frame_time_ms": r_fin_t, "event_time_ms": r_finish_ms, "frame_time_error_ms": r_fin_err,
+            "aspect_ratio": r_aspect, "formula": "spine_tilt_iso_deg @ finish frame"
+        },
+        benchmark="≤ 16.0° (實驗性參考區間，非認證標準)",
         optimal_tol=4.0,
         moderate_tol=8.0,
         unit_suffix="°",
         direction_cue=("更為直立", "身體殘留後傾"),
     ))
 
-    # 4. 可靠度總結與覆蓋率 (P0-B)
+    # 7. 可靠度總結與覆蓋率 (P0-B & P1-A)
     comparable_count = sum(1 for c in comparisons if c.is_comparable)
     total_metrics = len(comparisons)
     comparable_ratio = comparable_count / total_metrics if total_metrics > 0 else 0.0
 
-    avg_conf = (
-        sum(c.confidence for c in comparisons if c.is_comparable) / comparable_count
-        if comparable_count > 0 else 0.0
-    )
-
     if not is_angle_compatible:
         overall_status = "not_comparable"
         overall_reliability = "unreliable"
-    elif comparable_count == 0:
+    elif not is_aspect_corrected:
         overall_status = "insufficient_data"
         overall_reliability = "unreliable"
-    elif comparable_ratio < 0.50 or avg_conf < 0.50:
+    elif comparable_ratio < 0.35:
         overall_status = "insufficient_data"
+        overall_reliability = "unreliable"
+    elif comparable_ratio < 0.65:
+        overall_status = "ready"
         overall_reliability = "low"
-    elif comparable_ratio < 0.75 or avg_conf < 0.75:
+    elif comparable_ratio < 0.85:
         overall_status = "ready"
         overall_reliability = "moderate"
     else:
         overall_status = "ready"
         overall_reliability = "high"
 
-    # 5. Priority Fix 唯一改善重點選擇 (P0-D: 只能建立在真實證據上)
-    # 嚴格條件：必須 is_comparable=True、is_reliable=True，且屬於 significant_diff 或 moderate_diff
+    # 8. Priority Fix 唯一改善重點選擇 (P0-D: 嚴格建立在真實等比例幾何證據上)
     valid_diffs = [
         c for c in comparisons
         if c.is_comparable and c.is_reliable and c.status in ("significant_diff", "moderate_diff")
     ]
-    # 依照嚴重程度與偏差量排序
     valid_diffs.sort(
         key=lambda x: (2 if x.status == "significant_diff" else 1, abs(x.delta or 0)),
         reverse=True,
@@ -699,7 +1002,7 @@ def compute_quantitative_posture_comparison(
     retest_metric_target = None
     priority_fix_obj = None
 
-    if valid_diffs and overall_reliability in ("high", "moderate"):
+    if valid_diffs and overall_reliability in ("high", "moderate") and is_aspect_corrected:
         top_diff = valid_diffs[0]
         priority_fix_id = top_diff.id
         obs_item = f"{top_diff.phase_zh} — {top_diff.metric_name}"
@@ -709,12 +1012,12 @@ def compute_quantitative_posture_comparison(
 
         if "spine" in top_diff.id:
             priority_fix_summary = (
-                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
+                f"在 {top_diff.phase_zh} 經長寬比等比例校正後觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
                 f"建議使用 0.25× 慢動作同步比對從起桿至該階段之背部軸心角度維持。"
             )
             actionable_drill = {
                 "name": "臀部貼牆維持前傾軸心 Drill",
-                "preparation": "站姿就位時，右臀後方輕觸球包或牆面（距離 2 公分）。",
+                "preparation": "站姿就位時，右臀後方輕觸球包或牆面（距離約 2 公分）。",
                 "execution": "上桿時感受右臀輕貼，下桿過渡時由左臀接替貼住支撐物，維持骨盆深度。",
                 "checkpoint": "錄影對照 0.25× 慢動作，頂點至擊球瞬間前胸維持罩住球位。",
             }
@@ -771,6 +1074,8 @@ def compute_quantitative_posture_comparison(
         # 資料不足或無顯著差異：誠實揭露，絕不編造假缺陷與假口訣
         if not is_angle_compatible:
             priority_fix_summary = "相機視角不相容，無法確立可信的動作改善重點。建議更換標準 DTL 示範影片。"
+        elif not is_aspect_corrected:
+            priority_fix_summary = "缺少影像長寬比幾何資訊，未完成等比例校正，不產生動作改善重點。"
         elif comparable_count < 3:
             priority_fix_summary = "目前有效比對證據不足（缺少清晰 2D 關鍵點），建議使用 0.25× 慢動作手動檢視或上傳更高畫質影片。"
         else:
@@ -789,5 +1094,6 @@ def compute_quantitative_posture_comparison(
         retest_metric_target=retest_metric_target,
         priority_fix=priority_fix_obj,
         camera_compatibility=camera_compat_info,
+        geometry_calibration=geometry_calib_info,
         is_offline_mode=True,
     )

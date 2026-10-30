@@ -140,7 +140,17 @@ export interface QuantitativePostureReport {
     is_compatible?: boolean;
     reason?: string;
   };
+  geometry_calibration?: {
+    is_aspect_corrected?: boolean;
+    user_resolution?: string;
+    user_aspect_ratio?: number;
+    ref_resolution?: string;
+    ref_aspect_ratio?: number;
+    coordinate_system?: string;
+    disclaimer?: string;
+  };
   disclaimer: string;
+  truthfulness_notice?: string;
 }
 
 interface SwingComparisonPlayerProps {
@@ -1894,6 +1904,24 @@ export function SwingComparisonPlayer({
             <p className="text-[11px] text-gray-300">
               系統嚴格拒絕使用其他球桿偷偷替代。您可以點擊上方「匯入示範」手動新增，或切換至 7I、Driver 等已有示範的球桿。
             </p>
+          </div>
+        )}
+
+        {/* 幾何座標長寬比等比例校正提示 (P0-A) */}
+        {postureReport?.geometry_calibration?.is_aspect_corrected ? (
+          <div className="rounded-lg bg-emerald-950/20 border border-emerald-900/40 p-2 text-[11px] text-emerald-300 flex flex-wrap items-center justify-between gap-1">
+            <div className="flex items-center gap-1.5">
+              <span>📐</span>
+              <span className="font-medium">2D 影像長寬比等比例校正已啟用（Isotropic Coordinate Space）</span>
+            </div>
+            <div className="text-[10px] text-gray-400 font-mono">
+              我方: {postureReport.geometry_calibration.user_resolution} (A={postureReport.geometry_calibration.user_aspect_ratio}) ⇄ 示範: {postureReport.geometry_calibration.ref_resolution} (A={postureReport.geometry_calibration.ref_aspect_ratio})
+            </div>
+          </div>
+        ) : postureReport?.geometry_calibration && !postureReport.geometry_calibration.is_aspect_corrected && postureReport?.overall_status !== "reference_missing" && (
+          <div className="rounded-lg border border-amber-800/60 bg-amber-950/30 p-2.5 text-xs text-amber-300 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>缺少影像長寬比資訊，無法建立等比例座標系消除拉伸失真，2D 平面幾何差異已標記為 N/A。</span>
           </div>
         )}
 
