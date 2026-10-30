@@ -1,6 +1,36 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 20: Golf Swing Lab R3 — Final Geometry Integrity & Merge Gate）
+## 最新修復狀態（Round 21: Golf Swing Lab R3 — Final Release Audit & PR #3 Merge Readiness）
+1. **P0-A 修正旋轉 Metadata 重複套用（Double Rotation Swap Elimination & Idempotent Dimension Contract）**：`PASS`
+   - 統一資料契約，明確區分「原始編碼影像尺寸」（`coded_width`, `coded_height`）、「已套用旋轉顯示尺寸」（`display_width`, `display_height`, `display_aspect_ratio`）與「Pose 關鍵點實際所屬座標系」。
+   - 重構 `packages/analysis/posture_comparison.py` 的 `_extract_display_dimensions_and_aspect` 建立明確優先序：
+     - 若資料物件已標記 `is_display_dimensions=True` 或 `is_aspect_corrected=True`，直接採納，禁止二次對調。
+     - 若已具備 `display_aspect_ratio` 且當前長寬比吻合，直接採納，絕不重複交換。
+     - 僅在傳入原始未轉正編碼尺寸時依據 rotation (90°/270°) 做單次旋轉校正。
+   - `apps/api/main.py` 輸出明確的 `coded_width`, `coded_height`, `display_width`, `display_height`, `display_aspect_ratio`, `is_display_dimensions=True`，杜絕 API 交換一次後引擎又二次交換的重大漏洞。
+   - `tests/test_quantitative_posture_comparison.py` 新增 `test_rotation_metadata_api_integration_no_double_swap` 整合測試，覆蓋 5 大維度情境（1080×1920 rot=0, 1920×1080 rot=90, 1920×1080 rot=270, 640×360 rot=0, Reference 重入冪等性），18 / 18 專項測試 PASSED (100%)。
+2. **P0-B 交付報告完全來自真實 API（Real API Evidence & Zero Fake Metrics Guarantee）**：`PASS`
+   - 撰寫並執行 `scripts/generate_real_api_posture_report.py`，呼叫本機真實資料庫與 API（`GET /api/swings/{swing_id}/posture-comparison?ref_id={reference_id}`）。
+   - 分別對使用者揮桿（`cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf`）比對 7I DTL、Driver DTL 與 Driver Close-up 特寫示範。
+   - 徹底移除舊文字中不存在的指標（如「Finish Stability：70 分 vs 95 分」），8 項指標全數嚴格吻合引擎運動學定義（`address_spine_tilt`, `address_wrist_height`, `top_spine_retention`, `top_head_displacement`, `impact_spine_delta`, `swing_tempo_ratio`, `impact_hip_clearance`, `finish_spine_angle`）。
+   - 特寫視角示範誠實回報 `not_comparable`，標記鏡頭不相容限制。產出機器可讀報告 `docs/reports/real_api_posture_comparison_report.json`。
+3. **P1 0.25× 慢動作時間序列連續性、0 次 Hard Seek 與 3W 慢動作切換實測（macOS WKWebView）**：`PASS`
+   - 升級 `scripts/verify_webkit_r3_slowmo_and_coach.py`，在 macOS 原生 WKWebView 內執行：
+     - **0.25x 超慢動作 Top→Impact 區間連續時間序列**：連續取樣 14 個點，驗證使用者與示範時間嚴格單調遞增（無倒退、無跳回同一影格），速率維持 0.25x。
+     - **Hard Seek 次數**：即時監控推進階段 seek 事件，證實中途硬跳次數嚴格為 **0 次**（微調漂移最大僅 30ms，完全由平滑調速吸收）。
+     - **3W 慢動作切換與誠信揭露**：點擊切換 3W 示範，畫面即時呈現「⏱️ 慢動作示範」標籤，量化表中 Tempo 指標誠實呈現「N/A (慢動作素材不提供假Tempo)」。
+     - **骨架標記開關切換**：驗證按鈕文字切換（開啟 ↔ 隱藏），且 DOM 中 Canvas 數量由 2 減為 1，切換回開啟時恢復為 2。
+     - **四大階段量化表、Priority Fix 卡片與跳轉慢放**：完整載入 8 項指標、唯一改善重點卡片、Drill 練習步驟並成功觸發跳轉播放。
+   - 產出脫敏驗收報告 `docs/reports/swing_comparison_r3_report.json` 與真實 WebKit 截圖存證。
+4. **端到端全量驗證與建置確認**：`PASS`
+   - 後端全套測試：**122 / 122 PASSED (100%)** in 201.69s。
+   - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+   - WebKit 原生自動化驗收：**10 / 10 步驟全數 PASS**。
+- **最後更新時間**：2026-10-30T22:15:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**Personal Beta READY FOR MERGE (嚴禁自行合併 main，已推送到 PR #3 分支，等待負責人授權)**
+
+## 前期重大里程碑狀態（Round 20: Golf Swing Lab R3 — Final Geometry Integrity & Merge Gate）
 1. **P0-A 2D 影像長寬比等比例校正（Isotropic Coordinate Space）**：`PASS`
    - 重構 `packages/analysis/posture_comparison.py`，全面實作等比例影像座標系轉換：
      $$x_{\text{iso}} = x_{\text{norm}} \cdot \frac{W_{\text{display}}}{H_{\text{display}}} = x_{\text{norm}} \cdot A, \quad y_{\text{iso}} = y_{\text{norm}}$$

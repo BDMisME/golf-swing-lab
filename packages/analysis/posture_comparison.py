@@ -120,26 +120,55 @@ def _extract_display_dimensions_and_aspect(
 ) -> tuple[int | None, int | None, float | None]:
     """
     從揮桿資料字典提取影像顯示寬高與長寬比 (Aspect Ratio = Display Width / Display Height)。
-    自動處理 90°/270° 旋轉 Metadata 交換長寬。
+    統一資料契約：
+    1. 若已提供 display_width / display_height，或標註 is_display_dimensions=True，直接採納。
+    2. 若已提供 aspect_ratio 且與現有 (w / h) 相符，直接採納，嚴禁因 rotation 重複交換。
+    3. 若僅提供原始編碼尺寸 (coded_width, coded_height) 或未校正之尺寸，才依據 rotation (90°/270°) 交換一次。
     """
     if not isinstance(swing, dict):
         return None, None, None
 
-    direct_aspect = _safe_float(swing.get("aspect_ratio"))
     calib = swing.get("calibration_params") or {}
     q_meta = swing.get("quality_metadata") or {}
     vid_meta = swing.get("video") or {}
 
+    # 1. 檢查是否有已明確宣告的 display 尺寸
+    disp_w = _safe_float(swing.get("display_width") or calib.get("display_width"))
+    disp_h = _safe_float(swing.get("display_height") or calib.get("display_height"))
+    disp_aspect = _safe_float(
+        swing.get("display_aspect_ratio")
+        or swing.get("aspect_ratio")
+        or calib.get("display_aspect_ratio")
+        or calib.get("aspect_ratio")
+    )
+
+    if disp_w and disp_h and disp_w > 0 and disp_h > 0:
+        w_int = int(round(disp_w))
+        h_int = int(round(disp_h))
+        aspect = disp_aspect or round(w_int / h_int, 4)
+        return w_int, h_int, aspect
+
+    # 2. 檢查是否標註為已套用旋轉之顯示尺寸 (is_display_dimensions)
+    is_already_display = bool(
+        swing.get("is_display_dimensions")
+        or calib.get("is_display_dimensions")
+        or calib.get("is_aspect_corrected")
+    )
+
+    # 3. 提取一般寬高與旋轉
+    coded_w = _safe_float(swing.get("coded_width") or vid_meta.get("width"))
+    coded_h = _safe_float(swing.get("coded_height") or vid_meta.get("height"))
+
     w = (
-        _safe_float(swing.get("video_width"))
+        coded_w
+        or _safe_float(swing.get("video_width"))
         or _safe_float(calib.get("video_width"))
-        or _safe_float(vid_meta.get("width"))
         or _safe_float(q_meta.get("video_width"))
     )
     h = (
-        _safe_float(swing.get("video_height"))
+        coded_h
+        or _safe_float(swing.get("video_height"))
         or _safe_float(calib.get("video_height"))
-        or _safe_float(vid_meta.get("height"))
         or _safe_float(q_meta.get("video_height"))
     )
     rot = (
@@ -153,13 +182,31 @@ def _extract_display_dimensions_and_aspect(
         w_int = int(round(w))
         h_int = int(round(h))
         rot_int = int(round(rot))
+
+        # 若已標註為 display dimensions，絕不重複交換
+        if is_already_display:
+            aspect = disp_aspect or round(w_int / h_int, 4)
+            return w_int, h_int, aspect
+
+        # 若已提供 aspect_ratio，且現有 (w_int / h_int) 已經與 aspect_ratio 吻合（誤差 < 0.01）
+        # 說明此寬高已經是顯示尺寸，絕不能再交換！
+        if disp_aspect and disp_aspect > 0:
+            current_ratio = w_int / h_int
+            if abs(current_ratio - disp_aspect) < 0.01:
+                return w_int, h_int, round(disp_aspect, 4)
+            swapped_ratio = h_int / w_int
+            if abs(swapped_ratio - disp_aspect) < 0.01:
+                return h_int, w_int, round(disp_aspect, 4)
+
+        # 未標示且無明確長寬比對齊時，依 rotation (90/270) 執行一次旋轉校正
         if rot_int in (90, 270, -90, -270):
             w_int, h_int = h_int, w_int
+
         aspect = round(w_int / h_int, 4)
         return w_int, h_int, aspect
 
-    if direct_aspect and direct_aspect > 0:
-        return None, None, round(direct_aspect, 4)
+    if disp_aspect and disp_aspect > 0:
+        return None, None, round(disp_aspect, 4)
 
     return None, None, None
 
@@ -443,13 +490,20 @@ def compute_quantitative_posture_comparison(
 
     geometry_calib_info = {
         "is_aspect_corrected": is_aspect_corrected,
+        "coordinate_system": "isotropic_height_normalized" if is_aspect_corrected else "uncalibrated_anisotropic",
+        "user_display_width": u_w,
+        "user_display_height": u_h,
+        "user_display_aspect": u_aspect,
         "user_resolution": f"{u_w}x{u_h}" if (u_w and u_h) else "unknown",
         "user_aspect_ratio": u_aspect,
+        "ref_display_width": r_w,
+        "ref_display_height": r_h,
+        "ref_display_aspect": r_aspect,
         "ref_resolution": f"{r_w}x{r_h}" if (r_w and r_h) else "unknown",
         "ref_aspect_ratio": r_aspect,
-        "coordinate_system": "isotropic_height_normalized" if is_aspect_corrected else "uncalibrated_anisotropic",
         "disclaimer": (
-            "已完成 2D 影像長寬比等比例校正。請注意：長寬比校正僅消除影像像素座標之縮放失真，"
+            "已完成 2D 影像長寬比等比例校正（Isotropic Coordinate Space）。"
+            "請注意：長寬比校正僅消除影像像素座標之縮放失真，"
             "不等於消除相機俯仰角、透視景深與鏡頭畸變差異。"
         ),
     }

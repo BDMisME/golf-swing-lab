@@ -1247,12 +1247,15 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
     event_map = {e.event_name: e.time_ms for e in events}
 
     video_row = db.get(Video, seg.video_id)
-    vw = video_row.width if video_row else 0
-    vh = video_row.height if video_row else 0
+    coded_w = video_row.width if video_row else 0
+    coded_h = video_row.height if video_row else 0
     vrot = (video_row.rotation or 0) if video_row else 0
-    if vrot in (90, 270, -90, -270) and vw > 0 and vh > 0:
-        vw, vh = vh, vw
-    aspect_val = round(vw / vh, 4) if (vw > 0 and vh > 0) else None
+
+    if vrot in (90, 270, -90, -270) and coded_w > 0 and coded_h > 0:
+        disp_w, disp_h = coded_h, coded_w
+    else:
+        disp_w, disp_h = coded_w, coded_h
+    aspect_val = round(disp_w / disp_h, 4) if (disp_w > 0 and disp_h > 0) else None
 
     cov_val = score.coverage if score else 0.0
     q_meta = (artifact.quality_metadata if artifact and artifact.quality_metadata else {}) or {}
@@ -1268,8 +1271,14 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
         "id": seg.id,
         "video_id": seg.video_id,
         "session_id": video_row.session_id if video_row else "",
-        "video_width": vw,
-        "video_height": vh,
+        "coded_width": coded_w,
+        "coded_height": coded_h,
+        "display_width": disp_w,
+        "display_height": disp_h,
+        "display_aspect_ratio": aspect_val,
+        "is_display_dimensions": True,
+        "video_width": disp_w,
+        "video_height": disp_h,
         "video_rotation": vrot,
         "aspect_ratio": aspect_val,
         "sequence_no": seg.sequence_no,
@@ -1603,9 +1612,16 @@ def get_swing_posture_comparison(
     ref_w = ref_calib.get("video_width") or 0
     ref_h = ref_calib.get("video_height") or 0
     ref_rot = ref_calib.get("video_rotation") or 0
+    ref_aspect = ref_calib.get("aspect_ratio")
+
     if ref_rot in (90, 270, -90, -270) and ref_w > 0 and ref_h > 0:
-        ref_w, ref_h = ref_h, ref_w
-    ref_aspect = ref_calib.get("aspect_ratio") or (round(ref_w / ref_h, 4) if (ref_w > 0 and ref_h > 0) else None)
+        if not ref_calib.get("is_display_dimensions"):
+            ref_disp_w, ref_disp_h = ref_h, ref_w
+        else:
+            ref_disp_w, ref_disp_h = ref_w, ref_h
+    else:
+        ref_disp_w, ref_disp_h = ref_w, ref_h
+    ref_aspect_val = ref_aspect or (round(ref_disp_w / ref_disp_h, 4) if (ref_disp_w > 0 and ref_disp_h > 0) else None)
 
     ref_dict = {
         "id": ref.id if ref else "",
@@ -1615,10 +1631,14 @@ def get_swing_posture_comparison(
         "event_timestamps": ref.event_timestamps if ref else {},
         "calibration_params": ref_calib,
         "pose_artifact": ref.pose_artifact if ref else {},
-        "video_width": ref_w,
-        "video_height": ref_h,
+        "display_width": ref_disp_w,
+        "display_height": ref_disp_h,
+        "display_aspect_ratio": ref_aspect_val,
+        "is_display_dimensions": True,
+        "video_width": ref_disp_w,
+        "video_height": ref_disp_h,
         "video_rotation": ref_rot,
-        "aspect_ratio": ref_aspect,
+        "aspect_ratio": ref_aspect_val,
     }
     user_serialized = _serialize_segment(db, seg, include_detail=True)
     report = compute_quantitative_posture_comparison(user_serialized, ref_dict)

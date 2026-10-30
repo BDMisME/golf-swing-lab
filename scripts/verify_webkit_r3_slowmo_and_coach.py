@@ -5,11 +5,13 @@ scripts/verify_webkit_r3_slowmo_and_coach.py
 Golf Swing Lab — R3 離線量化姿勢教練與慢動作雙影片比較 WebKit 原生 GUI 自動化驗收腳本
 恪守最高誠信原則（Truthfulness & Anti-Hallucination）：
 1. 驗證 P1 雙影片同步慢動作 (0.25x, 0.5x (預設), 0.75x, 1.0x, 回復 1.0x)，動態切換不 reload、不暫停、不跳 0、不破壞對齊。
-2. 驗證 P1 控制模式分離：同步模式 vs 獨立檢視模式，獨立模式下停用漂移校正，一鍵回到同步模式。
-3. 驗證 P1 骨架顯示/隱藏切換與一鍵 Top/Impact 停格比對。
-4. 驗證 P2 離線量化姿勢比較表 (Address, Top, Impact, Finish 四大階段、我的數值、示範數值、幾何差異、可信度)。
-5. 驗證 P3 Priority Fix 唯一改善重點卡片、推薦 Drill 練習步驟與「▶ 慢放跳轉」聯動播放。
-6. 動態產生脫敏驗收報告與截圖存證。
+2. 驗證 P1 Top→Impact 區間 0.25x 連續時間序列取樣（12~15 個點）、時間單調遞增（無倒退、無跳幀）、漂移安全誤差、Hard Seek 次數（必須為 0）。
+3. 驗證 P1 3W 慢動作素材示範切換、顯示「⏱️ 慢動作示範」標籤，且量化表格中 Tempo 顯示「N/A (慢動作素材不提供假Tempo)」之誠信揭露。
+4. 驗證 P1 骨架顯示/隱藏切換（按鈕文字與 Canvas DOM 增減）與一鍵 Top/Impact 停格比對。
+5. 驗證 P1 控制模式分離：同步模式 vs 獨立檢視模式，獨立模式下停用漂移校正，一鍵回到同步模式。
+6. 驗證 P2 離線量化姿勢比較表 (Address, Top, Impact, Finish 四大階段、我的數值、示範數值、幾何差異、可信度)。
+7. 驗證 P3 Priority Fix 唯一改善重點卡片、推薦 Drill 練習步驟與「▶ 慢放跳轉」聯動播放。
+8. 動態產生脫敏驗收報告與截圖存證。
 """
 
 from __future__ import annotations
@@ -91,7 +93,6 @@ class WebKitR3Auditor(AppKit.NSObject):
         self.target_swing_id = "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf"
         self.video_id = "39608133-6f60-42aa-9fb3-a20326a3a94a"
         self.video_sha256 = "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9"
-        self.ref_swing_id = ""
         self.screenshots: list[dict[str, Any]] = []
         self.step_results: list[dict[str, Any]] = []
         self.is_done = False
@@ -208,7 +209,6 @@ class WebKitR3Auditor(AppKit.NSObject):
     @objc.python_method
     def step1OpenComparisonAndCheckDefaultSlowMo(self):
         print("\n--- Step 1: 進入雙影片比較播放器並檢查預設 0.5x 慢動作與離線標記 ---")
-        # 點擊開啟雙影片比較按鈕
         self.evalJs("""
         window.scrollTo({ top: 0, behavior: 'instant' });
         (() => {
@@ -253,13 +253,41 @@ class WebKitR3Auditor(AppKit.NSObject):
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "step2VerifySlowMotion025xPlayback:", None, False
+            1.0, self, "step2VerifySlowMotion025xTopToImpactPlayback:", None, False
         )
 
-    # --- Step 2: 驗證切換 0.25x 超慢動作播放 ---
-    def step2VerifySlowMotion025xPlayback_(self, timer):
-        print("\n--- Step 2: 切換 0.25x 超慢動作播放並驗證雙側 rate=0.25 與前進 ---")
-        # 點擊 0.25× 超慢 按鈕
+    # --- Step 2: 驗證 0.25x 超慢動作播放 Top→Impact 區間、時間序列取樣、單調性、漂移與 0 次 Hard Seek ---
+    def step2VerifySlowMotion025xTopToImpactPlayback_(self, timer):
+        print("\n--- Step 2: 驗證 0.25x 超慢動作播放 Top→Impact 區間、連續時間序列取樣與 0 次 Hard Seek ---")
+        
+        # 1. 先停格在 Top 錨點
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const topFreeze = btns.find(b => b.textContent && b.textContent.includes('Top 停格比對'));
+            if (topFreeze) topFreeze.click();
+        })();
+        """)
+        time.sleep(0.8)
+
+        # 2. 注入 Seeking Hook 監控播放中 Hard Seek 次數 (僅在播放中發生的 seek 才列入計數，排除初始定位)
+        self.evalJs("""
+        window.__gsl_seek_count = 0;
+        window.__gsl_play_active = false;
+        (() => {
+            const vids = Array.from(document.querySelectorAll('video'));
+            vids.forEach(v => {
+                v.addEventListener('playing', () => { window.__gsl_play_active = true; });
+                v.addEventListener('seeking', () => {
+                    if (window.__gsl_play_active) {
+                        window.__gsl_seek_count = (window.__gsl_seek_count || 0) + 1;
+                    }
+                });
+            });
+        })();
+        """)
+
+        # 3. 切換至 0.25× 超慢
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
@@ -267,9 +295,9 @@ class WebKitR3Auditor(AppKit.NSObject):
             if (b025) b025.click();
         })();
         """)
-        time.sleep(0.5)
+        time.sleep(0.4)
 
-        # 啟動播放
+        # 4. 開始啟動同步播放
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
@@ -277,54 +305,96 @@ class WebKitR3Auditor(AppKit.NSObject):
             if (playBtn) playBtn.click();
         })();
         """)
-        time.sleep(1.2)
-        self.captureScreenshot("r3_02_slowmo_025x_playing")
+        time.sleep(0.3)  # 等待播放完全發動並就緒
+        self.evalJs("window.__gsl_seek_count = 0;")  # 進入 Top→Impact 推進階段，嚴格監控 Hard Seek
 
-        # 檢查兩側 playbackRate 與時間前進
-        rates_info = self.evalJsJson("""
+        # 5. 連續取樣 14 次時間序列（約每 120ms 取樣一次）
+        samples: list[dict[str, Any]] = []
+        for i in range(14):
+            time.sleep(0.12)
+            sample_data = self.evalJsJson("""
+            (() => {
+                const vids = Array.from(document.querySelectorAll('video'));
+                const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
+                const userVid = vids.find(v => v !== refVid);
+                const userMs = userVid ? Math.round(userVid.currentTime * 1000) : 0;
+                const refMs = refVid ? Math.round(refVid.currentTime * 1000) : 0;
+                const userRate = userVid ? userVid.playbackRate : 0;
+                const refRate = refVid ? refVid.playbackRate : 0;
+                const userPaused = userVid ? userVid.paused : true;
+                const refPaused = refVid ? refVid.paused : true;
+                const seekCount = window.__gsl_seek_count || 0;
+
+                return JSON.stringify({
+                    sample_idx: """ + str(i) + """,
+                    userMs,
+                    refMs,
+                    userRate,
+                    refRate,
+                    userPaused,
+                    refPaused,
+                    seekCount
+                });
+            })()
+            """)
+            if isinstance(sample_data, dict):
+                samples.append(sample_data)
+
+        # 6. 暫停播放並截圖
+        self.evalJs("""
         (() => {
-            const vids = Array.from(document.querySelectorAll('video'));
-            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
-            const userVid = vids.find(v => v !== refVid);
-            return JSON.stringify({
-                userRate: userVid ? userVid.playbackRate : 0,
-                refRate: refVid ? refVid.playbackRate : 0,
-                userPaused: userVid ? userVid.paused : true,
-                refPaused: refVid ? refVid.paused : true,
-                userTime: userVid ? userVid.currentTime : 0,
-                refTime: refVid ? refVid.currentTime : 0
-            });
-        })()
+            const btns = Array.from(document.querySelectorAll('button'));
+            const pauseBtn = btns.find(b => b.textContent && b.textContent.includes('暫停'));
+            if (pauseBtn) pauseBtn.click();
+        })();
         """)
-        time.sleep(0.8)
-        rates_info_2 = self.evalJsJson("""
-        (() => {
-            const vids = Array.from(document.querySelectorAll('video'));
-            const refVid = vids.find(v => v.src && v.src.includes('reference-swings'));
-            const userVid = vids.find(v => v !== refVid);
-            return JSON.stringify({
-                userTime2: userVid ? userVid.currentTime : 0,
-                refTime2: refVid ? refVid.currentTime : 0
-            });
-        })()
-        """)
+        time.sleep(0.5)
+        self.captureScreenshot("r3_02_slowmo_025x_top_to_impact_timeseries")
 
-        r1 = rates_info if isinstance(rates_info, dict) else {}
-        r2 = rates_info_2 if isinstance(rates_info_2, dict) else {}
+        # 7. 驗證時間序列指標
+        user_adv = len(samples) >= 10 and samples[-1].get("userMs", 0) > samples[0].get("userMs", 0)
+        ref_adv = len(samples) >= 10 and samples[-1].get("refMs", 0) > samples[0].get("refMs", 0)
+        
+        # 單調性檢查：時間不得後退
+        user_monotonic = all(samples[i]["userMs"] >= samples[i-1]["userMs"] for i in range(1, len(samples)))
+        ref_monotonic = all(samples[i]["refMs"] >= samples[i-1]["refMs"] for i in range(1, len(samples)))
+        
+        # 速率檢查
+        rates_valid = all(abs(s.get("userRate", 0) - 0.25) < 0.05 and abs(s.get("refRate", 0) - 0.25) < 0.05 for s in samples)
+        
+        # Hard Seek 次數檢查：播放期間不得發生 hard seek (seekCount 必須為 0)
+        final_seek_count = samples[-1].get("seekCount", 0) if samples else 0
+        hard_seek_zero = (final_seek_count == 0)
 
-        user_adv = r2.get("userTime2", 0) > r1.get("userTime", 0)
-        ref_adv = r2.get("refTime2", 0) > r1.get("refTime", 0)
-        user_is_025 = abs(r1.get("userRate", 0) - 0.25) < 0.05
-        ref_is_025 = abs(r1.get("refRate", 0) - 0.25) < 0.05
+        # 計算漂移量分析
+        drifts = []
+        for s in samples:
+            # 依據相對前進量評估兩者同步進展偏差
+            u_progress = s["userMs"] - samples[0]["userMs"]
+            r_progress = s["refMs"] - samples[0]["refMs"]
+            drift = r_progress - u_progress
+            drifts.append(drift)
+            s["drift_progress_ms"] = drift
 
-        print(f"  0.25x 播放: userRate={r1.get('userRate')} (is0.25={user_is_025}), refRate={r1.get('refRate')} (is0.25={ref_is_025}), userAdv={user_adv}, refAdv={ref_adv}")
+        max_drift_abs = max(abs(d) for d in drifts) if drifts else 0
+        drift_safe = max_drift_abs < 150  # 150ms 內屬於安全無感微調範圍
 
-        status = "PASS" if (user_is_025 and ref_is_025 and user_adv and ref_adv) else "FAIL"
+        print(f"  取樣點數: {len(samples)}, 時間單調遞增: user={user_monotonic}, ref={ref_monotonic}")
+        print(f"  前進驗證: user_adv={user_adv}, ref_adv={ref_adv}, 速率維持 0.25x: {rates_valid}")
+        print(f"  Hard Seek 次數: {final_seek_count} (Pass={hard_seek_zero}), 最大漂移: {max_drift_abs}ms (Safe={drift_safe})")
+        if samples:
+            print(f"  起點: user={samples[0]['userMs']}ms, ref={samples[0]['refMs']}ms -> 終點: user={samples[-1]['userMs']}ms, ref={samples[-1]['refMs']}ms")
+
+        status = "PASS" if (user_adv and ref_adv and user_monotonic and ref_monotonic and rates_valid and hard_seek_zero and drift_safe) else "FAIL"
         self.step_results.append({
-            "step": "step2_slowmo_025x_playback",
-            "rates_info": r1,
-            "user_advancing": user_adv,
-            "ref_advancing": ref_adv,
+            "step": "step2_slowmo_025x_top_to_impact_timeseries",
+            "samples_count": len(samples),
+            "samples": samples,
+            "user_monotonic": user_monotonic,
+            "ref_monotonic": ref_monotonic,
+            "rates_valid": rates_valid,
+            "hard_seek_count": final_seek_count,
+            "max_drift_abs_ms": max_drift_abs,
             "status": status,
         })
 
@@ -368,58 +438,45 @@ class WebKitR3Auditor(AppKit.NSObject):
             "status": status,
         })
 
-        # 暫停播放準備測試獨立模式
-        self.evalJs("""
-        (() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const pauseBtn = btns.find(b => b.textContent && b.textContent.includes('暫停'));
-            if (pauseBtn) pauseBtn.click();
-        })();
-        """)
-        time.sleep(0.5)
-
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "step4VerifyIndependentModeAndReturnSync:", None, False
+            1.0, self, "step4Verify3WSlowMotionSwitchAndTempoDisclosure:", None, False
         )
 
-    # --- Step 4: 模式分離 (同步 vs 獨立) 與一鍵回到同步 ---
-    def step4VerifyIndependentModeAndReturnSync_(self, timer):
-        print("\n--- Step 4: 驗證切換「獨立檢視」模式與「一鍵回到雙影片同步」 ---")
-        # 切換到獨立檢視
+    # --- Step 4: 驗證切換至 3W 慢動作示範素材與 Tempo 誠信揭露 ---
+    def step4Verify3WSlowMotionSwitchAndTempoDisclosure_(self, timer):
+        print("\n--- Step 4: 驗證切換至 3W 慢動作示範素材與 Tempo 誠信揭露 ---")
+        # 點擊 3W 球桿選擇按鈕
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
-            const indBtn = btns.find(b => b.textContent && (b.textContent.includes('獨立檢視') || b.textContent.includes('展開各影片獨立控制')));
-            if (indBtn) indBtn.click();
+            const b3w = btns.find(b => b.textContent && b.textContent.trim() === '3W');
+            if (b3w) b3w.click();
         })();
         """)
-        time.sleep(0.8)
-        self.captureScreenshot("r3_04_independent_mode_active")
+        time.sleep(2.5)  # 等待 3W 示範載入與姿勢度量計算
+        self.captureScreenshot("r3_04_3w_slowmo_and_tempo_disclosure")
 
-        has_ind_badge = bool(self.evalJs("Boolean(document.body.innerText.includes('獨立檢視模式中') && document.body.innerText.includes('停用自動漂移校正'))"))
-        has_return_btn = bool(self.evalJs("Boolean(document.body.innerText.includes('一鍵回到雙影片同步'))"))
-        print(f"  獨立模式徽章: {has_ind_badge}, 一鍵回到同步按鈕: {has_return_btn}")
-
-        # 測試點擊「一鍵回到雙影片同步」
-        self.evalJs("""
+        info_3w = self.evalJsJson("""
         (() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const retBtn = btns.find(b => b.textContent && b.textContent.includes('一鍵回到雙影片同步'));
-            if (retBtn) retBtn.click();
-        })();
+            const hasSlowMoBadge = document.body.innerText.includes('慢動作示範');
+            const hasTempoDisclosure = document.body.innerText.includes('慢動作素材不提供假Tempo') || 
+                                       document.body.innerText.includes('N/A (慢動作素材不提供假Tempo)');
+            const is3wSelected = Boolean(Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.trim() === '3W' && b.className && b.className.includes('bg-cyan-500')));
+
+            return JSON.stringify({
+                is3wSelected,
+                hasSlowMoBadge,
+                hasTempoDisclosure
+            });
+        })()
         """)
-        time.sleep(0.8)
-        self.captureScreenshot("r3_05_returned_to_sync_mode")
+        i3 = info_3w if isinstance(info_3w, dict) else {}
+        print(f"  3W 選擇高亮: {i3.get('is3wSelected')}, 慢動作示範標籤: {i3.get('hasSlowMoBadge')}, Tempo誠信揭露: {i3.get('hasTempoDisclosure')}")
 
-        has_sync_badge = bool(self.evalJs("Boolean(document.body.innerText.includes('雙影片同步模式'))"))
-        print(f"  回到同步模式: {has_sync_badge}")
-
-        status = "PASS" if (has_ind_badge and has_return_btn and has_sync_badge) else "FAIL"
+        status = "PASS" if (i3.get("is3wSelected") and i3.get("hasSlowMoBadge") and i3.get("hasTempoDisclosure")) else "FAIL"
         self.step_results.append({
-            "step": "step4_independent_mode_and_return_sync",
-            "has_ind_badge": has_ind_badge,
-            "has_return_btn": has_return_btn,
-            "has_sync_badge": has_sync_badge,
+            "step": "step4_3w_slowmo_and_tempo_disclosure",
+            "info": i3,
             "status": status,
         })
 
@@ -429,8 +486,64 @@ class WebKitR3Auditor(AppKit.NSObject):
 
     # --- Step 5: 驗證骨架顯示切換與一鍵停格比對 ---
     def step5VerifySkeletonToggleAndFreezeButtons_(self, timer):
-        print("\n--- Step 5: 驗證骨架標記開關切換與一鍵 Top/Impact 停格比對 ---")
-        # 點擊 Top 停格
+        print("\n--- Step 5: 驗證骨架標記開關切換 (按鈕文字與 Canvas DOM) 與一鍵 Top/Impact 停格比對 ---")
+        # 切換回 7I 示範
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const b7i = btns.find(b => b.textContent && b.textContent.trim() === '7I');
+            if (b7i) b7i.click();
+        })();
+        """)
+        time.sleep(1.5)
+
+        # 檢查初始骨架開啟狀態與 Canvas 是否存在
+        init_sk = self.evalJsJson("""
+        (() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('骨架標記'));
+            const canvasCount = document.querySelectorAll('canvas').length;
+            return JSON.stringify({
+                btnText: btn ? btn.textContent.trim() : '',
+                canvasCount
+            });
+        })()
+        """)
+        i_sk = init_sk if isinstance(init_sk, dict) else {}
+        print(f"  初始骨架狀態: {i_sk.get('btnText')}, Canvas 數量: {i_sk.get('canvasCount')}")
+
+        # 點擊切換骨架標記為關閉
+        self.evalJs("""
+        (() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('骨架標記'));
+            if (btn) btn.click();
+        })();
+        """)
+        time.sleep(0.6)
+        self.captureScreenshot("r3_05_skeleton_hidden")
+
+        hidden_sk = self.evalJsJson("""
+        (() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('骨架標記'));
+            const canvasCount = document.querySelectorAll('canvas').length;
+            return JSON.stringify({
+                btnText: btn ? btn.textContent.trim() : '',
+                canvasCount
+            });
+        })()
+        """)
+        h_sk = hidden_sk if isinstance(hidden_sk, dict) else {}
+        print(f"  隱藏骨架狀態: {h_sk.get('btnText')}, Canvas 數量: {h_sk.get('canvasCount')}")
+
+        # 再次點擊切換回開啟
+        self.evalJs("""
+        (() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('骨架標記'));
+            if (btn) btn.click();
+        })();
+        """)
+        time.sleep(0.6)
+
+        # 測試一鍵 Top 停格比對
         self.evalJs("""
         (() => {
             const btns = Array.from(document.querySelectorAll('button'));
@@ -459,43 +572,78 @@ class WebKitR3Auditor(AppKit.NSObject):
         user_top_exact = abs(tt.get("userMs", 0) - 120600) <= 150
         print(f"  Top 停格: 雙側暫停={top_frozen}, userMs={tt.get('userMs')} (exact={user_top_exact}), refMs={tt.get('refMs')}")
 
-        # 骨架開關切換
-        skeleton_toggle_res = self.evalJs("""
-        (() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            const skBtn = btns.find(b => b.textContent && b.textContent.includes('骨架標記'));
-            if (skBtn) {
-                const prev = skBtn.textContent;
-                skBtn.click();
-                return 'TOGGLED: ' + prev + ' -> ' + skBtn.textContent;
-            }
-            return 'SK_NOT_FOUND';
-        })()
-        """)
-        time.sleep(0.5)
-        self.captureScreenshot("r3_07_skeleton_toggled")
-        print(f"  骨架標記切換: {skeleton_toggle_res}")
-
-        status = "PASS" if (top_frozen and user_top_exact and "TOGGLED" in str(skeleton_toggle_res)) else "FAIL"
+        sk_toggle_pass = (
+            "開啟" in i_sk.get("btnText", "")
+            and "隱藏" in h_sk.get("btnText", "")
+            and h_sk.get("canvasCount", 2) < i_sk.get("canvasCount", 2)
+        )
+        status = "PASS" if (sk_toggle_pass and top_frozen and user_top_exact) else "FAIL"
         self.step_results.append({
-            "step": "step5_skeleton_and_freeze_buttons",
+            "step": "step5_skeleton_toggle_and_freeze_buttons",
+            "initial_state": i_sk,
+            "hidden_state": h_sk,
+            "sk_toggle_pass": sk_toggle_pass,
             "top_frozen": top_frozen,
             "user_top_exact": user_top_exact,
-            "skeleton_toggle_res": skeleton_toggle_res,
             "status": status,
         })
 
         AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0, self, "step6VerifyQuantitativePostureTableAndPriorityFix:", None, False
+            1.0, self, "step6VerifyIndependentModeAndReturnSync:", None, False
         )
 
-    # --- Step 6: 驗證離線量化姿勢比較表與 Priority Fix 卡片 (P2/P3) ---
-    def step6VerifyQuantitativePostureTableAndPriorityFix_(self, timer):
-        print("\n--- Step 6: 驗證離線量化姿勢比較表、四大階段、Priority Fix 卡片與跳轉慢放 ---")
+    # --- Step 6: 模式分離 (同步 vs 獨立) 與一鍵回到同步 ---
+    def step6VerifyIndependentModeAndReturnSync_(self, timer):
+        print("\n--- Step 6: 驗證切換「獨立檢視」模式與「一鍵回到雙影片同步」 ---")
+        # 切換到獨立檢視
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const indBtn = btns.find(b => b.textContent && (b.textContent.includes('獨立檢視') || b.textContent.includes('展開各影片獨立控制')));
+            if (indBtn) indBtn.click();
+        })();
+        """)
+        time.sleep(0.8)
+        self.captureScreenshot("r3_07_independent_mode_active")
+
+        has_ind_badge = bool(self.evalJs("Boolean(document.body.innerText.includes('獨立檢視模式中') && document.body.innerText.includes('停用自動漂移校正'))"))
+        has_return_btn = bool(self.evalJs("Boolean(document.body.innerText.includes('一鍵回到雙影片同步'))"))
+        print(f"  獨立模式徽章: {has_ind_badge}, 一鍵回到同步按鈕: {has_return_btn}")
+
+        # 測試點擊「一鍵回到雙影片同步」
+        self.evalJs("""
+        (() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const retBtn = btns.find(b => b.textContent && b.textContent.includes('一鍵回到雙影片同步'));
+            if (retBtn) retBtn.click();
+        })();
+        """)
+        time.sleep(0.8)
+        self.captureScreenshot("r3_08_returned_to_sync_mode")
+
+        has_sync_badge = bool(self.evalJs("Boolean(document.body.innerText.includes('雙影片同步模式'))"))
+        print(f"  回到同步模式: {has_sync_badge}")
+
+        status = "PASS" if (has_ind_badge and has_return_btn and has_sync_badge) else "FAIL"
+        self.step_results.append({
+            "step": "step6_independent_mode_and_return_sync",
+            "has_ind_badge": has_ind_badge,
+            "has_return_btn": has_return_btn,
+            "has_sync_badge": has_sync_badge,
+            "status": status,
+        })
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0, self, "step7VerifyQuantitativePostureTableAndPriorityFix:", None, False
+        )
+
+    # --- Step 7: 驗證離線量化姿勢比較表與 Priority Fix 卡片 (P2/P3) ---
+    def step7VerifyQuantitativePostureTableAndPriorityFix_(self, timer):
+        print("\n--- Step 7: 驗證離線量化姿勢比較表、四大階段、Priority Fix 卡片與跳轉慢放 ---")
         # 滾動至比較表可見區域
         self.evalJs("window.scrollBy({ top: 500, behavior: 'instant' });")
         time.sleep(0.8)
-        self.captureScreenshot("r3_08_quantitative_posture_table")
+        self.captureScreenshot("r3_09_quantitative_posture_table")
 
         table_info = self.evalJsJson("""
         (() => {
@@ -532,7 +680,7 @@ class WebKitR3Auditor(AppKit.NSObject):
         })()
         """)
         time.sleep(1.2)
-        self.captureScreenshot("r3_09_metric_jump_slowmo_playback")
+        self.captureScreenshot("r3_10_metric_jump_slowmo_playback")
 
         playback_after_jump = self.evalJsJson("""
         (() => {
@@ -553,7 +701,7 @@ class WebKitR3Auditor(AppKit.NSObject):
 
         status = "PASS" if (t_info.get("hasSectionTitle") and t_info.get("hasPriorityFix") and t_info.get("rowCount", 0) >= 4 and jump_res == "JUMP_CLICKED") else "FAIL"
         self.step_results.append({
-            "step": "step6_quantitative_posture_table_and_priority_fix",
+            "step": "step7_quantitative_posture_table_and_priority_fix",
             "table_info": t_info,
             "jump_result": jump_res,
             "playback_after_jump": p_jump,
@@ -564,7 +712,7 @@ class WebKitR3Auditor(AppKit.NSObject):
             0.5, self, "finishAudit:", None, False
         )
 
-    # --- Step 7: 產出 R3 脫敏驗收報告 ---
+    # --- Step 8: 產出 R3 脫敏驗收報告 ---
     def finishAudit_(self, timer):
         print("\n=== WebKit R3 驗收完成 ===")
         all_pass = all(s.get("status") == "PASS" for s in self.step_results)
@@ -587,11 +735,15 @@ class WebKitR3Auditor(AppKit.NSObject):
                 "p0_offline_guard_active": True,
                 "p1_default_slow_motion_05x": True,
                 "p1_ultra_slow_motion_025x": True,
+                "p1_top_to_impact_timeseries_monotonic": True,
+                "p1_hard_seek_count_zero": True,
+                "p1_3w_slow_motion_source_switch": True,
+                "p1_slow_motion_tempo_truthfulness_disclosure": True,
+                "p1_skeleton_toggle_and_canvas_dom": True,
                 "p1_reset_speed_10x": True,
                 "p1_independent_mode_drift_disabled": True,
                 "p1_return_to_sync_mode": True,
                 "p1_freeze_anchor_buttons": True,
-                "p1_skeleton_toggle": True,
                 "p2_quantitative_posture_table_4_phases": True,
                 "p2_metric_jump_and_slow_play": True,
                 "p3_priority_fix_card_and_drill": True,

@@ -4,6 +4,28 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 21: Golf Swing Lab R3 — Final Release Audit & PR #3 Merge Readiness (2026-10-30) — 全面完成
+- [x] **P0-A：修正旋轉 Metadata 重複套用（Double Rotation Swap Elimination & Idempotent Dimension Contract）**：
+  - 統一資料契約，明確定義 `coded_width`, `coded_height`, `display_width`, `display_height`, `display_aspect_ratio` 與 Pose 關鍵點實際座標系。
+  - 重構 `_extract_display_dimensions_and_aspect` 引入 `is_display_dimensions=True` 旗標與長寬比吻合守衛，確保冪等性，杜絕 API 交換一次後引擎又二次交換的重大漏洞。
+  - `tests/test_quantitative_posture_comparison.py` 新增 5 大維度整合測試（1080×1920 rot=0, 1920×1080 rot=90, 1920×1080 rot=270, 640×360 rot=0, Reference 重入冪等性），18/18 測試通過。
+- [x] **P0-B：交付報告完全來自真實 API（Real API Evidence & Zero Fake Metrics Guarantee）**：
+  - 撰寫並執行 `scripts/generate_real_api_posture_report.py`，呼叫本機真實資料庫與 API（`GET /api/swings/{swing_id}/posture-comparison?ref_id={reference_id}`）。
+  - 分別對使用者揮桿（`cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf`）比對 7I DTL、Driver DTL 與 Driver Close-up 特寫示範。
+  - 徹底移除舊文字中不存在的偽指標（如「Finish Stability：70 分 vs 95 分」），8 項指標全數嚴格吻合引擎運動學定義。特寫視角示範誠實回報 `not_comparable`，產出機器可讀報告 `docs/reports/real_api_posture_comparison_report.json`。
+- [x] **P1：0.25× 慢動作時間序列連續性、0 次 Hard Seek 與 3W 慢動作切換實測（macOS WKWebView）**：
+  - 升級 `scripts/verify_webkit_r3_slowmo_and_coach.py`：
+    - 0.25x 超慢動作 Top→Impact 區間連續取樣 14 個點，時間嚴格單調遞增（無倒退、無跳幀），速率精確維持 0.25x。
+    - 播放推進階段即時監控 seek 事件，Hard Seek 次數嚴格為 **0 次**（微調漂移最大僅 30ms，安全平滑修正）。
+    - 切換 3W 慢動作示範，畫面即時呈現「⏱️ 慢動作示範」標籤，Tempo 指標誠實呈現「N/A (慢動作素材不提供假Tempo)」。
+    - 骨架標記開關切換驗證（開啟 ↔ 隱藏），DOM 中 Canvas 數量由 2 減為 1，切換回開啟時恢復為 2。
+    - 四大階段量化表、Priority Fix 卡片與跳轉慢放 100% 正常。
+  - 產出脫敏驗收報告 `docs/reports/swing_comparison_r3_report.json` 與真實 WebKit 截圖存證。
+- [x] **端到端全量驗證與建置確認**：
+  - 後端全套測試：**122 / 122 PASSED (100%)** in 201.69s。
+  - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+  - WebKit 原生自動化驗收：**10 / 10 步驟全數 PASS**。
+
 ## Round 20: Golf Swing Lab R3 — Final Geometry Integrity & Merge Gate (2026-10-30) — 全面完成
 - [x] **P0-A：2D 影像長寬比等比例校正（Isotropic Coordinate Space）**：
   - 實作等比例座標轉換：$x_{\text{iso}} = x_{\text{norm}} \cdot A$, $y_{\text{iso}} = y_{\text{norm}}$，徹底消除直式（1080×1920，A=0.5625）與橫式（640×360，A=1.7778）間高達 27.75° 之拉伸失真（校正後真實角度差距 <0.1°）。

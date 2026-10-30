@@ -1,8 +1,8 @@
 {
   "title": "Golf Swing Lab — R3 Offline Coach & Slow-Mo Comparison Acceptance Report",
-  "timestamp": "2026-10-30T10:04:44.723213+00:00",
+  "timestamp": "2026-10-30T14:12:42.869187+00:00",
   "git": {
-    "commit_sha": "7b3ddf67184beea3c939a0333ba14de578901b90",
+    "commit_sha": "75f61effe3dc068b7e4501c9f9fe8c919bcd4739",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -18,11 +18,15 @@
     "p0_offline_guard_active": true,
     "p1_default_slow_motion_05x": true,
     "p1_ultra_slow_motion_025x": true,
+    "p1_top_to_impact_timeseries_monotonic": true,
+    "p1_hard_seek_count_zero": true,
+    "p1_3w_slow_motion_source_switch": true,
+    "p1_slow_motion_tempo_truthfulness_disclosure": true,
+    "p1_skeleton_toggle_and_canvas_dom": true,
     "p1_reset_speed_10x": true,
     "p1_independent_mode_drift_disabled": true,
     "p1_return_to_sync_mode": true,
     "p1_freeze_anchor_buttons": true,
-    "p1_skeleton_toggle": true,
     "p2_quantitative_posture_table_4_phases": true,
     "p2_metric_jump_and_slow_play": true,
     "p3_priority_fix_card_and_drill": true,
@@ -42,17 +46,169 @@
       "status": "PASS"
     },
     {
-      "step": "step2_slowmo_025x_playback",
-      "rates_info": {
-        "userRate": 0.25,
-        "refRate": 0.25,
-        "userPaused": false,
-        "refPaused": false,
-        "userTime": 119.25020808301797,
-        "refTime": 0.02076344364537728
-      },
-      "user_advancing": true,
-      "ref_advancing": true,
+      "step": "step2_slowmo_025x_top_to_impact_timeseries",
+      "samples_count": 14,
+      "samples": [
+        {
+          "sample_idx": 0,
+          "userMs": 120653,
+          "refMs": 1439,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 1,
+          "userMs": 120687,
+          "refMs": 1473,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 2,
+          "userMs": 120718,
+          "refMs": 1504,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 3,
+          "userMs": 120732,
+          "refMs": 1534,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 16
+        },
+        {
+          "sample_idx": 4,
+          "userMs": 120746,
+          "refMs": 1535,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 3
+        },
+        {
+          "sample_idx": 5,
+          "userMs": 120777,
+          "refMs": 1563,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 6,
+          "userMs": 120808,
+          "refMs": 1624,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 30
+        },
+        {
+          "sample_idx": 7,
+          "userMs": 120838,
+          "refMs": 1625,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 1
+        },
+        {
+          "sample_idx": 8,
+          "userMs": 120869,
+          "refMs": 1653,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -2
+        },
+        {
+          "sample_idx": 9,
+          "userMs": 120899,
+          "refMs": 1713,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 28
+        },
+        {
+          "sample_idx": 10,
+          "userMs": 120930,
+          "refMs": 1714,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -2
+        },
+        {
+          "sample_idx": 11,
+          "userMs": 120960,
+          "refMs": 1742,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -4
+        },
+        {
+          "sample_idx": 12,
+          "userMs": 120991,
+          "refMs": 1803,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 26
+        },
+        {
+          "sample_idx": 13,
+          "userMs": 121022,
+          "refMs": 1803,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -5
+        }
+      ],
+      "user_monotonic": true,
+      "ref_monotonic": true,
+      "rates_valid": true,
+      "hard_seek_count": 0,
+      "max_drift_abs_ms": 30,
       "status": "PASS"
     },
     {
@@ -64,21 +220,38 @@
       "status": "PASS"
     },
     {
-      "step": "step4_independent_mode_and_return_sync",
+      "step": "step4_3w_slowmo_and_tempo_disclosure",
+      "info": {
+        "is3wSelected": true,
+        "hasSlowMoBadge": true,
+        "hasTempoDisclosure": true
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step5_skeleton_toggle_and_freeze_buttons",
+      "initial_state": {
+        "btnText": "🦴 骨架標記：開啟",
+        "canvasCount": 2
+      },
+      "hidden_state": {
+        "btnText": "🦴 骨架標記：隱藏",
+        "canvasCount": 1
+      },
+      "sk_toggle_pass": true,
+      "top_frozen": true,
+      "user_top_exact": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step6_independent_mode_and_return_sync",
       "has_ind_badge": true,
       "has_return_btn": true,
       "has_sync_badge": true,
       "status": "PASS"
     },
     {
-      "step": "step5_skeleton_and_freeze_buttons",
-      "top_frozen": true,
-      "user_top_exact": true,
-      "skeleton_toggle_res": "TOGGLED: 🦴 骨架標記：開啟 -> 🦴 骨架標記：開啟",
-      "status": "PASS"
-    },
-    {
-      "step": "step6_quantitative_posture_table_and_priority_fix",
+      "step": "step7_quantitative_posture_table_and_priority_fix",
       "table_info": {
         "hasSectionTitle": true,
         "hasPriorityFix": true,
@@ -93,7 +266,7 @@
         "refRate": 0.46,
         "userPaused": false,
         "refPaused": false,
-        "userTime": 119.8386354161261
+        "userTime": 119.71469545885921
       },
       "status": "PASS"
     }
@@ -104,36 +277,40 @@
       "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_01_default_slowmo_and_offline_badge.png"
     },
     {
-      "name": "r3_02_slowmo_025x_playing",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_02_slowmo_025x_playing.png"
+      "name": "r3_02_slowmo_025x_top_to_impact_timeseries",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_02_slowmo_025x_top_to_impact_timeseries.png"
     },
     {
       "name": "r3_03_speed_reset_10x",
       "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_03_speed_reset_10x.png"
     },
     {
-      "name": "r3_04_independent_mode_active",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_04_independent_mode_active.png"
+      "name": "r3_04_3w_slowmo_and_tempo_disclosure",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_04_3w_slowmo_and_tempo_disclosure.png"
     },
     {
-      "name": "r3_05_returned_to_sync_mode",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_05_returned_to_sync_mode.png"
+      "name": "r3_05_skeleton_hidden",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_05_skeleton_hidden.png"
     },
     {
       "name": "r3_06_top_freeze_alignment",
       "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_06_top_freeze_alignment.png"
     },
     {
-      "name": "r3_07_skeleton_toggled",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_07_skeleton_toggled.png"
+      "name": "r3_07_independent_mode_active",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_07_independent_mode_active.png"
     },
     {
-      "name": "r3_08_quantitative_posture_table",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_08_quantitative_posture_table.png"
+      "name": "r3_08_returned_to_sync_mode",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_08_returned_to_sync_mode.png"
     },
     {
-      "name": "r3_09_metric_jump_slowmo_playback",
-      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_09_metric_jump_slowmo_playback.png"
+      "name": "r3_09_quantitative_posture_table",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_09_quantitative_posture_table.png"
+    },
+    {
+      "name": "r3_10_metric_jump_slowmo_playback",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_10_metric_jump_slowmo_playback.png"
     }
   ]
 }

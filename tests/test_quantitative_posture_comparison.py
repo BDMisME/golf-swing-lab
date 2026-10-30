@@ -654,3 +654,183 @@ def test_geometry_calibration_and_truthfulness_notice_in_report():
     for m in report.metrics:
         assert "非認證標準" in m.general_benchmark_range
 
+
+# =========================================================================
+# P0-A: 旋轉 Metadata 重複套用修正與 API 整合測試 (Rotation Idempotency)
+# =========================================================================
+
+def test_rotation_metadata_api_integration_no_double_swap():
+    """
+    18. P0-A 旋轉 Metadata 修正驗證：
+    測試 API 端點在面對：
+    1. 1080×1920，rotation=0
+    2. 1920×1080，rotation=90
+    3. 1920×1080，rotation=270
+    4. 640×360，rotation=0
+    5. Reference 的已校正尺寸重新傳入量化引擎。
+    驗證 display dimensions 恆定，且同一物理動作在 rot=0 與 rot=90/270 下角度 100% 一致，絕不發生二次對調！
+    """
+    from apps.api.db import SessionLocal
+    from apps.api.models import User, PracticeSession, Video, SwingSegment, SwingEvent, PoseArtifact, ReferenceSwing
+    from apps.api.auth import hash_password, create_session_token
+
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.email == "rot_test@example.com").first()
+        if not user:
+            user = User(
+                email="rot_test@example.com",
+                username="rot_test",
+                password_hash=hash_password("Test123456!"),
+                role="owner",
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        token = create_session_token(user)
+
+        sess = PracticeSession(
+            owner_id=user.id,
+            title="Rotation Integration Session",
+            date="2026-10-30",
+        )
+        db.add(sess)
+        db.commit()
+        db.refresh(sess)
+
+        # 建立 4 種不同維度的 Video
+        # Case 1: 1080x1920, rot=0
+        v_1080_0 = Video(
+            owner_id=user.id, session_id=sess.id, original_name="v_1080_0.mp4",
+            storage_key="test/v_1080_0.mp4", mime="video/mp4", ingest_status="ready",
+            width=1080, height=1920, rotation=0,
+        )
+        # Case 2: 1920x1080, rot=90
+        v_1920_90 = Video(
+            owner_id=user.id, session_id=sess.id, original_name="v_1920_90.mp4",
+            storage_key="test/v_1920_90.mp4", mime="video/mp4", ingest_status="ready",
+            width=1920, height=1080, rotation=90,
+        )
+        # Case 3: 1920x1080, rot=270
+        v_1920_270 = Video(
+            owner_id=user.id, session_id=sess.id, original_name="v_1920_270.mp4",
+            storage_key="test/v_1920_270.mp4", mime="video/mp4", ingest_status="ready",
+            width=1920, height=1080, rotation=270,
+        )
+        # Case 4: 640x360, rot=0
+        v_640_0 = Video(
+            owner_id=user.id, session_id=sess.id, original_name="v_640_0.mp4",
+            storage_key="test/v_640_0.mp4", mime="video/mp4", ingest_status="ready",
+            width=640, height=360, rotation=0,
+        )
+        db.add_all([v_1080_0, v_1920_90, v_1920_270, v_640_0])
+        db.commit()
+
+        # 建立相同動作的 2D 關鍵點（站姿前傾角）
+        # 在正立的顯示影像座標系中：sh_x=0.45, hp_x=0.55
+        addr_lms = _make_landmarks(sh_x=0.45, hp_x=0.55)
+        top_lms = _make_landmarks(sh_x=0.45, hp_x=0.55)
+        imp_lms = _make_landmarks(sh_x=0.45, hp_x=0.58)
+        fin_lms = _make_landmarks(sh_x=0.54, hp_x=0.55, wrist_y=0.25)
+        kf_list = [
+            {"time_ms": 1100, "landmarks": addr_lms, "pose_confidence": 0.95},
+            {"time_ms": 2200, "landmarks": top_lms, "pose_confidence": 0.95},
+            {"time_ms": 2550, "landmarks": imp_lms, "pose_confidence": 0.95},
+            {"time_ms": 3400, "landmarks": fin_lms, "pose_confidence": 0.95},
+        ]
+
+        def _create_seg_with_events(video_id: str) -> str:
+            s = SwingSegment(
+                owner_id=user.id, video_id=video_id, start_ms=1000, end_ms=4000,
+                label="valid_swing", sequence_no=1, ball_strike_status="confirmed_strike",
+            )
+            db.add(s)
+            db.commit()
+            db.refresh(s)
+            db.add(SwingEvent(segment_id=s.id, event_name="address", time_ms=1100))
+            db.add(SwingEvent(segment_id=s.id, event_name="top", time_ms=2200))
+            db.add(SwingEvent(segment_id=s.id, event_name="impact_estimated", time_ms=2550))
+            db.add(SwingEvent(segment_id=s.id, event_name="finish", time_ms=3400))
+            db.add(PoseArtifact(
+                segment_id=s.id, storage_key="test/pose.json",
+                quality_metadata={"model": "mediapipe_2d"}, keyframes_json=kf_list,
+            ))
+            db.commit()
+            return s.id
+
+        seg_1080_0 = _create_seg_with_events(v_1080_0.id)
+        seg_1920_90 = _create_seg_with_events(v_1920_90.id)
+        seg_1920_270 = _create_seg_with_events(v_1920_270.id)
+        seg_640_0 = _create_seg_with_events(v_640_0.id)
+
+    with TestClient(app) as client:
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 驗證 Case 1: 1080x1920, rot=0 -> display: 1080x1920, aspect=0.5625
+        res1 = client.get(f"/api/swings/{seg_1080_0}/posture-comparison", headers=headers)
+        assert res1.status_code == 200
+        data1 = res1.json()
+        geom1 = data1["geometry_calibration"]
+        assert geom1["user_display_width"] == 1080
+        assert geom1["user_display_height"] == 1920
+        assert geom1["user_display_aspect"] == 0.5625
+        user_tilt1 = next(m for m in data1["metrics"] if m["id"] == "address_spine_tilt")["user_value"]
+
+        # 驗證 Case 2: 1920x1080, rot=90 -> display: 1080x1920, aspect=0.5625 (絕不可二次對調為 1.7778)
+        res2 = client.get(f"/api/swings/{seg_1920_90}/posture-comparison", headers=headers)
+        assert res2.status_code == 200
+        data2 = res2.json()
+        geom2 = data2["geometry_calibration"]
+        assert geom2["user_display_width"] == 1080
+        assert geom2["user_display_height"] == 1920
+        assert geom2["user_display_aspect"] == 0.5625, "rot=90 被二次對調為 1.7778！"
+        user_tilt2 = next(m for m in data2["metrics"] if m["id"] == "address_spine_tilt")["user_value"]
+
+        # 驗證同一動作在 rot=0 與 rot=90 幾何角度 100% 一致 (0.00° 誤差)
+        assert user_tilt1 == pytest.approx(user_tilt2, abs=1e-3)
+
+        # 驗證 Case 3: 1920x1080, rot=270 -> display: 1080x1920, aspect=0.5625
+        res3 = client.get(f"/api/swings/{seg_1920_270}/posture-comparison", headers=headers)
+        assert res3.status_code == 200
+        data3 = res3.json()
+        geom3 = data3["geometry_calibration"]
+        assert geom3["user_display_width"] == 1080
+        assert geom3["user_display_height"] == 1920
+        assert geom3["user_display_aspect"] == 0.5625
+        user_tilt3 = next(m for m in data3["metrics"] if m["id"] == "address_spine_tilt")["user_value"]
+        assert user_tilt1 == pytest.approx(user_tilt3, abs=1e-3)
+
+        # 驗證 Case 4: 640x360, rot=0 -> display: 640x360, aspect=1.7778
+        res4 = client.get(f"/api/swings/{seg_640_0}/posture-comparison", headers=headers)
+        assert res4.status_code == 200
+        data4 = res4.json()
+        geom4 = data4["geometry_calibration"]
+        assert geom4["user_display_width"] == 640
+        assert geom4["user_display_height"] == 360
+        assert geom4["user_display_aspect"] == 1.7778
+
+        # 驗證 Case 5: Reference 的已校正尺寸重新傳入量化引擎 (Idempotent 測試)
+        ref_reentry = {
+            "id": "ref-idempotent-test",
+            "club_type": "7I",
+            "camera_angle": "DTL",
+            "video_width": 1080,
+            "video_height": 1920,
+            "video_rotation": 90,  # 帶有 rotation=90 但已有校正過的寬高與 aspect_ratio
+            "aspect_ratio": 0.5625,
+            "is_display_dimensions": True,
+            "event_timestamps": {"address": 100, "top": 1200, "impact": 1550, "finish": 2400},
+            "calibration_params": {
+                "video_width": 1080, "video_height": 1920, "video_rotation": 90,
+                "aspect_ratio": 0.5625, "is_display_dimensions": True,
+            },
+            "pose_artifact": {"landmarks": {"100": addr_lms, "1200": top_lms, "1550": imp_lms, "2400": fin_lms}}
+        }
+        user_reentry = _make_standard_user_swing(aspect_ratio=0.5625, video_width=1080, video_height=1920)
+        report_re = compute_quantitative_posture_comparison(user_reentry, ref_reentry)
+        geom_re = report_re.geometry_calibration
+        assert geom_re["ref_display_width"] == 1080
+        assert geom_re["ref_display_height"] == 1920
+        assert geom_re["ref_display_aspect"] == 0.5625, "Reference 尺寸在重入時被二次對調！"
+
+
