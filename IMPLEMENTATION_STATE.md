@@ -1,25 +1,38 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 22: Golf Swing Lab R3 — Final Coaching Logic Hotfix）
-1. **P0 規則式教練建議與量化數據矛盾修正（Priority Fix Semantic & Dimensional Coherence Hotfix）**：`PASS`
-   - **7I 頭部位移軸心修正**：`top_head_displacement` 導入 `is_lower_better=True`。當使用者位移比 11.1% 遠小於示範選手 28.8%（Delta = -17.7%），表示受測者頭部軸心更為穩定，系統自動判定為 `optimal`，不列入缺陷，徹底杜絕「頭部浮動過大」之矛盾指責。
-   - **Driver 手腕高度錯誤 Drill 修正**：`address_wrist_height` 定位為靜態站姿個人設定差異，安全降級為純客觀觀察（`actionable_drill = None`），徹底杜絕誤套用 Finish「3 秒雕像收桿平衡 Drill」。
-   - **無量綱偏離度倍數排序（Unit-Agnostic Severity Sorting）**：以標準化偏離強度 `severity = status_weight * (|delta| / moderate_tol) * confidence` 排序，杜絕將度數（°）、百分比（%）、節奏比例（ratio）原始絕對值直接混排之嚴重錯誤。
-   - **方向性客觀描述與降級保證**：依據 Delta 正負方向給出精準客觀描述（偏直立 vs 前傾較深、上桿偏慢 vs 轉換過急等）；缺乏適切動態 Drill 時，安全降級為純客觀觀察（`actionable_drill = None`），不胡亂湊合練習處方。
-2. **P1 驗收報告一致性與動態 UTC 時間（Dynamic UTC & Real API Consistency）**：`PASS`
-   - `scripts/generate_real_api_posture_report.py` 移除寫死日期，改為動態 `datetime.now(timezone.utc).isoformat()`。
-   - 刷新 `docs/reports/real_api_posture_comparison_report.json`：
-     - 7I Priority Fix 正確更新為骨盆開放不足（`impact_hip_clearance`，開放不足 -14.6%，左臀後退清開空間 Drill）。
-     - Driver Priority Fix 正確降級為手腕設定觀察（`address_wrist_height`，`actionable_drill = null`）。
-3. **回歸測試與全量驗證確認**：`PASS`
-   - 專項測試：`tests/test_quantitative_posture_comparison.py` 新增 4 項專項測試，全數 **22 / 22 PASSED (100%)**。
+## 最新修復狀態（Round 23: Golf Swing Lab R3 — Final Scientific Integrity & Merge Gate）
+1. **第一階段：骨盆 2D 平面幾何指標運動學誠信修正（Pelvic 2D Displacement Scientific Integrity）**：`PASS`
+   - **客觀物理意義更名**：將 `impact_hip_clearance` 名稱由「擊球骨盆深度開放比」修正為「擊球骨盆2D相對位移比」（保留 `id="impact_hip_clearance"` 以確保 API 與前端契約相容性）。
+   - **移除單向 `is_higher_better` 假設**：2D 影像雙髖中點歐氏距離大小無法區分左臀後移（Clearance）或骨盆前頂（Early Extension），更無法推論 3D 骨盆旋轉角度，故移除越大越好假設，設置中性容許範圍（8.0%~18.0% 身長）。
+   - **假旋轉 Drill 徹底拔除**：移除「左臀後退清開空間 Drill」，當此指標作為觀察項目時安全降級為純客觀幾何觀察（`actionable_drill = None`），並在 summary 與 docstring 明確揭露 2D 歐氏距離無法推論旋轉之局限。
+   - **合成驗證**：新增 `test_pelvic_displacement_isotropic_direction_invariance`，驗證向前頂、向後退、下蹲、拔起四種不同方向之等距位移百分比完全相等，演算法不誤判旋轉度數。
+2. **第二階段：Optimal 判定與實驗性參考區間雙軸分離（Dual-Axis Optimal & Benchmark Evaluation）**：`PASS`
+   - **雙軸獨立評估架構**：
+     - 軸 1：`relative_status`（相對於示範選手差異：`aligned` / `moderate_diff` / `significant_diff`）。
+     - 軸 2：`benchmark_status`（相對於常模區間：`within_benchmark` / `outside_benchmark` / `not_applicable`）。
+   - **防止盲目認定 Optimal**：在越小越好指標（`top_spine_retention`, `top_head_displacement`, `impact_spine_delta`, `finish_spine_angle`）中，若使用者數值小於示範選手但超出實驗性參考區間（例如頭部位移 11.1% < 28.8% 但 > 8.0%），系統絕不給予 `optimal`，而是標註為 `moderate_diff`，並客觀說明「較示範小但仍超出實驗性參考區間」。
+   - **合成驗證**：新增 `test_optimal_requires_within_benchmark_even_if_better_than_ref`，驗證超出區間時不蓋章 optimal，僅在落在區間內時始得 optimal。
+3. **第三階段：Priority Fix 可診斷性與適用性優先排序（Priority Fix Diagnosability & Precedence）**：`PASS`
+   - **可行動 Drill 候選優先**：建立 `ACTIONABLE_DRILL_METRICS`（站姿前傾、頂點維持、頂點頭部、擊球前傾維持、節奏比、收桿直立）與 `OBSERVATION_ONLY_METRICS`（手腕高度、骨盆平面位移）。
+   - **動作缺陷篩選防護**：排除使用者表現優於或等於示範球員之項目（`delta <= 0` 且 lower_better），不誤導使用者修改更穩定的動作。
+   - **可診斷性優先序**：優先從具備 Actionable Drill 之動作缺陷中依無量綱嚴重度排序挑選；純觀察指標降級（`actionable_drill = None`）；若無可靠缺陷則回傳 `None`。
+   - **7I 與 Driver 真實 API 對齊**：
+     - 7I：精準判定為節奏轉換與站姿前傾缺陷，不被純觀察指標干擾。
+     - Driver：手腕設定差異降級為純觀察，`actionable_drill = null`，無任何假 Drill。
+4. **第四階段：報告一致性與單一真實來源（Single Source of Truth & Full Audit）**：`PASS`
+   - `docs/reports/real_api_posture_comparison_report.json` 包含動態 UTC 時間、Git SHA、Branch、工作樹狀態，各項度量數值與單位 100% 由真實 API 自動對齊。
+5. **第五階段：全矩陣自動化驗收與原生 WebKit 驗證**：`PASS`
+   - 專項測試：`tests/test_quantitative_posture_comparison.py` **25 / 25 PASSED (100%)**。
    - 離線 LLM 守衛：`tests/test_offline_llm_guard.py` **9 / 9 PASSED (100%)**。
    - 示範素材庫完整性：`scripts/verify_18_reference_swings.py` 18 / 18 示範資料庫記錄 100% 完整無缺。
-   - 後端全套測試：**126 / 126 PASSED (100%)**。
+   - 後端全套測試：**129 / 129 PASSED (100%)**（包含 2 分鐘長影片 12 球全量 CV 基準評估）。
    - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
-- **最後更新時間**：2026-10-31T03:25:00+08:00
+   - WebKit 原生視窗實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 7 大步驟 100% 全數通過（PASS），產出 10 張真實 WebKit 截圖存證與完整報告。
+- **最後更新時間**：2026-10-31T04:05:00+08:00
 - **當前分支**：`feat/r3-offline-coach-and-slow-motion`
-- **正式判定**：**Personal Beta READY FOR MERGE (嚴禁自行合併 main，已推送到 PR #3 分支，等待負責人授權)**
+- **正式判定**：**Personal Beta READY FOR MERGE (嚴禁自行合併 main，已推送到 PR #3 分支，等待專案負責人最後授權合併)**
+
+## 前期重大里程碑狀態（Round 22: Golf Swing Lab R3 — Final Coaching Logic Hotfix）
 
 ## 前期重大里程碑狀態（Round 21: Golf Swing Lab R3 — Final Release Audit & PR #3 Merge Readiness）
 

@@ -4,6 +4,34 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 23: Golf Swing Lab R3 — Final Scientific Integrity & Merge Gate (2026-10-31) — 全面完成
+- [x] **第一階段：修正骨盆幾何指標（Pelvic 2D Displacement Scientific Integrity）**：
+  - **更名與物理意義釐清**：將 `impact_hip_clearance` 名稱由「擊球骨盆深度開放比」修正為「擊球骨盆2D相對位移比」，保留 `id="impact_hip_clearance"` 保障合約相容。
+  - **移除 `is_higher_better` 單向假設**：2D 歐氏距離大小無法區分左臀後移與骨盆前頂（Early Extension），更無法推論 3D 旋轉，移除單向假設並設定雙向常模區間（8.0%~18.0%）。
+  - **假旋轉 Drill 徹底拔除**：移除「左臀後退清開空間 Drill」，安全降級為純客觀觀察（`actionable_drill = None`），在 summary 與 docstring 明確揭露 2D 歐氏距離局限。
+  - **合成測試驗證**：新增 `test_pelvic_displacement_isotropic_direction_invariance`，模擬向前頂、向後退、下蹲、拔起四種不同方向等距位移，驗證位移百分比完全相等且不誤判旋轉度數。
+- [x] **第二階段：修正 Optimal 判定（Dual-Axis Optimal & Benchmark Evaluation）**：
+  - **雙軸獨立評估機制**：明確分離 Relative Reference Comparison（`relative_status`: aligned / moderate_diff / significant_diff）與 Experimental Benchmark Evaluation（`benchmark_status`: within_benchmark / outside_benchmark）。
+  - **防止盲目認定 Optimal**：在越小越好指標中，使用者數值雖小於示範但超出實驗性參考區間時（如頭部位移 11.1% < 28.8% 但 > 8.0%），系統絕不給予 `optimal`，而是標註為 `moderate_diff`，客觀說明「較示範小但高於實驗性參考區間」。
+  - **合成測試驗證**：新增 `test_optimal_requires_within_benchmark_even_if_better_than_ref`，驗證超出區間不蓋章 optimal，落在區間內時始得 optimal。
+- [x] **第三階段：修正 Priority Fix（Priority Fix Diagnosability & Precedence）**：
+  - **可診斷性與適用性優先檢查**：建立 `ACTIONABLE_DRILL_METRICS` 與 `OBSERVATION_ONLY_METRICS`。
+  - **動作缺陷篩選防護**：排除使用者表現優於或等於示範球員之項目（`delta <= 0` 且 lower_better），不誤導修改更穩定的動作。
+  - **可診斷性優先序**：優先從具備 Actionable Drill 之動作缺陷中依無量綱嚴重度挑選；純觀察指標降級（`actionable_drill = None`）；無可靠缺陷時回傳 `None`。
+  - **真實 API 7I 與 Driver 驗證**：7I 精準挑選節奏比與站姿前傾缺陷；Driver 手腕設定差異安全降級為純觀察，無任何假 Drill。
+- [x] **第四階段：報告一致性與單一真實來源（Single Source of Truth & Full Audit）**：
+  - `scripts/generate_real_api_posture_report.py` 整合動態 UTC 時間、Git SHA、Branch、工作樹狀態，各項度量數值與單位 100% 由真實 API 自動對齊至 `docs/reports/real_api_posture_comparison_report.json`。
+- [x] **第五階段：全矩陣自動化驗收與原生 WebKit 驗證**：
+  - 專項測試：`tests/test_quantitative_posture_comparison.py` **25 / 25 PASSED (100%)**。
+  - 離線 LLM 守衛：`tests/test_offline_llm_guard.py` **9 / 9 PASSED (100%)**。
+  - 示範素材庫完整性：`scripts/verify_18_reference_swings.py` 18 / 18 示範資料庫記錄 100% 完整無缺。
+  - 後端全套測試：**129 / 129 PASSED (100%)**（包含 2 分鐘長影片 12 球全量 CV 基準評估）。
+  - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+  - WebKit 原生視窗實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 7 大步驟 100% 全數通過（PASS），產出 10 張真實 WebKit 截圖存證與完整報告。
+- [x] **第六階段：發行管制遵守**：
+  - 絕不自行合併 main，僅推送到 `feat/r3-offline-coach-and-slow-motion` 分支，更新 PR #3。
+  - 保留 18 筆示範庫 UUID、不修改使用者原始影片、不重置 PostgreSQL。
+
 ## Round 22: Golf Swing Lab R3 — Final Coaching Logic Hotfix (2026-10-31) — 全面完成
 - [x] **P0：Priority Fix 判斷與實際數值矛盾修正（Coaching Logic Hotfix）**：
   - **7I 頭部位移軸心修正**：`top_head_displacement` 設為 `is_lower_better=True`。User 位移比 11.1% 遠小於 Ref 28.8%（Delta = -17.7%），判定為 `optimal`，不列入缺陷，徹底排除「頭部浮動過大」矛盾。

@@ -74,10 +74,25 @@ def generate_report() -> dict[str, Any]:
         assert res_close.status_code == 200, f"Driver Close-up API 回傳失敗: {res_close.text}"
         data_close = res_close.json()
 
+    import subprocess
+    def _run_git(args: list[str]) -> str:
+        try:
+            return subprocess.check_output(["git"] + args, cwd=str(REPO_ROOT), text=True).strip()
+        except Exception:
+            return "unknown"
+
+    git_sha = _run_git(["rev-parse", "HEAD"])
+    git_branch = _run_git(["branch", "--show-current"])
+    git_dirty = bool(_run_git(["status", "--porcelain"]))
+
+    now_utc = datetime.now(timezone.utc)
     final_report = {
         "metadata": {
             "title": "Golf Swing Lab — R3 Real API Posture Comparison Verification Report",
-            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "generated_at_utc": now_utc.isoformat(),
+            "git_head_sha": git_sha,
+            "git_branch": git_branch,
+            "git_working_tree_clean": not git_dirty,
             "source": "GET /api/swings/{swing_id}/posture-comparison",
             "user_swing_id": target_swing_id,
             "truthfulness_principles": [

@@ -1019,4 +1019,242 @@ def test_priority_fix_safe_degradation_without_drill():
     assert "站姿手腕" in p_fix.issue_title
 
 
+# =========================================================================
+# 第一階段：骨盆 2D 平面幾何指標運動學誠信測試
+# =========================================================================
+
+def test_pelvic_displacement_isotropic_direction_invariance():
+    """
+    第一階段合成測試：
+    骨盆雙髖中點在 2D 投影平面上從 Address 到 Impact，分別模擬四個不同方向相同歐氏距離位移：
+    (a) 向前頂（Early Extension）: dx = +0.03, dy = 0.0
+    (b) 向後退（Clearance）: dx = -0.03, dy = 0.0
+    (c) 下蹲（Squat）: dx = 0.0, dy = +0.03
+    (d) 拔起（Extension）: dx = 0.0, dy = -0.03
+    驗證：
+    1. 四種物理意義完全相異之動作，在 2D 平面上計算出之位移百分比完全相等。
+    2. 指標名稱為「擊球骨盆2D相對位移比」，絕不宣稱為「骨盆旋轉」或「清開空間角度」。
+    3. 演算法不因位移大小而誤判骨盆旋轉度數。
+    4. 當骨盆位移作為改善候選時，actionable_drill 降級為 None，不發放單向 Drill。
+    """
+    torso_len = 0.30
+    dist = 0.03
+
+    cases = [
+        ("early_extension", 0.55 + dist, 0.60),
+        ("hip_clearance_back", 0.55 - dist, 0.60),
+        ("squat_down", 0.55, 0.60 + dist),
+        ("jump_up", 0.55, 0.60 - dist),
+    ]
+
+    calculated_pcts = []
+    for name, hp_x, hp_y in cases:
+        addr_lms = _make_landmarks(hp_x=0.55, hp_y=0.60)
+        imp_lms = _make_landmarks(hp_x=hp_x, hp_y=hp_y)
+        # 以長寬比 1.0 等比例測試
+        iso_addr = {k: (v["x"], v["y"], v["visibility"]) for k, v in addr_lms.items()}
+        iso_imp = {k: (v["x"], v["y"], v["visibility"]) for k, v in imp_lms.items()}
+
+        from packages.analysis.posture_comparison import _compute_hip_displacement_pct
+        pct, conf = _compute_hip_displacement_pct(iso_addr, iso_imp, torso_len)
+        assert pct is not None
+        calculated_pcts.append(round(pct, 2))
+
+    # 四種不同方向之歐氏位移比完全相等 (0.03 / 0.30 * 100 = 10.0%)
+    expected_pct = round((dist / torso_len) * 100.0, 2)
+    for p in calculated_pcts:
+        assert p == pytest.approx(expected_pct, abs=1e-2)
+
+    # 驗證在完整報告中指標名稱與降級機制
+    user_swing = _make_standard_user_swing()
+    ref_swing = _make_standard_ref_swing()
+    rep = compute_quantitative_posture_comparison(user_swing, ref_swing)
+    pelvic_m = next(m for m in rep.metrics if m.id == "impact_hip_clearance")
+    assert pelvic_m.metric_name == "擊球骨盆2D相對位移比"
+    assert "旋轉" not in pelvic_m.metric_name
+
+    # 驗證當挑選為 priority_fix 時無假 Drill
+    from packages.analysis.posture_comparison import _build_priority_fix
+    pelvic_fix = _build_priority_fix([pelvic_m])
+    if pelvic_fix and pelvic_fix.metric_id == "impact_hip_clearance":
+        assert pelvic_fix.drill is None
+        assert pelvic_fix.actionable_drill is None
+        assert "無法推論 3D 骨盆旋轉" in pelvic_fix.summary
+
+
+# =========================================================================
+# 第二階段：Optimal 判定與參考區間雙軸分離測試
+# =========================================================================
+
+def test_optimal_requires_within_benchmark_even_if_better_than_ref():
+    """
+    第二階段合成測試：
+    當指標屬於越小越好（is_lower_better=True），如頂點頭部位移 top_head_displacement：
+    情境 A：使用者數值（11.1%）相較示範選手（28.8%）更穩定（delta = -17.7%），
+            但使用者數值仍超出實驗性參考區間（≤ 8.0% 身長）。
+            系統「絕不得」判定為 optimal！
+            應判定為 benchmark_status == "outside_benchmark"，status == "moderate_diff"，
+            並客觀說明「相較示範選手位移較小，但仍超出實驗性參考區間」。
+    情境 B：使用者數值（4.0%）相較示範選手（28.8%）更穩定，
+            且使用者數值落在實驗性參考區間內（4.0% ≤ 8.0%）。
+            系統始得判定為 benchmark_status == "within_benchmark"，status == "optimal"。
+    """
+    torso_len = 0.30
+    ref_addr = _make_landmarks(nose_x=0.45, nose_y=0.20)
+    ref_top = _make_landmarks(nose_x=0.5364, nose_y=0.20)  # 位移約 28.8% of torso
+
+    # 情境 A: 使用者位移 11.1% (> 8.0% benchmark)
+    user_addr_a = _make_landmarks(nose_x=0.45, nose_y=0.20)
+    user_top_a = _make_landmarks(nose_x=0.4833, nose_y=0.20)  # 位移約 11.1% of torso
+
+    user_swing_a = {
+        "aspect_ratio": 1.0,
+        "video_width": 1000,
+        "video_height": 1000,
+        "events": [
+            {"event_name": "address", "time_ms": 100},
+            {"event_name": "top", "time_ms": 1000},
+            {"event_name": "impact_estimated", "time_ms": 1300},
+            {"event_name": "finish", "time_ms": 2000},
+        ],
+        "keyframes": [
+            {"time_ms": 100, "landmarks": user_addr_a, "pose_confidence": 0.95},
+            {"time_ms": 1000, "landmarks": user_top_a, "pose_confidence": 0.95},
+            {"time_ms": 1300, "landmarks": user_addr_a, "pose_confidence": 0.95},
+            {"time_ms": 2000, "landmarks": user_addr_a, "pose_confidence": 0.95},
+        ],
+    }
+
+    ref_swing = {
+        "id": "ref-dual-axis-test",
+        "club_type": "7I",
+        "camera_angle": "DTL",
+        "aspect_ratio": 1.0,
+        "video_width": 1000,
+        "video_height": 1000,
+        "event_timestamps": {"address": 100, "top": 1000, "impact": 1300, "finish": 2000},
+        "pose_artifact": {
+            "landmarks": {
+                "100": ref_addr,
+                "1000": ref_top,
+                "1300": ref_addr,
+                "2000": ref_addr,
+            }
+        },
+    }
+
+    rep_a = compute_quantitative_posture_comparison(user_swing_a, ref_swing)
+    head_m_a = next(m for m in rep_a.metrics if m.id == "top_head_displacement")
+
+    # 驗證情境 A
+    assert head_m_a.delta < 0, "使用者位移應小於示範選手"
+    assert head_m_a.benchmark_status == "outside_benchmark", "11.1% 應超出 <= 8.0% 常模區間"
+    assert head_m_a.status != "optimal", "超出常模區間時，絕不得判定為 optimal！"
+    assert head_m_a.status == "moderate_diff"
+    assert "但仍超出實驗性參考區間" in head_m_a.evaluation_text
+
+    # 情境 B: 使用者位移 4.0% (<= 8.0% benchmark)
+    user_top_b = _make_landmarks(nose_x=0.462, nose_y=0.20)  # 位移約 4.0% of torso
+    user_swing_b = dict(user_swing_a)
+    user_swing_b["keyframes"] = [
+        {"time_ms": 100, "landmarks": user_addr_a, "pose_confidence": 0.95},
+        {"time_ms": 1000, "landmarks": user_top_b, "pose_confidence": 0.95},
+        {"time_ms": 1300, "landmarks": user_addr_a, "pose_confidence": 0.95},
+        {"time_ms": 2000, "landmarks": user_addr_a, "pose_confidence": 0.95},
+    ]
+
+    rep_b = compute_quantitative_posture_comparison(user_swing_b, ref_swing)
+    head_m_b = next(m for m in rep_b.metrics if m.id == "top_head_displacement")
+
+    # 驗證情境 B
+    assert head_m_b.delta < 0
+    assert head_m_b.benchmark_status == "within_benchmark"
+    assert head_m_b.status == "optimal"
+    assert "維持更佳穩定度" in head_m_b.evaluation_text
+
+
+# =========================================================================
+# 第三階段：Priority Fix 可診斷性與真實 7I 改善重點驗證
+# =========================================================================
+
+def test_priority_fix_diagnosability_and_7i_spine_tilt_precedence():
+    """
+    第三階段測試：
+    驗證可診斷性與 Actionable Drill 優先排序機制：
+    在包含以下候選之指標清單中：
+    1. impact_hip_clearance: 骨盆位移差異（純觀察指標，無 Drill）
+    2. address_wrist_height: 手腕高度差異（純觀察指標，無 Drill）
+    3. top_head_displacement: delta < 0（使用者比示範更穩定，非使用者缺陷）
+    4. address_spine_tilt: delta = -8.5°（站姿前傾偏直立，具備 Actionable Drill）
+    驗證：
+    系統必須精確挑選 address_spine_tilt 作為 Priority Fix，並配發「站姿髖關節鉸鏈 Drill」，
+    絕不被純觀察指標或比示範更好的指標干擾！
+    """
+    from packages.analysis.posture_comparison import _build_priority_fix
+
+    m_hip = PostureMetricComparison(
+        id="impact_hip_clearance",
+        metric_name="擊球骨盆2D相對位移比",
+        phase="impact",
+        phase_zh="擊球瞬間 (Impact)",
+        unit="torso_pct",
+        user_value=11.5,
+        ref_value=14.0,
+        delta=-2.5,
+        status="moderate_diff",
+        confidence=0.88,
+        optimal_tol=4.0,
+        moderate_tol=8.0,
+    )
+    m_wrist = PostureMetricComparison(
+        id="address_wrist_height",
+        metric_name="雙手手腕基準高度比",
+        phase="address",
+        phase_zh="準備姿勢 (Address)",
+        unit="torso_pct",
+        user_value=-18.4,
+        ref_value=1.4,
+        delta=-19.8,
+        status="significant_diff",
+        confidence=0.85,
+        optimal_tol=5.0,
+        moderate_tol=10.0,
+    )
+    m_head = PostureMetricComparison(
+        id="top_head_displacement",
+        metric_name="頂點頭部相對位移比",
+        phase="top",
+        phase_zh="上桿頂點 (Top)",
+        unit="torso_pct",
+        user_value=11.1,
+        ref_value=28.8,
+        delta=-17.7,
+        status="moderate_diff",
+        confidence=0.88,
+        optimal_tol=3.0,
+        moderate_tol=6.0,
+    )
+    m_spine = PostureMetricComparison(
+        id="address_spine_tilt",
+        metric_name="站姿軀幹前傾角",
+        phase="address",
+        phase_zh="準備姿勢 (Address)",
+        unit="deg_2d",
+        user_value=27.1,
+        ref_value=35.6,
+        delta=-8.5,
+        status="significant_diff",
+        confidence=0.89,
+        optimal_tol=4.0,
+        moderate_tol=8.0,
+    )
+
+    p_fix = _build_priority_fix([m_hip, m_wrist, m_head, m_spine])
+    assert p_fix is not None
+    assert p_fix.metric_id == "address_spine_tilt", f"Expected address_spine_tilt, got {p_fix.metric_id}"
+    assert p_fix.drill is not None
+    assert "髖關節鉸鏈" in p_fix.drill["name"]
+    assert "前傾" in p_fix.focus_area
+
+
 

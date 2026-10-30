@@ -1,7 +1,10 @@
 {
   "metadata": {
     "title": "Golf Swing Lab — R3 Real API Posture Comparison Verification Report",
-    "generated_at_utc": "2026-10-30T19:19:24.117807+00:00",
+    "generated_at_utc": "2026-10-30T19:57:14.887635+00:00",
+    "git_head_sha": "83e9aa6384fae11be537bbbf602c9d46ac8e5b38",
+    "git_branch": "feat/r3-offline-coach-and-slow-motion",
+    "git_working_tree_clean": false,
     "source": "GET /api/swings/{swing_id}/posture-comparison",
     "user_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
     "truthfulness_principles": [
@@ -63,6 +66,8 @@
             "landmark_source": "ref_pose_artifact",
             "formula": "atan2(|sh_iso.x - hp_iso.x|, hp_iso.y - sh_iso.y)"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 119400,
           "target_jump_phase": "address",
           "recommended_speed": 0.5
@@ -111,6 +116,8 @@
             "landmark_source": "ref_pose_artifact",
             "formula": "(hp_iso.y - wr_iso.y) / torso_len_iso * 100"
           },
+          "relative_status": "moderate_diff",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 119400,
           "target_jump_phase": "address",
           "recommended_speed": 0.5
@@ -134,7 +141,7 @@
           "is_reliable": true,
           "is_comparable": true,
           "status": "optimal",
-          "evaluation_text": "數值為 1.1°，相較於示範選手（3.1°）維持更佳的穩定度與控制。",
+          "evaluation_text": "數值為 1.1°，落在實驗性參考區間內且相較示範選手（3.1°）維持更佳穩定度。",
           "optimal_tol": 2.5,
           "moderate_tol": 5.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -155,6 +162,8 @@
             "aspect_ratio": 1.7778,
             "formula": "|top_spine_iso_deg - addr_spine_iso_deg|"
           },
+          "relative_status": "aligned",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120600,
           "target_jump_phase": "top",
           "recommended_speed": 0.25
@@ -177,8 +186,8 @@
           "confidence": 1.0,
           "is_reliable": true,
           "is_comparable": true,
-          "status": "optimal",
-          "evaluation_text": "數值為 11.1%，相較於示範選手（28.8%）維持更佳的穩定度與控制。",
+          "status": "moderate_diff",
+          "evaluation_text": "數值為 11.1%，相較示範選手（28.8%）位移或變化量較小，但仍超出實驗性參考區間（≤ 8.0% 身長 (實驗性參考區間，非認證標準)）。",
           "optimal_tol": 3.0,
           "moderate_tol": 6.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -199,6 +208,8 @@
             "aspect_ratio": 1.7778,
             "formula": "dist(nose_top_iso, nose_addr_iso) / torso_len_iso * 100"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 120600,
           "target_jump_phase": "top",
           "recommended_speed": 0.25
@@ -221,8 +232,8 @@
           "confidence": 1.0,
           "is_reliable": true,
           "is_comparable": true,
-          "status": "optimal",
-          "evaluation_text": "數值為 7.1°，相較於示範選手（17.0°）維持更佳的穩定度與控制。",
+          "status": "moderate_diff",
+          "evaluation_text": "數值為 7.1°，相較示範選手（17.0°）位移或變化量較小，但仍超出實驗性參考區間（≤ 5.0° (實驗性參考區間，非認證標準)）。",
           "optimal_tol": 2.5,
           "moderate_tol": 5.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -243,6 +254,8 @@
             "aspect_ratio": 1.7778,
             "formula": "|impact_spine_iso_deg - addr_spine_iso_deg|"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -286,6 +299,8 @@
             "is_slow_motion": false,
             "formula": "backswing_ms / downswing_ms"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -294,7 +309,7 @@
           "id": "impact_hip_clearance",
           "phase": "impact",
           "phase_zh": "擊球瞬間 (Impact)",
-          "metric_name": "擊球骨盆深度開放比",
+          "metric_name": "擊球骨盆2D相對位移比",
           "name_zh": null,
           "observation": null,
           "user_value": 9.9,
@@ -309,7 +324,7 @@
           "is_reliable": true,
           "is_comparable": true,
           "status": "significant_diff",
-          "evaluation_text": "較示範選手明顯開放不足 14.6%，為本階段核心結構差異。",
+          "evaluation_text": "較示範選手明顯平面位移較小 14.6%，為本階段核心結構差異。",
           "optimal_tol": 4.0,
           "moderate_tol": 8.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -330,6 +345,8 @@
             "aspect_ratio": 1.7778,
             "formula": "dist(hip_imp_iso, hip_addr_iso) / torso_len_iso * 100"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -353,7 +370,7 @@
           "is_reliable": true,
           "is_comparable": true,
           "status": "optimal",
-          "evaluation_text": "數值為 8.2°，相較於示範選手（11.2°）維持更佳的穩定度與控制。",
+          "evaluation_text": "數值為 8.2°，落在實驗性參考區間內且相較示範選手（11.2°）維持更佳穩定度。",
           "optimal_tol": 4.0,
           "moderate_tol": 8.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -372,35 +389,37 @@
             "aspect_ratio": 1.7778,
             "formula": "spine_tilt_iso_deg @ finish frame"
           },
+          "relative_status": "aligned",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 121800,
           "target_jump_phase": "finish",
           "recommended_speed": 0.5
         }
       ],
-      "priority_fix_id": "impact_hip_clearance",
-      "priority_fix_summary": "在擊球瞬間（Impact）觀測到骨盆深度開放比為 9.9%（示範選手為 24.5%，開放較少 -14.6%）。擊球瞬間左髖向後退開幅度相對較小，建議加強骨盆旋轉清出擊球通道。",
+      "priority_fix_id": "swing_tempo_ratio",
+      "priority_fix_summary": "在擊球瞬間（Impact）上下桿節奏時間比為 3.27:1（示範選手為 1.90:1，比例偏大 +1.37）。上桿耗時相對於下桿較長，轉換啟動偏慢，建議運用慢動作對照頂點換向節奏。",
       "actionable_drill": {
-        "name": "左臀後退清開空間 Drill",
-        "preparation": "左腳跟外側後方 5 公分處放置空球盒或標記物。",
-        "execution": "啟動下桿轉身時，感受左髖主動向後旋轉，使左臀後移清出擊球通道。",
-        "checkpoint": "0.25× 慢動作停格檢視擊球瞬間，從後方可看見左臀深度後移。"
+        "name": "三拍默數節奏轉換 Drill",
+        "preparation": "正常站姿，心中默念節奏口訣「1-2 上桿... 3 啟動釋放」。",
+        "execution": "頂點給予 0.1 秒的從容過渡感，避免雙手急躁下砸。",
+        "checkpoint": "錄影確認上桿頂點有清晰的換向過渡軌跡，非急促折返。"
       },
-      "retest_metric_target": "下次練習 5 球，目標：擊球骨盆深度開放比達到 14.0% 身長以上。",
+      "retest_metric_target": "下次練習 5 球，目標：上下桿時間比維持於 2.7:1 至 3.3:1 區間。",
       "priority_fix": {
-        "focus_area": "擊球瞬間 (Impact) — 擊球骨盆深度開放比",
-        "metric_id": "impact_hip_clearance",
-        "user_value": "9.9%",
-        "ref_value": "24.5%",
-        "delta": "-14.6%",
-        "summary": "在擊球瞬間（Impact）觀測到骨盆深度開放比為 9.9%（示範選手為 24.5%，開放較少 -14.6%）。擊球瞬間左髖向後退開幅度相對較小，建議加強骨盆旋轉清出擊球通道。",
+        "focus_area": "擊球瞬間 (Impact) — 上下桿節奏時間比",
+        "metric_id": "swing_tempo_ratio",
+        "user_value": "3.27:1",
+        "ref_value": "1.90:1",
+        "delta": "+1.37",
+        "summary": "在擊球瞬間（Impact）上下桿節奏時間比為 3.27:1（示範選手為 1.90:1，比例偏大 +1.37）。上桿耗時相對於下桿較長，轉換啟動偏慢，建議運用慢動作對照頂點換向節奏。",
         "drill": {
-          "name": "左臀後退清開空間 Drill",
-          "preparation": "左腳跟外側後方 5 公分處放置空球盒或標記物。",
-          "execution": "啟動下桿轉身時，感受左髖主動向後旋轉，使左臀後移清出擊球通道。",
-          "checkpoint": "0.25× 慢動作停格檢視擊球瞬間，從後方可看見左臀深度後移。"
+          "name": "三拍默數節奏轉換 Drill",
+          "preparation": "正常站姿，心中默念節奏口訣「1-2 上桿... 3 啟動釋放」。",
+          "execution": "頂點給予 0.1 秒的從容過渡感，避免雙手急躁下砸。",
+          "checkpoint": "錄影確認上桿頂點有清晰的換向過渡軌跡，非急促折返。"
         },
-        "target": "下次練習 5 球，目標：擊球骨盆深度開放比達到 14.0% 身長以上。",
-        "confidence": 1.0
+        "target": "下次練習 5 球，目標：上下桿時間比維持於 2.7:1 至 3.3:1 區間。",
+        "confidence": 0.85
       },
       "camera_compatibility": {
         "user_camera": "DTL",
@@ -479,6 +498,8 @@
             "landmark_source": "ref_pose_artifact",
             "formula": "atan2(|sh_iso.x - hp_iso.x|, hp_iso.y - sh_iso.y)"
           },
+          "relative_status": "aligned",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 119400,
           "target_jump_phase": "address",
           "recommended_speed": 0.5
@@ -527,6 +548,8 @@
             "landmark_source": "ref_pose_artifact",
             "formula": "(hp_iso.y - wr_iso.y) / torso_len_iso * 100"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 119400,
           "target_jump_phase": "address",
           "recommended_speed": 0.5
@@ -571,6 +594,8 @@
             "aspect_ratio": 1.7778,
             "formula": "|top_spine_iso_deg - addr_spine_iso_deg|"
           },
+          "relative_status": "aligned",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120600,
           "target_jump_phase": "top",
           "recommended_speed": 0.25
@@ -593,8 +618,8 @@
           "confidence": 1.0,
           "is_reliable": true,
           "is_comparable": true,
-          "status": "optimal",
-          "evaluation_text": "數值為 11.1%，相較於示範選手（22.3%）維持更佳的穩定度與控制。",
+          "status": "moderate_diff",
+          "evaluation_text": "數值為 11.1%，相較示範選手（22.3%）位移或變化量較小，但仍超出實驗性參考區間（≤ 8.0% 身長 (實驗性參考區間，非認證標準)）。",
           "optimal_tol": 3.0,
           "moderate_tol": 6.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -615,6 +640,8 @@
             "aspect_ratio": 1.7778,
             "formula": "dist(nose_top_iso, nose_addr_iso) / torso_len_iso * 100"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 120600,
           "target_jump_phase": "top",
           "recommended_speed": 0.25
@@ -637,8 +664,8 @@
           "confidence": 1.0,
           "is_reliable": true,
           "is_comparable": true,
-          "status": "optimal",
-          "evaluation_text": "數值為 7.1°，相較於示範選手（13.5°）維持更佳的穩定度與控制。",
+          "status": "moderate_diff",
+          "evaluation_text": "數值為 7.1°，相較示範選手（13.5°）位移或變化量較小，但仍超出實驗性參考區間（≤ 5.0° (實驗性參考區間，非認證標準)）。",
           "optimal_tol": 2.5,
           "moderate_tol": 5.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -659,6 +686,8 @@
             "aspect_ratio": 1.7778,
             "formula": "|impact_spine_iso_deg - addr_spine_iso_deg|"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -702,6 +731,8 @@
             "is_slow_motion": false,
             "formula": "backswing_ms / downswing_ms"
           },
+          "relative_status": "aligned",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -710,7 +741,7 @@
           "id": "impact_hip_clearance",
           "phase": "impact",
           "phase_zh": "擊球瞬間 (Impact)",
-          "metric_name": "擊球骨盆深度開放比",
+          "metric_name": "擊球骨盆2D相對位移比",
           "name_zh": null,
           "observation": null,
           "user_value": 9.9,
@@ -725,7 +756,7 @@
           "is_reliable": true,
           "is_comparable": true,
           "status": "significant_diff",
-          "evaluation_text": "較示範選手明顯開放不足 14.6%，為本階段核心結構差異。",
+          "evaluation_text": "較示範選手明顯平面位移較小 14.6%，為本階段核心結構差異。",
           "optimal_tol": 4.0,
           "moderate_tol": 8.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -746,6 +777,8 @@
             "aspect_ratio": 1.7778,
             "formula": "dist(hip_imp_iso, hip_addr_iso) / torso_len_iso * 100"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -769,7 +802,7 @@
           "is_reliable": true,
           "is_comparable": true,
           "status": "optimal",
-          "evaluation_text": "數值為 8.2°，相較於示範選手（25.7°）維持更佳的穩定度與控制。",
+          "evaluation_text": "數值為 8.2°，落在實驗性參考區間內且相較示範選手（25.7°）維持更佳穩定度。",
           "optimal_tol": 4.0,
           "moderate_tol": 8.0,
           "geometry_coord_system": "isotropic_height_normalized",
@@ -788,6 +821,8 @@
             "aspect_ratio": 1.7778,
             "formula": "spine_tilt_iso_deg @ finish frame"
           },
+          "relative_status": "significant_diff",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 121800,
           "target_jump_phase": "finish",
           "recommended_speed": 0.5
@@ -885,6 +920,8 @@
             "landmark_source": "none",
             "formula": "atan2(|sh_iso.x - hp_iso.x|, hp_iso.y - sh_iso.y)"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 119400,
           "target_jump_phase": "address",
           "recommended_speed": 0.5
@@ -933,6 +970,8 @@
             "landmark_source": "none",
             "formula": "(hp_iso.y - wr_iso.y) / torso_len_iso * 100"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 119400,
           "target_jump_phase": "address",
           "recommended_speed": 0.5
@@ -977,6 +1016,8 @@
             "aspect_ratio": 1.7778,
             "formula": "|top_spine_iso_deg - addr_spine_iso_deg|"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120600,
           "target_jump_phase": "top",
           "recommended_speed": 0.25
@@ -1021,6 +1062,8 @@
             "aspect_ratio": 1.7778,
             "formula": "dist(nose_top_iso, nose_addr_iso) / torso_len_iso * 100"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 120600,
           "target_jump_phase": "top",
           "recommended_speed": 0.25
@@ -1065,6 +1108,8 @@
             "aspect_ratio": 1.7778,
             "formula": "|impact_spine_iso_deg - addr_spine_iso_deg|"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "outside_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -1108,6 +1153,8 @@
             "is_slow_motion": false,
             "formula": "backswing_ms / downswing_ms"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -1116,7 +1163,7 @@
           "id": "impact_hip_clearance",
           "phase": "impact",
           "phase_zh": "擊球瞬間 (Impact)",
-          "metric_name": "擊球骨盆深度開放比",
+          "metric_name": "擊球骨盆2D相對位移比",
           "name_zh": null,
           "observation": null,
           "user_value": 9.9,
@@ -1152,6 +1199,8 @@
             "aspect_ratio": 1.7778,
             "formula": "dist(hip_imp_iso, hip_addr_iso) / torso_len_iso * 100"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 120967,
           "target_jump_phase": "impact",
           "recommended_speed": 0.25
@@ -1194,6 +1243,8 @@
             "aspect_ratio": 1.7778,
             "formula": "spine_tilt_iso_deg @ finish frame"
           },
+          "relative_status": "not_comparable",
+          "benchmark_status": "within_benchmark",
           "target_jump_ms": 121800,
           "target_jump_phase": "finish",
           "recommended_speed": 0.5

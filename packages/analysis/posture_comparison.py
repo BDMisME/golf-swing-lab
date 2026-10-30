@@ -57,6 +57,8 @@ class PostureMetricComparison(BaseModel):
     event_accuracy_ms: int | None = None
     user_evidence: dict[str, Any] = Field(default_factory=dict)
     ref_evidence: dict[str, Any] = Field(default_factory=dict)
+    relative_status: str = "aligned"  # aligned | moderate_diff | significant_diff | smaller_than_ref | larger_than_ref
+    benchmark_status: str = "unassessed"  # within_benchmark | outside_benchmark | not_applicable
     target_jump_ms: int = 0
     target_jump_phase: str = ""
     recommended_speed: float = 0.5
@@ -343,12 +345,19 @@ def _compute_head_displacement_pct(
     return pct, conf
 
 
-def _compute_hip_clearance_pct(
+def _compute_hip_displacement_pct(
     addr_lms: dict[str, tuple[float, float, float]],
     impact_lms: dict[str, tuple[float, float, float]],
     torso_len: float,
 ) -> tuple[float | None, float]:
-    """計算擊球瞬間相較準備姿勢時雙髖中點在等比例座標系下之 2D 平面位移比 (% of torso)。"""
+    """
+    計算擊球瞬間相較準備姿勢時雙髖中點在等比例座標系下之 2D 平面位移比 (% of torso)。
+    【最高誠信原則與運動學說明】：
+    本指標僅計算 2D 影像投影平面上雙髖中點之歐氏位移距離 (Euclidean Distance)，
+    無法推論 3D 空間之骨盆旋轉角度 (Pelvis Rotation)，亦無法單由平面位移大小區分
+    臀部是向後退開清出擊球通道 (Hip Clearance) 抑或向前頂出 (Early Extension)。
+    嚴禁將此歐氏位移距離直接當作骨盆旋轉度數或具方向性之後退量。
+    """
     hp1 = _midpoint_xyv(addr_lms, "left_hip", "right_hip")
     hp2 = _midpoint_xyv(impact_lms, "left_hip", "right_hip")
     if not hp1 or not hp2 or torso_len <= 0.04:
@@ -359,6 +368,9 @@ def _compute_hip_clearance_pct(
     pct = (dist / torso_len) * 100.0
     conf = min(hp1[2], hp2[2])
     return pct, conf
+
+
+_compute_hip_clearance_pct = _compute_hip_displacement_pct
 
 
 # =========================================================================
@@ -488,6 +500,20 @@ def _metric_severity_score(m: PostureMetricComparison) -> float:
     return status_weight * norm_ratio * m.confidence
 
 
+ACTIONABLE_DRILL_METRICS = {
+    "address_spine_tilt",
+    "top_spine_retention",
+    "top_head_displacement",
+    "impact_spine_delta",
+    "swing_tempo_ratio",
+    "finish_spine_angle",
+}
+OBSERVATION_ONLY_METRICS = {
+    "address_wrist_height",
+    "impact_hip_clearance",
+}
+
+
 def _build_priority_fix(
     comparisons: list[PostureMetricComparison],
     overall_reliability: str = "high",
@@ -497,21 +523,51 @@ def _build_priority_fix(
 ) -> PriorityFixItem | None:
     """
     Priority Fix 唯一改善重點選擇。
-    排除不是缺陷（如使用者比示範更穩定）的項目，只納入真正構成需要改善的候選。
+    【運動學與診斷可行動性原則】：
+    1. 優先篩選具備有效 2D Actionable Drill 且確實構成動作缺陷的候選項目（如站姿前傾、節奏、脊椎維持）。
+    2. 若指標屬於越小越好（如頂點前傾維持、頂點頭部位移），且使用者數值小於或等於示範（delta <= 0），
+       代表使用者維持度優於示範，絕不得作為優先「動作缺陷」誤導使用者修正。
+    3. 骨盆平面位移比與手腕高度屬於純 2D 幾何觀察指標，無法推論 3D 骨盆旋轉或站位舒適度，
+       若選中則安全降級為客觀觀察（actionable_drill = None），嚴禁配發方向性假 Drill。
+    4. 若所有指標皆在容許相容區間內或無可靠缺陷，回傳 None。
     """
-    valid_diffs = [
+    if not (comparisons and overall_reliability in ("high", "moderate") and is_aspect_corrected):
+        return None
+
+    # 篩選有效且偏離的指標
+    all_diffs = [
         c for c in comparisons
         if c.is_comparable and c.is_reliable and c.status in (
             "significant_diff", "moderate_diff", "significant_difference", "needs_attention"
         )
     ]
 
-    valid_diffs.sort(key=_metric_severity_score, reverse=True)
+    # 排除不是缺陷（使用者表現優於或等於示範球員）的項目
+    real_defects = []
+    for c in all_diffs:
+        # 若為 lower_better 且 delta <= 0（使用者數值小於示範），不是使用者缺陷
+        if c.id in ("top_spine_retention", "top_head_displacement", "impact_spine_delta", "finish_spine_angle") and (c.delta or 0.0) <= 0:
+            continue
+        real_defects.append(c)
 
-    if not (valid_diffs and overall_reliability in ("high", "moderate") and is_aspect_corrected):
+    # 分離具備 Actionable Drill 之診斷指標與純觀察指標
+    actionable_candidates = [c for c in real_defects if c.id in ACTIONABLE_DRILL_METRICS]
+    observation_candidates = [c for c in real_defects if c.id in OBSERVATION_ONLY_METRICS]
+
+    actionable_candidates.sort(key=_metric_severity_score, reverse=True)
+    observation_candidates.sort(key=_metric_severity_score, reverse=True)
+
+    # 優先選取具備可行動改善方案之指標；若無，再考慮純觀察指標
+    if actionable_candidates:
+        top_diff = actionable_candidates[0]
+    elif observation_candidates:
+        top_diff = observation_candidates[0]
+    elif real_defects:
+        real_defects.sort(key=_metric_severity_score, reverse=True)
+        top_diff = real_defects[0]
+    else:
         return None
 
-    top_diff = valid_diffs[0]
     obs_item = f"{top_diff.phase_zh or top_diff.phase} — {top_diff.metric_name or top_diff.name_zh}"
     u_str = top_diff.user_value_display or f"{top_diff.user_value}{top_diff.unit}"
     r_str = top_diff.ref_value_display or f"{top_diff.ref_value}{top_diff.unit}"
@@ -600,16 +656,12 @@ def _build_priority_fix(
 
     elif top_diff.id == "impact_hip_clearance":
         priority_fix_summary = (
-            f"在擊球瞬間（Impact）觀測到骨盆深度開放比為 {u_str}（示範選手為 {r_str}，開放較少 {d_str}）。"
-            f"擊球瞬間左髖向後退開幅度相對較小，建議加強骨盆旋轉清出擊球通道。"
+            f"在擊球瞬間（Impact）觀測到骨盆2D平面相對位移比為 {u_str}（示範選手為 {r_str}，差異 {d_str}）。"
+            f"此指標為 2D 影像雙髖中點在投影平面之歐氏位移距離，無法推論 3D 骨盆旋轉角度或臀部後退方向，"
+            f"不配發單向 Drill，降級為純客觀幾何觀察。"
         )
-        actionable_drill = {
-            "name": "左臀後退清開空間 Drill",
-            "preparation": "左腳跟外側後方 5 公分處放置空球盒或標記物。",
-            "execution": "啟動下桿轉身時，感受左髖主動向後旋轉，使左臀後移清出擊球通道。",
-            "checkpoint": "0.25× 慢動作停格檢視擊球瞬間，從後方可看見左臀深度後移。",
-        }
-        retest_metric_target = "下次練習 5 球，目標：擊球骨盆深度開放比達到 14.0% 身長以上。"
+        actionable_drill = None
+        retest_metric_target = "建議在 0.25× 慢動作停格檢視擊球瞬間骨盆平面位置與重心維持。"
 
     elif top_diff.id == "finish_spine_angle":
         priority_fix_summary = (
@@ -867,6 +919,7 @@ def compute_quantitative_posture_comparison(
         requires_geometry: bool = True,
         is_lower_better: bool = False,
         is_higher_better: bool = False,
+        benchmark_bounds: tuple[float | None, float | None] | None = None,
     ) -> PostureMetricComparison:
         """安全建構單項量化姿勢比對物件。若任一方缺失，明確設置為不可比。"""
         # 示範是否為慢動作素材
@@ -896,15 +949,34 @@ def compute_quantitative_posture_comparison(
         status = "insufficient_evidence"
         confidence = round(min(u_conf, r_conf), 2) if is_comparable else 0.0
         eval_text = ""
+        relative_status = "unassessed"
+        benchmark_status = "unassessed"
 
+        # 1. 實驗性參考區間評估 (Experimental Benchmark Evaluation)
+        if u_val is not None:
+            if benchmark_bounds is not None:
+                b_min, b_max = benchmark_bounds
+                in_b = True
+                if b_min is not None and u_val < b_min:
+                    in_b = False
+                if b_max is not None and u_val > b_max:
+                    in_b = False
+                benchmark_status = "within_benchmark" if in_b else "outside_benchmark"
+            else:
+                benchmark_status = "not_applicable"
+
+        # 2. 相對示範評估 (Relative Reference Comparison)
         if not is_angle_compatible:
             status = "not_comparable"
+            relative_status = "not_comparable"
             eval_text = f"相機視角不相容（示範為 {ref_camera}，非標準 DTL），不推算 2D 平面幾何差異。"
         elif not geometry_ok:
             status = "insufficient_evidence"
+            relative_status = "insufficient_evidence"
             eval_text = "缺少影片解析度或長寬比資訊，無法進行等比例影像座標校正，不推算 2D 差異。"
         elif not is_comparable:
             status = "insufficient_evidence"
+            relative_status = "insufficient_evidence"
             missing_who = []
             if u_val is None or u_conf < 0.35:
                 missing_who.append("使用者揮桿")
@@ -916,14 +988,30 @@ def compute_quantitative_posture_comparison(
             delta_display = f"{delta:+.1f}" + unit_suffix if "°" in unit_suffix or "%" in unit_suffix else f"{delta:+.2f}"
             abs_d = abs(delta)
 
+            # 計算示範相對狀態 relative_status
+            if abs_d <= optimal_tol:
+                relative_status = "aligned"
+            elif abs_d <= moderate_tol:
+                relative_status = "moderate_diff"
+            else:
+                relative_status = "significant_diff"
+
+            # 綜合品質判定 (結合相對差異與常模區間)
             if is_lower_better and delta <= 0:
-                # 使用者數值小於或等於示範球員，在「越小越好」指標中代表維持更穩定或更優！
-                status = "optimal"
-                eval_text = f"數值為 {u_val_display}，相較於示範選手（{r_val_display}）維持更佳的穩定度與控制。"
+                if benchmark_status == "within_benchmark":
+                    status = "optimal"
+                    eval_text = f"數值為 {u_val_display}，落在實驗性參考區間內且相較示範選手（{r_val_display}）維持更佳穩定度。"
+                else:
+                    # 使用者數值小於示範，但超出實驗性參考區間，絕不可盲目判定為 optimal
+                    status = "moderate_diff"
+                    eval_text = f"數值為 {u_val_display}，相較示範選手（{r_val_display}）位移或變化量較小，但仍超出實驗性參考區間（{benchmark}）。"
             elif is_higher_better and delta >= 0:
-                # 使用者數值大於或等於示範球員，在「越大越好」指標中代表表現充分！
-                status = "optimal"
-                eval_text = f"數值為 {u_val_display}，相較於示範選手（{r_val_display}）展現充分的幅度。"
+                if benchmark_status == "within_benchmark":
+                    status = "optimal"
+                    eval_text = f"數值為 {u_val_display}，落在實驗性參考區間內且相較示範選手（{r_val_display}）展現充分幅度。"
+                else:
+                    status = "moderate_diff"
+                    eval_text = f"數值為 {u_val_display}，相較示範選手（{r_val_display}）幅度較大，但超出實驗性參考區間（{benchmark}）。"
             elif abs_d <= optimal_tol:
                 status = "optimal"
                 eval_text = f"與示範選手數值高度相符（差距僅 {delta_display}，在常模允許誤差 {optimal_tol}{unit_suffix} 內）。"
@@ -971,6 +1059,8 @@ def compute_quantitative_posture_comparison(
             event_accuracy_ms=acc_ms,
             user_evidence=u_ev,
             ref_evidence=r_ev,
+            relative_status=relative_status,
+            benchmark_status=benchmark_status,
             target_jump_ms=target_jump_map.get(phase, 0),
             target_jump_phase=phase,
             recommended_speed=0.25 if phase in ("top", "impact") else 0.5,
@@ -1008,6 +1098,7 @@ def compute_quantitative_posture_comparison(
         moderate_tol=8.0,
         unit_suffix="°",
         direction_cue=("偏直立", "偏過深前傾"),
+        benchmark_bounds=(36.0, 44.0),
     ))
 
     u_wrist_h, u_wh_conf = _compute_wrist_height_ratio(u_addr_iso, u_torso_len or 0.25) if u_addr_iso else (None, 0.0)
@@ -1039,6 +1130,7 @@ def compute_quantitative_posture_comparison(
         moderate_tol=10.0,
         unit_suffix="%",
         direction_cue=("偏低", "偏高"),
+        benchmark_bounds=(-12.0, 8.0),
     ))
 
     # =========================================================================
@@ -1074,6 +1166,7 @@ def compute_quantitative_posture_comparison(
         unit_suffix="°",
         direction_cue=("前傾維持更佳", "前傾提早流失"),
         is_lower_better=True,
+        benchmark_bounds=(None, 4.0),
     ))
 
     u_top_head, u_th_conf = _compute_head_displacement_pct(u_addr_iso, u_top_iso, u_torso_len or 0.25) if (u_addr_iso and u_top_iso) else (None, 0.0)
@@ -1104,6 +1197,7 @@ def compute_quantitative_posture_comparison(
         unit_suffix="%",
         direction_cue=("頭部更為穩定", "頭部浮動過大"),
         is_lower_better=True,
+        benchmark_bounds=(None, 8.0),
     ))
 
     # =========================================================================
@@ -1139,6 +1233,7 @@ def compute_quantitative_posture_comparison(
         unit_suffix="°",
         direction_cue=("前傾維持扎實", "觸球提早起立"),
         is_lower_better=True,
+        benchmark_bounds=(None, 5.0),
     ))
 
     # 上下桿節奏比（Tempo）
@@ -1190,16 +1285,17 @@ def compute_quantitative_posture_comparison(
         slow_mo_note="N/A (慢動作素材不提供假Tempo)",
         direction_cue=("下桿轉換急促", "上桿過度緩慢"),
         requires_geometry=False,  # 時間比不依賴空間座標長寬比
+        benchmark_bounds=(2.7, 3.3),
     ))
 
-    # 擊球骨盆深度開放比
-    u_hip_clear, u_hc_conf = _compute_hip_clearance_pct(u_addr_iso, u_imp_iso, u_torso_len or 0.25) if (u_addr_iso and u_imp_iso) else (None, 0.0)
-    r_hip_clear, r_hc_conf = _compute_hip_clearance_pct(r_addr_iso, r_imp_iso, r_torso_len or 0.25) if (r_addr_iso and r_imp_iso) else (None, 0.0)
+    # 擊球骨盆2D相對位移比 (第一階段：更名與誠實運動學解釋，移除 is_higher_better)
+    u_hip_clear, u_hc_conf = _compute_hip_displacement_pct(u_addr_iso, u_imp_iso, u_torso_len or 0.25) if (u_addr_iso and u_imp_iso) else (None, 0.0)
+    r_hip_clear, r_hc_conf = _compute_hip_displacement_pct(r_addr_iso, r_imp_iso, r_torso_len or 0.25) if (r_addr_iso and r_imp_iso) else (None, 0.0)
     comparisons.append(make_metric(
         id_="impact_hip_clearance",
         phase="impact",
         phase_zh="擊球瞬間 (Impact)",
-        name="擊球骨盆深度開放比",
+        name="擊球骨盆2D相對位移比",
         unit="torso_pct",
         u_val=round(u_hip_clear, 1) if u_hip_clear is not None else None,
         u_conf=min(u_hc_conf, u_torso_conf),
@@ -1219,8 +1315,9 @@ def compute_quantitative_posture_comparison(
         optimal_tol=4.0,
         moderate_tol=8.0,
         unit_suffix="%",
-        direction_cue=("開放不足", "過度側移"),
-        is_higher_better=True,
+        direction_cue=("平面位移較小", "平面位移較大"),
+        is_higher_better=False,
+        benchmark_bounds=(8.0, 18.0),
     ))
 
     # =========================================================================
@@ -1252,6 +1349,7 @@ def compute_quantitative_posture_comparison(
         unit_suffix="°",
         direction_cue=("更為直立", "身體殘留後傾"),
         is_lower_better=True,
+        benchmark_bounds=(None, 16.0),
     ))
 
     # 7. 可靠度總結與覆蓋率 (P0-B & P1-A)
