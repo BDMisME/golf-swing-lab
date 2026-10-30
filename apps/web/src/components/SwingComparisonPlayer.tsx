@@ -73,38 +73,73 @@ export interface ClubCatalogItem {
 export interface PostureMetricItem {
   id: string;
   phase: string;
-  phase_label: string;
-  name: string;
+  phase_zh?: string;
+  phase_label?: string;
+  metric_name?: string;
+  name?: string;
   user_value: number | null;
+  user_value_display?: string;
   ref_value: number | null;
-  diff: number | null;
+  ref_value_display?: string;
+  delta?: number | null;
+  delta_display?: string;
+  diff?: number | null;
   unit: string;
-  description: string;
-  reliability: "high" | "medium" | "low" | "unreliable";
-  target_ms: number;
-  status: "good" | "warning" | "needs_work" | "unknown";
+  general_benchmark_range?: string;
+  description?: string;
+  evaluation_text?: string;
+  confidence?: number;
+  reliability?: "high" | "medium" | "low" | "unreliable";
+  is_reliable?: boolean;
+  is_comparable?: boolean;
+  target_jump_ms?: number;
+  target_ms?: number;
+  status: "optimal" | "moderate_diff" | "significant_diff" | "insufficient_evidence" | "not_comparable" | "good" | "warning" | "needs_work" | "unknown";
 }
 
 export interface PriorityFixItem {
-  phase: string;
-  metric_name: string;
-  diff_str: string;
-  reliability: string;
-  advice: string;
-  drill_name: string;
-  drill_steps: string[];
-  retest_target: string;
+  phase?: string;
+  metric_name?: string;
+  focus_area?: string;
+  diff_str?: string;
+  delta?: string;
+  reliability?: string;
+  confidence?: number;
+  advice?: string;
+  summary?: string;
+  drill_name?: string;
+  drill_steps?: string[];
+  drill?: {
+    name: string;
+    preparation: string;
+    execution: string;
+    checkpoint: string;
+  };
+  retest_target?: string;
+  target?: string;
 }
 
 export interface QuantitativePostureReport {
-  swing_id: string;
+  user_swing_id?: string;
+  swing_id?: string;
+  ref_swing_id?: string | null;
   ref_id?: string;
   ref_title?: string;
   club_type: string;
+  overall_status?: string;
   is_offline_mode: boolean;
   overall_reliability: string;
   metrics: PostureMetricItem[];
   priority_fix?: PriorityFixItem;
+  priority_fix_summary?: string | null;
+  actionable_drill?: any;
+  retest_metric_target?: string | null;
+  camera_compatibility?: {
+    user_camera?: string;
+    ref_camera?: string;
+    is_compatible?: boolean;
+    reason?: string;
+  };
   disclaimer: string;
 }
 
@@ -1807,6 +1842,7 @@ export function SwingComparisonPlayer({
       </div>
 
       {/* P2: 離線量化姿勢比較表 (Quantitative Posture Comparison Table) */}
+      {/* P2: 離線量化姿勢比較表 (Quantitative Posture Comparison Table) */}
       <div className="rounded-xl border border-sky-800/60 bg-black/60 p-4 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 pb-2">
           <div className="flex items-center gap-2">
@@ -1820,47 +1856,95 @@ export function SwingComparisonPlayer({
           </div>
           <div className="text-[11px] text-gray-400 flex items-center gap-2">
             <span>可信度：</span>
-            <strong className="text-emerald-400">
-              {postureReport?.overall_reliability === "high" ? "高度可信 (High)" : "中度可信 (Medium)"}
+            <strong
+              className={
+                postureReport?.overall_reliability === "high"
+                  ? "text-emerald-400"
+                  : postureReport?.overall_reliability === "moderate"
+                  ? "text-amber-400"
+                  : "text-rose-400"
+              }
+            >
+              {postureReport?.overall_reliability === "high"
+                ? "高度可信 (High)"
+                : postureReport?.overall_reliability === "moderate"
+                ? "中度可信 (Moderate)"
+                : postureReport?.overall_reliability === "low"
+                ? "證據偏低 (Low)"
+                : "無法可靠比對 (Unreliable)"}
             </strong>
           </div>
         </div>
 
-        {/* Priority Fix (唯一改善重點卡片 - P3) */}
-        {postureReport?.priority_fix && (
+        {/* 視角或球桿不相容警示 (P0-A #6 & P0-C) */}
+        {postureReport?.camera_compatibility && !postureReport.camera_compatibility.is_compatible && (
+          <div className="rounded-lg border border-rose-800/60 bg-rose-950/30 p-2.5 text-xs text-rose-300 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{postureReport.camera_compatibility.reason || "視角不相容，未進行 2D 平面幾何差異計算。"}</span>
+          </div>
+        )}
+
+        {/* 缺少示範影片提示 (P0-C) */}
+        {postureReport?.overall_status === "reference_missing" && (
+          <div className="rounded-lg border border-amber-800/60 bg-amber-950/30 p-3 text-xs text-amber-300 space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <span>⚠️</span>
+              <span>尚無 {selectedClub} 的合格示範素材</span>
+            </div>
+            <p className="text-[11px] text-gray-300">
+              系統嚴格拒絕使用其他球桿偷偷替代。您可以點擊上方「匯入示範」手動新增，或切換至 7I、Driver 等已有示範的球桿。
+            </p>
+          </div>
+        )}
+
+        {/* Priority Fix (唯一改善重點卡片 - P0-D) */}
+        {postureReport?.priority_fix ? (
           <div className="rounded-xl border border-amber-600/70 bg-gradient-to-r from-amber-950/40 to-black/60 p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-amber-400 font-bold text-xs flex items-center gap-1.5">
                 <span>🎯</span>
-                <span>本球唯一改善重點 (Priority Fix)：{postureReport.priority_fix.metric_name}</span>
+                <span>
+                  本球唯一改善重點 (Priority Fix)：
+                  {postureReport.priority_fix.focus_area || postureReport.priority_fix.metric_name}
+                </span>
               </span>
               <span className="text-[10px] bg-amber-900/60 text-amber-200 px-2 py-0.5 rounded border border-amber-700/40">
-                階段：{postureReport.priority_fix.phase.toUpperCase()} · 差異：{postureReport.priority_fix.diff_str}
+                差異：{postureReport.priority_fix.delta || postureReport.priority_fix.diff_str}
               </span>
             </div>
             <p className="text-xs text-gray-200 leading-relaxed">
-              {postureReport.priority_fix.advice}
+              {postureReport.priority_fix.summary || postureReport.priority_fix.advice}
             </p>
-            <div className="p-2.5 rounded-lg bg-black/50 border border-amber-900/40 space-y-1">
-              <div className="text-[11px] font-bold text-amber-300">
-                推薦練習：{postureReport.priority_fix.drill_name}
+            {postureReport.priority_fix.drill && (
+              <div className="p-2.5 rounded-lg bg-black/50 border border-amber-900/40 space-y-1">
+                <div className="text-[11px] font-bold text-amber-300">
+                  推薦練習：{postureReport.priority_fix.drill.name}
+                </div>
+                <div className="text-[11px] text-gray-300 space-y-0.5">
+                  <div>• 準備：{postureReport.priority_fix.drill.preparation}</div>
+                  <div>• 執行：{postureReport.priority_fix.drill.execution}</div>
+                  <div>• 檢核：{postureReport.priority_fix.drill.checkpoint}</div>
+                </div>
+                {postureReport.priority_fix.target && (
+                  <div className="text-[10px] text-gray-400 pt-1">
+                    下次重測目標：
+                    <span className="text-emerald-400">{postureReport.priority_fix.target}</span>
+                  </div>
+                )}
               </div>
-              <ul className="list-disc list-inside text-[11px] text-gray-300 space-y-0.5">
-                {postureReport.priority_fix.drill_steps.map((step, idx) => (
-                  <li key={idx}>{step}</li>
-                ))}
-              </ul>
-              <div className="text-[10px] text-gray-400 pt-1">
-                下次重測目標：<span className="text-emerald-400">{postureReport.priority_fix.retest_target}</span>
-              </div>
-            </div>
+            )}
           </div>
-        )}
+        ) : postureReport?.priority_fix_summary ? (
+          <div className="rounded-lg border border-sky-900/60 bg-sky-950/20 p-2.5 text-xs text-sky-200 flex items-center gap-2">
+            <span>ℹ️</span>
+            <span>{postureReport.priority_fix_summary}</span>
+          </div>
+        ) : null}
 
         {/* 量化指標清單表格 */}
         {postureLoading ? (
           <div className="text-center py-6 text-gray-400 text-xs animate-pulse">
-            正在計算離線 2D 骨架幾何量測數值...
+            正在計算離線 2D 骨架真實幾何量測數值...
           </div>
         ) : postureReport?.metrics && postureReport.metrics.length > 0 ? (
           <div className="overflow-x-auto">
@@ -1869,6 +1953,7 @@ export function SwingComparisonPlayer({
                 <tr className="border-b border-gray-800 text-gray-400 text-[11px]">
                   <th className="py-2 px-2 font-semibold">動作階段</th>
                   <th className="py-2 px-2 font-semibold">檢測項目</th>
+                  <th className="py-2 px-2 font-semibold">理論常模參考</th>
                   <th className="py-2 px-2 font-semibold">我的數值</th>
                   <th className="py-2 px-2 font-semibold">示範數值</th>
                   <th className="py-2 px-2 font-semibold">幾何差異</th>
@@ -1878,16 +1963,30 @@ export function SwingComparisonPlayer({
               </thead>
               <tbody className="divide-y divide-gray-800/60 font-mono">
                 {postureReport.metrics.map((m: any) => {
-                  const phaseLabel = m.phase_label || m.phase_zh || m.phase;
-                  const metricName = m.name || m.metric_name;
-                  const diffVal = m.diff !== undefined ? m.diff : m.delta;
-                  const unitStr = m.unit === "deg_2d" ? "°" : m.unit === "torso_pct" ? "%" : m.unit === "ratio" ? "" : m.unit === "score" ? "分" : m.unit || "";
-                  const userValStr = m.user_value_display || (m.user_value !== null ? `${m.user_value} ${unitStr}` : "N/A");
-                  const refValStr = m.ref_value_display || (m.ref_value !== null ? `${m.ref_value} ${unitStr}` : "N/A");
-                  const diffStr = m.delta_display || (diffVal !== null ? `${diffVal > 0 ? "+" : ""}${diffVal} ${unitStr}` : "無法比對");
+                  const phaseLabel = m.phase_zh || m.phase_label || m.phase;
+                  const metricName = m.metric_name || m.name;
+                  const benchmark = m.general_benchmark_range || "--";
+                  const userValStr = m.user_value_display || (m.user_value !== null ? `${m.user_value}` : "N/A");
+                  const refValStr = m.ref_value_display || (m.ref_value !== null ? `${m.ref_value}` : "N/A");
+                  const diffStr = m.delta_display || "--";
                   const targetMs = m.target_jump_ms || m.target_ms || userTimeline.startMs;
-                  const descStr = m.description || m.evaluation_text || "";
-                  const isHighReliability = m.reliability === "high" || (m.confidence !== undefined && m.confidence >= 0.85);
+                  const evalText = m.evaluation_text || m.description || "";
+                  const isComparable = m.is_comparable ?? (m.status !== "not_comparable" && m.status !== "insufficient_evidence");
+
+                  let relBadgeClass = "bg-gray-800 text-gray-400 border-gray-700";
+                  let relText = "證據不足";
+                  if (m.status === "not_comparable") {
+                    relText = "視角不合";
+                  } else if (m.confidence >= 0.75) {
+                    relBadgeClass = "bg-emerald-950/80 text-emerald-300 border-emerald-800/40";
+                    relText = "高";
+                  } else if (m.confidence >= 0.50) {
+                    relBadgeClass = "bg-amber-950/80 text-amber-300 border-amber-800/40";
+                    relText = "中";
+                  } else if (m.confidence > 0) {
+                    relBadgeClass = "bg-rose-950/80 text-rose-300 border-rose-800/40";
+                    relText = "低";
+                  }
 
                   return (
                     <tr key={m.id} className="hover:bg-white/[0.02] transition">
@@ -1895,8 +1994,13 @@ export function SwingComparisonPlayer({
                         {phaseLabel}
                       </td>
                       <td className="py-2 px-2 font-sans text-white">
-                        <div>{metricName}</div>
-                        <div className="text-[10px] text-gray-500 font-normal">{descStr}</div>
+                        <div className="font-semibold">{metricName}</div>
+                        {evalText && (
+                          <div className="text-[10px] text-gray-500 font-normal mt-0.5">{evalText}</div>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-gray-400 font-sans text-[11px]">
+                        {benchmark}
                       </td>
                       <td className="py-2 px-2 text-emerald-400 font-bold">
                         {userValStr}
@@ -1907,11 +2011,11 @@ export function SwingComparisonPlayer({
                       <td className="py-2 px-2">
                         <span
                           className={`font-bold ${
-                            diffVal === null
+                            !isComparable || m.delta === null
                               ? "text-gray-500"
-                              : Math.abs(diffVal) < 2
+                              : m.status === "optimal"
                               ? "text-emerald-400"
-                              : Math.abs(diffVal) < 5
+                              : m.status === "moderate_diff"
                               ? "text-amber-400"
                               : "text-rose-400"
                           }`}
@@ -1920,14 +2024,8 @@ export function SwingComparisonPlayer({
                         </span>
                       </td>
                       <td className="py-2 px-2 font-sans">
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                            isHighReliability
-                              ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800/40"
-                              : "bg-amber-950/80 text-amber-300 border border-amber-800/40"
-                          }`}
-                        >
-                          {isHighReliability ? "高" : "中"}
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${relBadgeClass}`}>
+                          {relText}
                         </span>
                       </td>
                       <td className="py-2 px-2 text-right">
@@ -1948,7 +2046,7 @@ export function SwingComparisonPlayer({
           </div>
         ) : (
           <div className="text-center py-4 text-gray-500 text-xs">
-            {postureError || "暫無量化數據（可點擊上方球桿選擇或重新載入）"}
+            {postureError || (postureReport?.overall_status === "reference_missing" ? "尚無可用的示範影片" : "暫無量化數據")}
           </div>
         )}
 

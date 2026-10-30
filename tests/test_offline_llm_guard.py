@@ -156,3 +156,82 @@ def test_settings_api_exposes_offline_mode():
         data = res.json()
         assert data["enable_external_llm"] is False
         assert data["coach_mode"] == "offline"
+
+
+@pytest.mark.asyncio
+async def test_provider_with_transport_still_blocked_when_offline(monkeypatch):
+    """
+    P1-A 核心驗證：
+    即使呼叫端注入了 transport（如 MockTransport）或合法 API Key，
+    只要 enable_external_llm=False，就絕對不得發送請求，必須 100% 阻斷並回退至 RuleBasedCoachProvider。
+    """
+    monkeypatch.setenv("GSL_ENABLE_EXTERNAL_LLM", "false")
+    get_settings.cache_clear()
+
+    request_called = False
+
+    def handler(_req):
+        nonlocal request_called
+        request_called = True
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
+
+    import httpx
+    provider = OpenAICompatibleCoachProvider(
+        api_key="sk-real-looking-key-123456",
+        transport=httpx.MockTransport(handler),
+    )
+
+    report = await provider.generate_feedback(
+        session_summary={"total_swings": 1},
+        swing_evidence=[{"segment_id": "seg-1", "overall_score": 80.0, "label": "valid_swing"}],
+    )
+
+    # 必須未曾觸發 transport
+    assert request_called is False
+    assert report.provider in ("none", "rule-based")
+    assert report.llm_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_gemini_with_transport_still_blocked_when_offline(monkeypatch):
+    """驗證 GeminiCoachProvider 在有 transport 且離線時依然 100% 阻斷。"""
+    monkeypatch.setenv("GSL_ENABLE_EXTERNAL_LLM", "false")
+    get_settings.cache_clear()
+
+    request_called = False
+
+    def handler(_req):
+        nonlocal request_called
+        request_called = True
+        return httpx.Response(200, json={"candidates": []})
+
+    import httpx
+    gemini = GeminiCoachProvider(
+        api_key="AIzaSyTestKey9999",
+        transport=httpx.MockTransport(handler),
+    )
+
+    report = await gemini.generate_feedback(
+        session_summary={"total_swings": 1},
+        swing_evidence=[{"segment_id": "seg-1", "overall_score": 80.0, "label": "valid_swing"}],
+    )
+
+    assert request_called is False
+    assert report.provider in ("none", "rule-based")
+    assert report.llm_enabled is False
+
+
+def test_fail_closed_when_settings_load_error(monkeypatch):
+    """
+    P1-A 核心驗證：
+    當組態系統載入失敗（如拋出例外）時，必須安全 Fail-Closed，
+    is_external_llm_allowed 必須回傳 False，拒絕外部呼叫。
+    """
+    from packages.analysis.coach import is_external_llm_allowed
+
+    def broken_get_settings():
+        raise RuntimeError("無法讀取系統配置檔 (Simulated Config Failure)")
+
+    monkeypatch.setattr("apps.api.config.get_settings", broken_get_settings)
+    assert is_external_llm_allowed() is False
+

@@ -1564,22 +1564,35 @@ def get_swing_posture_comparison(
     verify_owner(db, current_user, seg.owner_id, "swing_segment", seg.id)
 
     ref = None
+    target_club = club_type
+
     if ref_id:
+        # 使用者指定特定 Reference ID 時，嚴格依該 ID 檢索，不存在則不 fallback
         ref = db.get(ReferenceSwing, ref_id)
-    if not ref:
-        target_club = club_type or "7I"
+        if ref:
+            target_club = ref.club_type
+    elif club_type:
+        # 使用者指定球桿時，僅在該球桿類別中尋找預設或合格示範，絕不跨球桿 fallback
+        ref = db.scalar(
+            select(ReferenceSwing)
+            .where(ReferenceSwing.club_type == club_type)
+            .order_by(desc(ReferenceSwing.is_default), desc(ReferenceSwing.imported_at))
+        )
+    else:
+        # 預設依揮桿所屬場次之球桿尋找
+        sess = db.get(PracticeSession, seg.video.session_id) if (seg.video and seg.video.session_id) else None
+        target_club = getattr(sess, "club", "7I") or "7I"
         ref = db.scalar(
             select(ReferenceSwing)
             .where(ReferenceSwing.club_type == target_club)
-            .order_by(desc(ReferenceSwing.is_default))
+            .order_by(desc(ReferenceSwing.is_default), desc(ReferenceSwing.imported_at))
         )
-    if not ref:
-        ref = db.scalar(select(ReferenceSwing).order_by(desc(ReferenceSwing.is_default)))
 
     ref_dict = {
         "id": ref.id if ref else "",
-        "club_type": ref.club_type if ref else "7I",
+        "club_type": target_club or "7I",
         "title": ref.title if ref else "",
+        "camera_angle": ref.camera_angle if ref else "DTL",
         "event_timestamps": ref.event_timestamps if ref else {},
         "calibration_params": ref.calibration_params if ref else {},
         "pose_artifact": ref.pose_artifact if ref else {},

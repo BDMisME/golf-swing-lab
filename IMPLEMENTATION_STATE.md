@@ -1,6 +1,38 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 18: Golf Swing Lab R3 — 離線量化姿勢教練與慢動作雙影片比較）
+## 最新修復狀態（Round 19: Golf Swing Lab R3 — Real Pose Evidence & Offline Integrity 修復）
+1. **P0-A 真實 Pose 幾何量測與假常數徹底拔除**：`PASS`
+   - 重構 `packages/analysis/posture_comparison.py`，徹底移除所有寫死假常數（`ref_addr_tilt=40.0`, `ref_spine_delta=1.8`, `ref_head_top_pct=3.5`, `ref_tempo=3.0`, `user_hip_clear=11.5`, `ref_hip_clear=14.0`, `ref_finish_score=95.0` 等）。
+   - 純粹從雙方真實關鍵影格（`keyframes_json` / `landmarks`）計算，包含雙肩中點、雙髖中點、手腕中點、頭部鼻尖。
+   - 尺標正規化：以雙肩中點至雙髖中點之 2D 歐氏長度（軀幹長度 Torso Length）為標準尺規進行無量綱計算（手腕高度比、頭部位移比、骨盆深度位移比），嚴禁未標定之公分或英吋。
+   - 缺少 Pose 或關鍵點可見度不足（< 0.35）時，一律誠實標註為 `N/A`、`status="insufficient_evidence"`，絕不湊數。
+   - 鏡頭視角檢查：比對示範影片與使用者視角，非標準 DTL（如 LW 後斜、Putter 特寫）標註 `not_comparable`，不推算 2D 平面幾何差異。
+2. **P0-B 移除假標準與可信度動態分級**：`PASS`
+   - 理論常模分離：建立獨立欄位 `general_benchmark_range`（如站姿前傾 36°~44°、頂點維持 ≤4°、節奏比 2.7~3.3:1），與示範球員實際量測數值 (`ref_value`) 嚴格區隔。
+   - 可信度動態評定：`overall_reliability` 不再固定為 `high`，而是依有效比對指標數與平均信心度動態評估（high/moderate/low/unreliable）。
+   - 恪守誠信：明確標記 2D 平面幾何量測限制，禁止由單一 2D 變化妄斷 3D 力學。
+3. **P0-C Reference 選擇嚴格跟隨使用者指定，杜絕隱性 Fallback**：`PASS`
+   - 修改 `apps/api/main.py` 之 `get_swing_posture_comparison`：當使用者指定 `ref_id` 或 `club_type` 時嚴格檢索，若無對應示範影片**絕不偷偷 fallback 到 7I**，而是回傳 `overall_status="reference_missing"` 與提示。
+   - 預設查詢球桿示範時優先挑選具備真實骨架關鍵點之正式示範（`order_by(desc(is_default), desc(imported_at))`）。
+4. **P0-D Priority Fix 唯一改善重點建立在真實證據上**：`PASS`
+   - 只有在 `is_comparable=True`、`is_reliable=True` 且落入 `significant_diff` 或 `moderate_diff` 時才選出改善重點並產出 Drill。
+   - 各項指標都在相容區間內或證據不足時，`priority_fix_id` 誠實回傳 `None`，提示無顯著幾何異常或證據不足，絕不編造假缺陷與隨機 Drill。
+5. **P1-A 離線守衛加固與 Fail-Closed 阻斷**：`PASS`
+   - 於 `packages/analysis/coach.py` 實作 `is_external_llm_allowed()`，當 `enable_external_llm=False` 或組態載入例外時 Fail-Closed 阻斷。
+   - 徹底移除 `and self.transport is None` 繞過漏洞，即使外部傳入 transport 或 API Key 亦 100% 阻斷外部連線。
+   - `tests/test_offline_llm_guard.py` 新增阻斷與例外防禦測試，**9 / 9 PASSED (100%)**。
+6. **P1-B 慢動作示範素材節奏保護**：`PASS`
+   - 示範素材若為慢動作 (`is_slow_motion=True`)，其 tempo 明確標示為 `N/A (慢動作素材不提供假Tempo)`，不推算假數值。
+7. **P1-C 自動化驗收與品質保證**：`PASS`
+   - `tests/test_quantitative_posture_comparison.py` 全面重構並擴充 9 項專項測試，**9 / 9 PASSED (100%)**。
+   - 全套後端測試套件：**113 / 113 PASSED (100%)** in 206.28s。
+   - Next.js 15.5.28 正式建置：**9/9 靜態路由編譯無誤 (0 錯誤)**。
+   - WebKit 原生端到端實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 6 大步驟全數通過（PASS），產出真實截圖與報告 `docs/reports/swing_comparison_r3_report.json`。
+- **最後更新時間**：2026-10-30T13:15:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR PR REVIEW (嚴禁自行合併 main，等待使用者授權)**
+
+## 前期重大里程碑狀態（Round 18: Golf Swing Lab R3 — 離線量化姿勢教練與慢動作雙影片比較）
 1. **P0 離線守衛與全域外部 LLM 請求阻斷**：`PASS`
    - 後端統一定義 `GSL_ENABLE_EXTERNAL_LLM=false`（`apps/api/config.py`）。
    - `packages/analysis/coach.py` 中 `OpenAICompatibleCoachProvider` 與 `GeminiCoachProvider` 全面防禦攔截，未顯式設定時一律安全回退為 `RuleBasedCoachProvider`，禁止任何對外 HTTP 請求。

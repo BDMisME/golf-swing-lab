@@ -1,8 +1,8 @@
 {
   "title": "Golf Swing Lab — R3 Offline Coach & Slow-Mo Comparison Acceptance Report",
-  "timestamp": "2026-10-29T19:02:37.404522+00:00",
+  "timestamp": "2026-10-30T05:13:06.230286+00:00",
   "git": {
-    "commit_sha": "2d9b83637297b6cd0042213dc264d47eb6631b7b",
+    "commit_sha": "42105fb9f66e52aee81c2e319284f70b743f114f",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -48,8 +48,8 @@
         "refRate": 0.25,
         "userPaused": false,
         "refPaused": false,
-        "userTime": 119.24832835422367,
-        "refTime": 0.02002871170127821
+        "userTime": 119.24896338557156,
+        "refTime": 0.020172569261840464
       },
       "user_advancing": true,
       "ref_advancing": true,
@@ -93,7 +93,7 @@
         "refRate": 0.46,
         "userPaused": false,
         "refPaused": false,
-        "userTime": 119.84263114508953
+        "userTime": 119.8330341040236
       },
       "status": "PASS"
     }

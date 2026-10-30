@@ -1,13 +1,14 @@
 """
 packages/analysis/posture_comparison.py
 =======================================
-Golf Swing Lab R3 — 離線量化姿勢比較引擎 (Offline Quantitative Posture Comparison)
+Golf Swing Lab R3 — 離線真實量化姿勢比較引擎 (Real Pose Offline Posture Comparison)
 嚴格遵循最高誠信原則（Truthfulness & Anti-Hallucination）：
-1. 僅使用 2D 可觀測之骨架座標，透過雙肩至雙髖之真實軀幹長度 (Torso Length) 進行無量綱尺度正規化。
-2. 嚴禁將像素直接視為公分或英吋；嚴禁將 2D 平面投影角度宣稱為 3D 真實空間旋轉角。
-3. 嚴禁編造或推論未經雷達感測之物理量（如球速、桿頭速度、飛行距離、甜蜜點擊球品質、桿面角）。
-4. 針對資料缺失或低信心度影格，明確標記為 is_reliable=False 與「無法可靠比較」，杜絕胡亂湊數。
-5. 提供一鍵雙影片慢動作（0.25x / 0.5x）跳轉錨點與客觀訓練指引。
+1. 僅使用雙方實際解碼之 2D 骨架關鍵點（MediaPipe 2D Landmarks），由真實軀幹長度 (Torso Length) 進行無量綱尺度正規化。
+2. 嚴禁使用任何寫死常數假裝為示範球員數值（如 ref_addr_tilt=40.0, ref_tempo=3.0, ref_finish=95.0 等）。
+3. 缺少任何一方 Pose、關鍵點可見度不足 (<0.35) 或鏡頭視角不相容時，一律誠實標示為 N/A 與 insufficient_evidence / not_comparable，絕不胡亂湊數。
+4. 若示範影片為慢動作素材，嚴禁將播放秒數推算為示範 Tempo，示範 Tempo 明確標記為 N/A (慢動作素材)。
+5. 提供獨立「理論參考常模」欄位，標明依據，與示範球員實際量測數值嚴格分離。
+6. Priority Fix 僅在具備充足證據與真實顯著差異時產生；資料不足時絕不編造動作缺點或假 Drill。
 """
 
 from __future__ import annotations
@@ -29,10 +30,14 @@ class PostureMetricComparison(BaseModel):
     delta: float | None
     delta_display: str
     unit: str
-    confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+    general_benchmark_range: str  # 理論常模與說明（獨立欄位，不可冒充示範球員數值）
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     is_reliable: bool = True
-    status: str = "optimal"  # optimal | moderate_diff | significant_diff | unreliable
+    is_comparable: bool = True
+    status: str = "optimal"  # optimal | moderate_diff | significant_diff | insufficient_evidence | not_comparable
     evaluation_text: str
+    user_evidence: dict[str, Any] = Field(default_factory=dict)
+    ref_evidence: dict[str, Any] = Field(default_factory=dict)
     target_jump_ms: int
     target_jump_phase: str
     recommended_speed: float = 0.5
@@ -40,15 +45,17 @@ class PostureMetricComparison(BaseModel):
 
 class QuantitativePostureReport(BaseModel):
     user_swing_id: str
-    ref_swing_id: str
+    ref_swing_id: str | None
     club_type: str
-    overall_status: str
+    overall_status: str  # ready | reference_missing | not_comparable | insufficient_data
+    overall_reliability: str  # high | moderate | low | unreliable
     metrics: list[PostureMetricComparison]
     priority_fix_id: str | None = None
     priority_fix_summary: str | None = None
     actionable_drill: dict[str, str] | None = None
     retest_metric_target: str | None = None
     priority_fix: dict[str, Any] | None = None
+    camera_compatibility: dict[str, Any] = Field(default_factory=dict)
     disclaimer: str = (
         "【最高誠信原則說明】本報告所有數值均為 2D DTL 單相機平面幾何量測，"
         "已由軀幹長度正規化；非 3D 空間絕對座標，不推測未量測之球速、距離或桿面角。"
@@ -58,8 +65,11 @@ class QuantitativePostureReport(BaseModel):
         "已由軀幹長度正規化；非 3D 空間絕對座標，不推測未量測之球速、距離或桿面角。"
     )
     is_offline_mode: bool = True
-    overall_reliability: str = "high"
 
+
+# =========================================================================
+# 輔助計算函數：純幾何運動學計算（無任何寫死常態替代值）
+# =========================================================================
 
 def _safe_float(val: Any) -> float | None:
     if val is None:
@@ -71,332 +81,614 @@ def _safe_float(val: Any) -> float | None:
         return None
 
 
-def _get_keyframe_points(keyframes: list[dict[str, Any]], phase_name: str) -> dict[str, dict[str, float]]:
-    """從 keyframes 列表中安全提取特定階段關鍵點座標。"""
-    for kf in keyframes:
-        if kf.get("event_name") == phase_name or kf.get("phase") == phase_name:
-            pts = kf.get("keypoints") or kf.get("landmarks") or {}
-            if isinstance(pts, dict):
-                return pts
-            if isinstance(pts, list):
-                # 兼容 list 格式關鍵點
-                out = {}
-                for p in pts:
-                    name = p.get("name")
-                    if name:
-                        out[name] = {"x": p.get("x", 0.0), "y": p.get("y", 0.0)}
-                return out
-    return {}
+def _get_lm_xyv(pt: Any) -> tuple[float, float, float] | None:
+    """提取關鍵點 (x, y, visibility)。"""
+    if not pt or not isinstance(pt, dict):
+        return None
+    x = _safe_float(pt.get("x"))
+    y = _safe_float(pt.get("y"))
+    v = _safe_float(pt.get("visibility"))
+    if v is None:
+        v = _safe_float(pt.get("confidence", 0.8))
+    if x is None or y is None:
+        return None
+    return (x, y, v if v is not None else 0.5)
 
 
-def _calculate_torso_length(pts: dict[str, Any]) -> float:
+def _midpoint_xyv(lm_dict: dict[str, Any], k1: str, k2: str) -> tuple[float, float, float] | None:
+    """計算兩個關鍵點之中點座標與可見度。"""
+    p1 = _get_lm_xyv(lm_dict.get(k1))
+    p2 = _get_lm_xyv(lm_dict.get(k2))
+    if not p1 and not p2:
+        return None
+    if p1 and not p2:
+        return p1 if p1[2] >= 0.25 else None
+    if p2 and not p1:
+        return p2 if p2[2] >= 0.25 else None
+    assert p1 is not None and p2 is not None
+    w1 = max(0.01, p1[2])
+    w2 = max(0.01, p2[2])
+    tot = w1 + w2
+    mx = (p1[0] * w1 + p2[0] * w2) / tot
+    my = (p1[1] * w1 + p2[1] * w2) / tot
+    mv = (p1[2] * w1 + p2[2] * w2) / tot
+    return (mx, my, mv)
+
+
+def _compute_torso_length(lm_dict: dict[str, Any]) -> tuple[float | None, float]:
     """計算雙肩中點至雙髖中點之 2D 歐氏長度 (作為正規化尺標)。"""
-    ls = pts.get("left_shoulder")
-    rs = pts.get("right_shoulder")
-    lh = pts.get("left_hip")
-    rh = pts.get("right_hip")
-    if not (ls and rs and lh and rh):
-        return 0.35  # 合理預設值 (0.35 正規化坐標長度)
-    
-    shoulder_mid = ((ls.get("x", 0) + rs.get("x", 0)) / 2.0, (ls.get("y", 0) + rs.get("y", 0)) / 2.0)
-    hip_mid = ((lh.get("x", 0) + rh.get("x", 0)) / 2.0, (lh.get("y", 0) + rh.get("y", 0)) / 2.0)
-    dx = shoulder_mid[0] - hip_mid[0]
-    dy = shoulder_mid[1] - hip_mid[1]
+    sh = _midpoint_xyv(lm_dict, "left_shoulder", "right_shoulder")
+    hp = _midpoint_xyv(lm_dict, "left_hip", "right_hip")
+    if not sh or not hp:
+        return None, 0.0
+    dx = sh[0] - hp[0]
+    dy = sh[1] - hp[1]
     dist = math.sqrt(dx * dx + dy * dy)
-    return dist if dist > 0.05 else 0.35
+    conf = min(sh[2], hp[2])
+    if dist < 0.04:  # 不合常理之軀幹尺度
+        return None, 0.0
+    return dist, conf
 
+
+def _compute_spine_tilt_deg(lm_dict: dict[str, Any]) -> tuple[float | None, float]:
+    """計算肩中點與髖中點連線相對於垂直線之 2D DTL 前傾角度。"""
+    sh = _midpoint_xyv(lm_dict, "left_shoulder", "right_shoulder")
+    hp = _midpoint_xyv(lm_dict, "left_hip", "right_hip")
+    if not sh or not hp:
+        return None, 0.0
+    dx = sh[0] - hp[0]
+    dy = hp[1] - sh[1]  # 影像中 y 軸向下，dy 為髖在肩下方的高度差
+    if dy <= 1e-4:
+        return None, 0.0
+    angle = math.degrees(math.atan2(abs(dx), max(1e-4, dy)))
+    conf = min(sh[2], hp[2])
+    return angle, conf
+
+
+def _compute_wrist_height_ratio(lm_dict: dict[str, Any], torso_len: float) -> tuple[float | None, float]:
+    """計算雙手手腕中點相對於雙髖中點之垂直高度比 (% of torso)。"""
+    wr = _midpoint_xyv(lm_dict, "left_wrist", "right_wrist")
+    hp = _midpoint_xyv(lm_dict, "left_hip", "right_hip")
+    if not wr or not hp or torso_len <= 0.04:
+        return None, 0.0
+    # 影像 y 向下，手腕在髖部下方時 (wr[1] > hp[1])，垂直位移為負值
+    vert_delta = hp[1] - wr[1]
+    ratio = (vert_delta / torso_len) * 100.0
+    conf = min(wr[2], hp[2])
+    return ratio, conf
+
+
+def _compute_head_displacement_pct(
+    addr_lms: dict[str, Any],
+    target_lms: dict[str, Any],
+    torso_len: float,
+) -> tuple[float | None, float]:
+    """計算目標階段頭部 (nose) 相對站姿頭部之 2D 歐氏位移比例 (% of torso)。"""
+    n1 = _get_lm_xyv(addr_lms.get("nose"))
+    n2 = _get_lm_xyv(target_lms.get("nose"))
+    if not n1 or not n2 or torso_len <= 0.04:
+        return None, 0.0
+    dx = n2[0] - n1[0]
+    dy = n2[1] - n1[1]
+    dist = math.sqrt(dx * dx + dy * dy)
+    pct = (dist / torso_len) * 100.0
+    conf = min(n1[2], n2[2])
+    return pct, conf
+
+
+def _compute_hip_clearance_pct(
+    addr_lms: dict[str, Any],
+    impact_lms: dict[str, Any],
+    torso_len: float,
+) -> tuple[float | None, float]:
+    """計算擊球瞬間相較準備姿勢時雙髖中點在 DTL 平面的水平/深度位移比 (% of torso)。"""
+    hp1 = _midpoint_xyv(addr_lms, "left_hip", "right_hip")
+    hp2 = _midpoint_xyv(impact_lms, "left_hip", "right_hip")
+    if not hp1 or not hp2 or torso_len <= 0.04:
+        return None, 0.0
+    # 在 DTL 視角中，髖部向後清除（保持骨盆深度）表現為 X 軸或 Y 軸的位移
+    dx = hp2[0] - hp1[0]
+    dy = hp2[1] - hp1[1]
+    dist = math.sqrt(dx * dx + dy * dy)
+    pct = (dist / torso_len) * 100.0
+    conf = min(hp1[2], hp2[2])
+    return pct, conf
+
+
+# =========================================================================
+# 影格檢索：從使用者 keyframes 與示範影片 landmarks 中精確查找
+# =========================================================================
+
+def _find_user_landmarks_for_phase(
+    keyframes: list[dict[str, Any]],
+    target_time_ms: int,
+    max_tolerance_ms: int = 350,
+) -> tuple[dict[str, Any] | None, int | None, float]:
+    """從使用者 keyframes_json 找到最接近目標時間碼的真實 landmarks。"""
+    if not keyframes:
+        return None, None, 0.0
+    best_kf = None
+    best_diff = float("inf")
+    for kf in keyframes:
+        t = kf.get("time_ms")
+        if t is None:
+            continue
+        diff = abs(int(t) - target_time_ms)
+        if diff < best_diff:
+            best_diff = diff
+            best_kf = kf
+    if best_kf and best_diff <= max_tolerance_ms:
+        lms = best_kf.get("landmarks") or best_kf.get("keypoints") or {}
+        conf = float(best_kf.get("pose_confidence", 0.8))
+        return lms, int(best_kf.get("time_ms", target_time_ms)), conf
+    return None, None, 0.0
+
+
+def _find_ref_landmarks_for_phase(
+    ref_pose_artifact: dict[str, Any],
+    target_time_ms: int,
+    max_tolerance_ms: int = 350,
+) -> tuple[dict[str, Any] | None, int | None, float]:
+    """從示範影片 pose_artifact['landmarks'] 找到最接近目標時間碼的真實 landmarks。"""
+    lms_dict = ref_pose_artifact.get("landmarks")
+    if isinstance(lms_dict, dict) and lms_dict:
+        best_k = None
+        best_diff = float("inf")
+        for k_str, val in lms_dict.items():
+            try:
+                t = int(k_str)
+                diff = abs(t - target_time_ms)
+                if diff < best_diff:
+                    best_diff = diff
+                    best_k = k_str
+            except ValueError:
+                continue
+        if best_k and best_diff <= max_tolerance_ms:
+            # 評估示範關鍵點之平均可見度
+            pts = lms_dict[best_k]
+            vis_list = [p.get("visibility", 1.0) for p in pts.values() if isinstance(p, dict)]
+            avg_vis = float(sum(vis_list) / len(vis_list)) if vis_list else 0.9
+            return pts, int(best_k), avg_vis
+
+    # 亦支援若 ref 包含 keyframes 列表格式
+    kfs = ref_pose_artifact.get("keyframes")
+    if isinstance(kfs, list) and kfs:
+        return _find_user_landmarks_for_phase(kfs, target_time_ms, max_tolerance_ms)
+
+    return None, None, 0.0
+
+
+# =========================================================================
+# 主比較引擎
+# =========================================================================
 
 def compute_quantitative_posture_comparison(
     user_swing: dict[str, Any],
     ref_swing: dict[str, Any],
 ) -> QuantitativePostureReport:
     """
-    依據使用者揮桿與參考示範揮桿之可觀測 2D 骨架特徵與時間碼，
-    計算 4 大階段（Address, Top, Impact, Finish）客觀量化姿勢比較清單。
+    依據使用者揮桿與參考示範揮桿之真實 2D MediaPipe Pose 關鍵點與時間碼，
+    計算 4 大階段客觀量化姿勢比較清單。
+    嚴禁任何假造數據，無資料時明確標註 N/A 與 insufficient_evidence。
     """
-    user_subscores = user_swing.get("subscores") or {}
-    user_metrics = {m.get("metric_key"): m for m in (user_swing.get("metrics") or [])}
-    user_events = {e.get("event_name"): int(e.get("time_ms", 0)) for e in (user_swing.get("events") or [])}
-    user_kf = (user_swing.get("pose_artifact") or {}).get("keyframes") or user_swing.get("keyframes") or []
+    user_id = str(user_swing.get("id") or user_swing.get("segment_id") or "")
+    ref_id = str(ref_swing.get("id") or "")
+    club_type = str(ref_swing.get("club_type") or user_swing.get("club") or "7I")
 
-    ref_events = ref_swing.get("event_timestamps") or {}
+    # 1. 檢查示範影片是否存在
+    if not ref_id:
+        return QuantitativePostureReport(
+            user_swing_id=user_id,
+            ref_swing_id=None,
+            club_type=club_type,
+            overall_status="reference_missing",
+            overall_reliability="unreliable",
+            metrics=[],
+            priority_fix_summary=f"目前尚無 {club_type} 的專業示範影片，請手動匯入或切換其他球桿。",
+            camera_compatibility={"is_compatible": False, "reason": "缺少示範影片"},
+        )
+
+    # 2. 相機視角與狀態可靠度檢查 (P0-A #6)
+    ref_camera = str(ref_swing.get("camera_angle") or "DTL")
+    user_camera = str(user_swing.get("camera_angle") or "DTL")
     ref_calib = ref_swing.get("calibration_params") or {}
-    ref_kf = (ref_swing.get("pose_artifact") or {}).get("keyframes") or []
+    is_ref_reliable = bool(ref_calib.get("events_reliable", True))
 
+    is_angle_compatible = (
+        ref_camera.upper() == "DTL"
+        and user_camera.upper() == "DTL"
+        and is_ref_reliable
+    )
+    camera_compat_info = {
+        "user_camera": user_camera,
+        "ref_camera": ref_camera,
+        "is_compatible": is_angle_compatible,
+        "ref_events_reliable": is_ref_reliable,
+        "reason": (
+            "相機視角相容（均為後方 DTL 全揮桿視角）"
+            if is_angle_compatible
+            else f"視角不相容：示範影片視角為 {ref_camera}，非標準後方視角 (DTL)，幾何投影不具直接比較性。"
+        ),
+    }
+
+    # 3. 提取事件時間碼
+    user_events = {e.get("event_name"): int(e.get("time_ms", 0)) for e in (user_swing.get("events") or [])}
     user_start_ms = int(user_swing.get("start_ms", 0))
+    user_addr_ms = user_events.get("address") or user_start_ms
     user_top_ms = user_events.get("top") or (user_start_ms + 1200)
     user_impact_ms = user_events.get("impact_estimated") or user_events.get("impact") or (user_top_ms + 333)
-    user_address_ms = user_events.get("address") or user_start_ms
     user_finish_ms = user_events.get("finish") or (user_impact_ms + 800)
 
-    ref_top_ms = int(ref_events.get("top", 1367))
-    ref_impact_ms = int(ref_events.get("impact", 1700))
-    ref_address_ms = int(ref_events.get("address", max(0, ref_top_ms - 1000)))
-    ref_finish_ms = int(ref_events.get("finish", ref_impact_ms + 800))
+    ref_events = ref_swing.get("event_timestamps") or {}
+    ref_addr_ms = int(ref_events.get("address", 0))
+    ref_top_ms = int(ref_events.get("top", 0))
+    ref_impact_ms = int(ref_events.get("impact", 0))
+    ref_finish_ms = int(ref_events.get("finish", 0))
+
+    # 4. 提取關鍵點
+    user_kf = (user_swing.get("pose_artifact") or {}).get("keyframes_json") or user_swing.get("keyframes") or []
+    ref_pa = ref_swing.get("pose_artifact") or {}
+
+    u_addr_lms, u_addr_t, u_addr_conf = _find_user_landmarks_for_phase(user_kf, user_addr_ms)
+    u_top_lms, u_top_t, u_top_conf = _find_user_landmarks_for_phase(user_kf, user_top_ms)
+    u_imp_lms, u_imp_t, u_imp_conf = _find_user_landmarks_for_phase(user_kf, user_impact_ms)
+    u_fin_lms, u_fin_t, u_fin_conf = _find_user_landmarks_for_phase(user_kf, user_finish_ms)
+
+    r_addr_lms, r_addr_t, r_addr_conf = _find_ref_landmarks_for_phase(ref_pa, ref_addr_ms)
+    r_top_lms, r_top_t, r_top_conf = _find_ref_landmarks_for_phase(ref_pa, ref_top_ms)
+    r_imp_lms, r_imp_t, r_imp_conf = _find_ref_landmarks_for_phase(ref_pa, ref_impact_ms)
+    r_fin_lms, r_fin_t, r_fin_conf = _find_ref_landmarks_for_phase(ref_pa, ref_finish_ms)
+
+    # 計算正規化軀幹長度
+    u_torso_len, u_torso_conf = _compute_torso_length(u_addr_lms) if u_addr_lms else (None, 0.0)
+    r_torso_len, r_torso_conf = _compute_torso_length(r_addr_lms) if r_addr_lms else (None, 0.0)
 
     comparisons: list[PostureMetricComparison] = []
 
+    def make_metric(
+        id_: str,
+        phase: str,
+        phase_zh: str,
+        name: str,
+        unit: str,
+        u_val: float | None,
+        u_conf: float,
+        u_ev: dict[str, Any],
+        r_val: float | None,
+        r_conf: float,
+        r_ev: dict[str, Any],
+        benchmark: str,
+        optimal_tol: float,
+        moderate_tol: float,
+        val_format: str = "{:.1f}",
+        unit_suffix: str = "",
+        is_slow_mo_ref: bool = False,
+        slow_mo_note: str = "",
+        direction_cue: tuple[str, str] = ("偏低", "偏高"),
+    ) -> PostureMetricComparison:
+        """安全建構單項量化姿勢比對物件。若任一方缺失，明確設置為不可比。"""
+        # 示範是否為慢動作素材
+        if is_slow_mo_ref:
+            r_val = None
+            r_val_display = slow_mo_note or "N/A (慢動作素材)"
+        else:
+            r_val_display = (val_format + unit_suffix).format(r_val) if r_val is not None else "N/A"
+
+        u_val_display = (val_format + unit_suffix).format(u_val) if u_val is not None else "N/A"
+
+        # 檢查是否可比
+        is_comparable = (
+            is_angle_compatible
+            and (u_val is not None)
+            and (r_val is not None)
+            and (u_conf >= 0.35)
+            and (r_conf >= 0.35)
+        )
+
+        delta = None
+        delta_display = "--"
+        status = "insufficient_evidence"
+        confidence = round(min(u_conf, r_conf), 2) if is_comparable else 0.0
+        eval_text = ""
+
+        if not is_angle_compatible:
+            status = "not_comparable"
+            eval_text = f"相機視角不相容（示範為 {ref_camera}，非標準 DTL），不推算 2D 平面幾何差異。"
+        elif not is_comparable:
+            status = "insufficient_evidence"
+            missing_who = []
+            if u_val is None or u_conf < 0.35:
+                missing_who.append("使用者揮桿")
+            if r_val is None or r_conf < 0.35:
+                missing_who.append("示範影片" if not is_slow_mo_ref else "示範Tempo(慢動作無真實時長)")
+            eval_text = f"缺少{'與'.join(missing_who)}之可靠關鍵點，未具備充分觀測證據，不計算差異。"
+        else:
+            delta = round(u_val - r_val, 2)
+            delta_display = f"{delta:+.1f}" + unit_suffix if "°" in unit_suffix or "%" in unit_suffix else f"{delta:+.2f}"
+            abs_d = abs(delta)
+            if abs_d <= optimal_tol:
+                status = "optimal"
+                eval_text = f"與示範選手數值高度相符（差距僅 {delta_display}，在常模允許誤差 {optimal_tol}{unit_suffix} 內）。"
+            elif abs_d <= moderate_tol:
+                status = "moderate_diff"
+                cue = direction_cue[1] if delta > 0 else direction_cue[0]
+                eval_text = f"較示範選手{cue} {abs_d:.1f}{unit_suffix}，落在可微調區間。"
+            else:
+                status = "significant_diff"
+                cue = direction_cue[1] if delta > 0 else direction_cue[0]
+                eval_text = f"較示範選手明顯{cue} {abs_d:.1f}{unit_suffix}，為本階段核心結構差異。"
+
+        target_jump_map = {
+            "address": user_addr_ms,
+            "top": user_top_ms,
+            "impact": user_impact_ms,
+            "finish": user_finish_ms,
+        }
+
+        return PostureMetricComparison(
+            id=id_,
+            phase=phase,
+            phase_zh=phase_zh,
+            metric_name=name,
+            user_value=u_val,
+            user_value_display=u_val_display,
+            ref_value=r_val,
+            ref_value_display=r_val_display,
+            delta=delta,
+            delta_display=delta_display,
+            unit=unit,
+            general_benchmark_range=benchmark,
+            confidence=confidence,
+            is_reliable=(confidence >= 0.50),
+            is_comparable=is_comparable,
+            status=status,
+            evaluation_text=eval_text,
+            user_evidence=u_ev,
+            ref_evidence=r_ev,
+            target_jump_ms=target_jump_map.get(phase, user_addr_ms),
+            target_jump_phase=phase,
+            recommended_speed=0.25 if phase in ("top", "impact") else 0.5,
+        )
+
     # =========================================================================
-    # 1. Address 準備姿勢階段
+    # 階段 1：Address 準備姿勢
     # =========================================================================
-    # 1.1 站姿前傾角度 (Address Spine Tilt)
-    # 預設基準值：DTL 視角下 7I ~ Driver 理想站姿前傾通常在 36° ~ 42° 之間
-    ref_addr_tilt = 40.0
-    user_addr_tilt = 38.5
-    # 若 metric 中有 address_spine_tilt
-    if "address_spine_tilt_deg" in user_metrics:
-        user_addr_tilt = _safe_float(user_metrics["address_spine_tilt_deg"].get("value")) or 38.5
-    
-    delta_addr_tilt = round(user_addr_tilt - ref_addr_tilt, 1)
-    status_addr_tilt = "optimal" if abs(delta_addr_tilt) <= 4.0 else ("moderate_diff" if abs(delta_addr_tilt) <= 8.0 else "significant_diff")
-    comparisons.append(PostureMetricComparison(
-        id="address_spine_tilt",
+    u_addr_tilt, u_at_conf = _compute_spine_tilt_deg(u_addr_lms) if u_addr_lms else (None, 0.0)
+    r_addr_tilt, r_at_conf = _compute_spine_tilt_deg(r_addr_lms) if r_addr_lms else (None, 0.0)
+    comparisons.append(make_metric(
+        id_="address_spine_tilt",
         phase="address",
         phase_zh="準備姿勢 (Address)",
-        metric_name="站姿軀幹前傾角度",
-        user_value=user_addr_tilt,
-        user_value_display=f"{user_addr_tilt:.1f}°",
-        ref_value=ref_addr_tilt,
-        ref_value_display=f"{ref_addr_tilt:.1f}°",
-        delta=delta_addr_tilt,
-        delta_display=f"{delta_addr_tilt:+.1f}°",
+        name="站姿軀幹前傾角",
         unit="deg_2d",
-        confidence=0.92,
-        is_reliable=True,
-        status=status_addr_tilt,
-        evaluation_text=(
-            "站姿前傾角度符合良好 DTL 基準（36°~44°）。"
-            if status_addr_tilt == "optimal"
-            else f"站姿前傾較示範偏{'直立' if delta_addr_tilt < 0 else '過深'} {abs(delta_addr_tilt):.1f}°，影響後續起桿旋轉空間。"
-        ),
-        target_jump_ms=user_address_ms,
-        target_jump_phase="address",
-        recommended_speed=0.5,
+        u_val=round(u_addr_tilt, 1) if u_addr_tilt is not None else None,
+        u_conf=u_at_conf,
+        u_ev={"time_ms": u_addr_t, "formula": "atan2(|shoulder_mid.x - hip_mid.x|, hip_mid.y - shoulder_mid.y)"},
+        r_val=round(r_addr_tilt, 1) if r_addr_tilt is not None else None,
+        r_conf=r_at_conf,
+        r_ev={"time_ms": r_addr_t, "formula": "atan2(|shoulder_mid.x - hip_mid.x|, hip_mid.y - shoulder_mid.y)"},
+        benchmark="36.0° ~ 44.0° (DTL 後方視角標準站姿前傾常模)",
+        optimal_tol=4.0,
+        moderate_tol=8.0,
+        unit_suffix="°",
+        direction_cue=("偏直立", "偏過深前傾"),
     ))
 
-    # 1.2 頭部相對重心水平位置比 (Head Horizontal Position % of Torso)
-    ref_head_pos = 4.0  # 4%
-    user_head_pos = 4.8
-    delta_head_pos = round(user_head_pos - ref_head_pos, 1)
-    comparisons.append(PostureMetricComparison(
-        id="address_head_position",
+    u_wrist_h, u_wh_conf = _compute_wrist_height_ratio(u_addr_lms, u_torso_len or 0.25) if u_addr_lms else (None, 0.0)
+    r_wrist_h, r_wh_conf = _compute_wrist_height_ratio(r_addr_lms, r_torso_len or 0.25) if r_addr_lms else (None, 0.0)
+    comparisons.append(make_metric(
+        id_="address_wrist_height",
         phase="address",
         phase_zh="準備姿勢 (Address)",
-        metric_name="頭部相對軸心水平比",
-        user_value=user_head_pos,
-        user_value_display=f"{user_head_pos:.1f}%",
-        ref_value=ref_head_pos,
-        ref_value_display=f"{ref_head_pos:.1f}%",
-        delta=delta_head_pos,
-        delta_display=f"{delta_head_pos:+.1f}%",
+        name="雙手手腕基準高度比",
         unit="torso_pct",
-        confidence=0.90,
-        is_reliable=True,
-        status="optimal" if abs(delta_head_pos) <= 3.0 else "moderate_diff",
-        evaluation_text="頭部視線在站姿時保持穩定居中，未出現過度前傾或向後縮回。",
-        target_jump_ms=user_address_ms,
-        target_jump_phase="address",
-        recommended_speed=0.5,
+        u_val=round(u_wrist_h, 1) if u_wrist_h is not None else None,
+        u_conf=u_wh_conf,
+        u_ev={"time_ms": u_addr_t, "formula": "(hip_mid.y - wrist_mid.y) / torso_len * 100"},
+        r_val=round(r_wrist_h, 1) if r_wrist_h is not None else None,
+        r_conf=r_wh_conf,
+        r_ev={"time_ms": r_addr_t, "formula": "(hip_mid.y - wrist_mid.y) / torso_len * 100"},
+        benchmark="-12.0% ~ +8.0% 身長 (雙手自然垂懸於下巴鉛垂線下方)",
+        optimal_tol=5.0,
+        moderate_tol=10.0,
+        unit_suffix="%",
+        direction_cue=("偏低", "偏高"),
     ))
 
     # =========================================================================
-    # 2. Top 上桿頂點階段
+    # 階段 2：Top 上桿頂點
     # =========================================================================
-    # 2.1 頂點前傾角維持差值 (Spine Tilt Retention @ Top)
-    spine_sub = user_subscores.get("spine_tilt_stability") or {}
-    raw_spine_delta = _safe_float(spine_sub.get("raw_value"))
-    if raw_spine_delta is None:
-        raw_spine_delta = _safe_float((user_metrics.get("spine_tilt_delta_deg") or {}).get("value")) or 3.2
-    
-    ref_spine_delta = 1.8  # 職業示範通常維持在 2° 內
-    delta_retention = round(raw_spine_delta - ref_spine_delta, 1)
-    status_retention = "optimal" if raw_spine_delta <= 3.5 else ("moderate_diff" if raw_spine_delta <= 6.0 else "significant_diff")
-    comparisons.append(PostureMetricComparison(
-        id="top_spine_retention",
+    u_top_tilt, u_tt_conf = _compute_spine_tilt_deg(u_top_lms) if u_top_lms else (None, 0.0)
+    r_top_tilt, r_tt_conf = _compute_spine_tilt_deg(r_top_lms) if r_top_lms else (None, 0.0)
+    u_top_ret = abs(u_top_tilt - u_addr_tilt) if (u_top_tilt is not None and u_addr_tilt is not None) else None
+    r_top_ret = abs(r_top_tilt - r_addr_tilt) if (r_top_tilt is not None and r_addr_tilt is not None) else None
+    comparisons.append(make_metric(
+        id_="top_spine_retention",
         phase="top",
         phase_zh="上桿頂點 (Top)",
-        metric_name="頂點軀幹前傾維持變化量",
-        user_value=round(raw_spine_delta, 1),
-        user_value_display=f"{raw_spine_delta:.1f}°",
-        ref_value=ref_spine_delta,
-        ref_value_display=f"{ref_spine_delta:.1f}°",
-        delta=delta_retention,
-        delta_display=f"{delta_retention:+.1f}°",
+        name="頂點前傾維持變化量",
         unit="deg_2d",
-        confidence=float(spine_sub.get("confidence", 0.88)),
-        is_reliable=True,
-        status=status_retention,
-        evaluation_text=(
-            f"上桿頂點軀幹前傾角變化 Δ={raw_spine_delta:.1f}°；示範選手維持於 {ref_spine_delta:.1f}°。"
-            + ("維持優異脊柱旋轉深度。" if status_retention == "optimal" else "轉換瞬間有提早直立（Early Extension）傾向，建議在 0.25x 慢動作下對照頂點背部角度。")
-        ),
-        target_jump_ms=user_top_ms,
-        target_jump_phase="top",
-        recommended_speed=0.25,
+        u_val=round(u_top_ret, 1) if u_top_ret is not None else None,
+        u_conf=min(u_tt_conf, u_at_conf),
+        u_ev={"addr_time_ms": u_addr_t, "top_time_ms": u_top_t, "formula": "|top_spine_deg - addr_spine_deg|"},
+        r_val=round(r_top_ret, 1) if r_top_ret is not None else None,
+        r_conf=min(r_tt_conf, r_at_conf),
+        r_ev={"addr_time_ms": r_addr_t, "top_time_ms": r_top_t, "formula": "|top_spine_deg - addr_spine_deg|"},
+        benchmark="≤ 4.0° (頂點良好維持軀幹前傾，不早起提昇)",
+        optimal_tol=2.5,
+        moderate_tol=5.0,
+        unit_suffix="°",
+        direction_cue=("維持更穩", "抬起變化較大"),
     ))
 
-    # 2.2 頂點頭部相對位移比 (Head Displacement @ Top % Torso)
-    head_sub = user_subscores.get("head_stability") or {}
-    raw_head_disp = _safe_float(head_sub.get("raw_value"))
-    if raw_head_disp is None:
-        raw_head_disp = _safe_float((user_metrics.get("head_displacement_ratio") or {}).get("value")) or 0.06
-    user_head_top_pct = round(raw_head_disp * 100, 1)
-    ref_head_top_pct = 3.5  # 示範選手 3.5%
-    delta_head_top = round(user_head_top_pct - ref_head_top_pct, 1)
-    status_head_top = "optimal" if user_head_top_pct <= 6.0 else ("moderate_diff" if user_head_top_pct <= 12.0 else "significant_diff")
-    comparisons.append(PostureMetricComparison(
-        id="top_head_displacement",
+    u_top_head, u_th_conf = _compute_head_displacement_pct(u_addr_lms, u_top_lms, u_torso_len or 0.25) if (u_addr_lms and u_top_lms) else (None, 0.0)
+    r_top_head, r_th_conf = _compute_head_displacement_pct(r_addr_lms, r_top_lms, r_torso_len or 0.25) if (r_addr_lms and r_top_lms) else (None, 0.0)
+    comparisons.append(make_metric(
+        id_="top_head_displacement",
         phase="top",
         phase_zh="上桿頂點 (Top)",
-        metric_name="頂點頭部相對位移比",
-        user_value=user_head_top_pct,
-        user_value_display=f"{user_head_top_pct:.1f}%",
-        ref_value=ref_head_top_pct,
-        ref_value_display=f"{ref_head_top_pct:.1f}%",
-        delta=delta_head_top,
-        delta_display=f"{delta_head_top:+.1f}%",
+        name="頂點頭部相對位移比",
         unit="torso_pct",
-        confidence=float(head_sub.get("confidence", 0.85)),
-        is_reliable=True,
-        status=status_head_top,
-        evaluation_text=(
-            "頂點頭部空間軸心穩定。" if status_head_top == "optimal"
-            else f"上桿蓄力時頭部相對身長產生了 {user_head_top_pct:.1f}% 的浮動或側移，顯示軸心旋轉伴隨輕微位移代償。"
-        ),
-        target_jump_ms=user_top_ms,
-        target_jump_phase="top",
-        recommended_speed=0.25,
+        u_val=round(u_top_head, 1) if u_top_head is not None else None,
+        u_conf=min(u_th_conf, u_torso_conf),
+        u_ev={"addr_time_ms": u_addr_t, "top_time_ms": u_top_t, "formula": "dist(nose_top, nose_addr) / torso_len * 100"},
+        r_val=round(r_top_head, 1) if r_top_head is not None else None,
+        r_conf=min(r_th_conf, r_torso_conf),
+        r_ev={"addr_time_ms": r_addr_t, "top_time_ms": r_top_t, "formula": "dist(nose_top, nose_addr) / torso_len * 100"},
+        benchmark="≤ 8.0% 身長 (上桿蓄力時軸心頭部穩定無大幅側移)",
+        optimal_tol=3.5,
+        moderate_tol=7.0,
+        unit_suffix="%",
+        direction_cue=("更少晃動", "側移晃動較大"),
     ))
 
-    # 2.3 上下桿過渡節奏比例 (Tempo Ratio @ Transition)
-    tempo_sub = user_subscores.get("tempo_consistency") or {}
-    raw_tempo = _safe_float(tempo_sub.get("raw_value"))
-    if raw_tempo is None:
-        raw_tempo = _safe_float((user_metrics.get("backswing_downswing_ratio") or {}).get("value")) or 2.9
-    
-    # 若示範是慢動作影片，不使用慢動作的播放時間當真實節奏，而是標明示範標準 3.0:1
-    is_ref_slow_mo = bool(ref_calib.get("is_slow_motion", False))
-    ref_tempo = 3.0
-    delta_tempo = round(raw_tempo - ref_tempo, 2)
-    status_tempo = "optimal" if abs(delta_tempo) <= 0.4 else ("moderate_diff" if abs(delta_tempo) <= 0.8 else "significant_diff")
-    comparisons.append(PostureMetricComparison(
-        id="transition_tempo_ratio",
-        phase="top",
-        phase_zh="頂點轉換 (Transition)",
-        metric_name="上下桿時間節奏比",
-        user_value=round(raw_tempo, 2),
-        user_value_display=f"{raw_tempo:.2f}:1",
-        ref_value=ref_tempo,
-        ref_value_display=f"{ref_tempo:.1f}:1" + (" (標竿)" if is_ref_slow_mo else ""),
-        delta=delta_tempo,
-        delta_display=f"{delta_tempo:+.2f}",
+    # =========================================================================
+    # 階段 3：Downswing / Impact 擊球瞬間
+    # =========================================================================
+    u_imp_tilt, u_it_conf = _compute_spine_tilt_deg(u_imp_lms) if u_imp_lms else (None, 0.0)
+    r_imp_tilt, r_it_conf = _compute_spine_tilt_deg(r_imp_lms) if r_imp_lms else (None, 0.0)
+    u_imp_ret = abs(u_imp_tilt - u_addr_tilt) if (u_imp_tilt is not None and u_addr_tilt is not None) else None
+    r_imp_ret = abs(r_imp_tilt - r_addr_tilt) if (r_imp_tilt is not None and r_addr_tilt is not None) else None
+    comparisons.append(make_metric(
+        id_="impact_spine_delta",
+        phase="impact",
+        phase_zh="擊球瞬間 (Impact)",
+        name="擊球前傾角變化量",
+        unit="deg_2d",
+        u_val=round(u_imp_ret, 1) if u_imp_ret is not None else None,
+        u_conf=min(u_it_conf, u_at_conf),
+        u_ev={"addr_time_ms": u_addr_t, "impact_time_ms": u_imp_t, "formula": "|impact_spine_deg - addr_spine_deg|"},
+        r_val=round(r_imp_ret, 1) if r_imp_ret is not None else None,
+        r_conf=min(r_it_conf, r_at_conf),
+        r_ev={"addr_time_ms": r_addr_t, "impact_time_ms": r_imp_t, "formula": "|impact_spine_deg - addr_spine_deg|"},
+        benchmark="≤ 4.5° (觸球瞬間維持準備姿勢角度，不提前拔起)",
+        optimal_tol=2.5,
+        moderate_tol=5.0,
+        unit_suffix="°",
+        direction_cue=("維持更穩", "角度變化偏大"),
+    ))
+
+    # 節奏比 (Tempo Ratio)：若示範為慢動作影片，示範數值嚴格為 None
+    is_ref_slow_mo = bool(ref_calib.get("is_slow_motion", False)) or (ref_calib.get("supports_realtime_sync") is False)
+    u_tempo = None
+    u_tempo_conf = 0.0
+    u_back_ms = user_top_ms - user_addr_ms
+    u_down_ms = user_impact_ms - user_top_ms
+    if u_back_ms > 200 and u_down_ms > 100:
+        u_tempo = round(u_back_ms / u_down_ms, 2)
+        u_tempo_conf = 0.85
+
+    r_tempo = None
+    r_tempo_conf = 0.0
+    if not is_ref_slow_mo and ref_top_ms > ref_addr_ms and ref_impact_ms > ref_top_ms:
+        r_back_ms = ref_top_ms - ref_addr_ms
+        r_down_ms = ref_impact_ms - ref_top_ms
+        if r_back_ms > 200 and r_down_ms > 100:
+            r_tempo = round(r_back_ms / r_down_ms, 2)
+            r_tempo_conf = 0.85
+
+    comparisons.append(make_metric(
+        id_="swing_tempo_ratio",
+        phase="impact",
+        phase_zh="擊球瞬間 (Impact)",
+        name="上下桿時間節奏比",
         unit="ratio",
-        confidence=float(tempo_sub.get("confidence", 0.88)),
-        is_reliable=True,
-        status=status_tempo,
-        evaluation_text=(
-            f"上下桿節奏 {raw_tempo:.2f}:1 符合流暢揮桿區間。" if status_tempo == "optimal"
-            else f"節奏比為 {raw_tempo:.2f}:1，偏離標準 3.0:1 區間（{'下桿轉換較急促' if delta_tempo < 0 else '上桿累積較慢'}）。"
-        ),
-        target_jump_ms=user_top_ms,
-        target_jump_phase="top",
-        recommended_speed=0.5,
+        u_val=u_tempo,
+        u_conf=u_tempo_conf,
+        u_ev={"backswing_ms": u_back_ms, "downswing_ms": u_down_ms, "formula": "backswing_ms / downswing_ms"},
+        r_val=r_tempo,
+        r_conf=r_tempo_conf,
+        r_ev={"backswing_ms": ref_top_ms - ref_addr_ms, "downswing_ms": ref_impact_ms - ref_top_ms, "formula": "backswing_ms / downswing_ms"},
+        benchmark="2.7:1 ~ 3.3:1 (標準高爾夫全揮桿約 3:1 節拍比)",
+        optimal_tol=0.35,
+        moderate_tol=0.70,
+        val_format="{:.2f}",
+        unit_suffix=":1",
+        is_slow_mo_ref=is_ref_slow_mo,
+        slow_mo_note="N/A (慢動作素材不提供假Tempo)",
+        direction_cue=("下桿轉換急促", "上桿過度緩慢"),
     ))
 
-    # =========================================================================
-    # 3. Downswing / Impact 擊球瞬間階段
-    # =========================================================================
-    # 3.1 擊球瞬間頭部軸心位移比 (Head Displacement @ Impact)
-    user_head_impact_pct = round((raw_head_disp or 0.07) * 110, 1)  # 觸球瞬間通常位移略大於頂點
-    ref_head_impact_pct = 4.2
-    delta_head_imp = round(user_head_impact_pct - ref_head_impact_pct, 1)
-    status_head_imp = "optimal" if user_head_impact_pct <= 7.0 else ("moderate_diff" if user_head_impact_pct <= 14.0 else "significant_diff")
-    comparisons.append(PostureMetricComparison(
-        id="impact_head_stability",
+    # 擊球骨盆深度開放比
+    u_hip_clear, u_hc_conf = _compute_hip_clearance_pct(u_addr_lms, u_imp_lms, u_torso_len or 0.25) if (u_addr_lms and u_imp_lms) else (None, 0.0)
+    r_hip_clear, r_hc_conf = _compute_hip_clearance_pct(r_addr_lms, r_imp_lms, r_torso_len or 0.25) if (r_addr_lms and r_imp_lms) else (None, 0.0)
+    comparisons.append(make_metric(
+        id_="impact_hip_clearance",
         phase="impact",
         phase_zh="擊球瞬間 (Impact)",
-        metric_name="擊球頭部軸心位移比",
-        user_value=user_head_impact_pct,
-        user_value_display=f"{user_head_impact_pct:.1f}%",
-        ref_value=ref_head_impact_pct,
-        ref_value_display=f"{ref_head_impact_pct:.1f}%",
-        delta=delta_head_imp,
-        delta_display=f"{delta_head_imp:+.1f}%",
+        name="擊球骨盆深度開放比",
         unit="torso_pct",
-        confidence=0.86,
-        is_reliable=True,
-        status=status_head_imp,
-        evaluation_text=(
-            "擊球瞬間軸心穩定，視線鎖定球位良好。" if status_head_imp == "optimal"
-            else f"擊球瞬間頭部下沉或側向位移達 {user_head_impact_pct:.1f}%，易導致最低點 (Low Point) 晃動。"
-        ),
-        target_jump_ms=user_impact_ms,
-        target_jump_phase="impact",
-        recommended_speed=0.25,
-    ))
-
-    # 3.2 擊球骨盆深度開放比 (Hip Clearance @ Impact % Torso)
-    ref_hip_clear = 14.0  # 14%
-    user_hip_clear = 11.5
-    delta_hip_clear = round(user_hip_clear - ref_hip_clear, 1)
-    comparisons.append(PostureMetricComparison(
-        id="impact_hip_clearance",
-        phase="impact",
-        phase_zh="擊球瞬間 (Impact)",
-        metric_name="擊球骨盆深度開放比",
-        user_value=user_hip_clear,
-        user_value_display=f"{user_hip_clear:.1f}%",
-        ref_value=ref_hip_clear,
-        ref_value_display=f"{ref_hip_clear:.1f}%",
-        delta=delta_hip_clear,
-        delta_display=f"{delta_hip_clear:+.1f}%",
-        unit="torso_pct",
-        confidence=0.82,
-        is_reliable=True,
-        status="optimal" if abs(delta_hip_clear) <= 3.5 else "moderate_diff",
-        evaluation_text="擊球瞬間前髖部順暢轉開，提供雙臂下落空間。",
-        target_jump_ms=user_impact_ms,
-        target_jump_phase="impact",
-        recommended_speed=0.25,
+        u_val=round(u_hip_clear, 1) if u_hip_clear is not None else None,
+        u_conf=min(u_hc_conf, u_torso_conf),
+        u_ev={"addr_time_ms": u_addr_t, "impact_time_ms": u_imp_t, "formula": "dist(hip_imp, hip_addr) / torso_len * 100"},
+        r_val=round(r_hip_clear, 1) if r_hip_clear is not None else None,
+        r_conf=min(r_hc_conf, r_torso_conf),
+        r_ev={"addr_time_ms": r_addr_t, "impact_time_ms": r_imp_t, "formula": "dist(hip_imp, hip_addr) / torso_len * 100"},
+        benchmark="8.0% ~ 18.0% 身長 (下桿順暢轉開左髖，保留雙手通道)",
+        optimal_tol=4.0,
+        moderate_tol=8.0,
+        unit_suffix="%",
+        direction_cue=("開放不足", "過度側移"),
     ))
 
     # =========================================================================
-    # 4. Finish 收桿階段
+    # 階段 4：Finish 收桿平衡
     # =========================================================================
-    finish_sub = user_subscores.get("finish_balance") or {}
-    finish_score = _safe_float(finish_sub.get("score"))
-    if finish_score is None:
-        finish_score = 82.0
-    ref_finish_score = 95.0
-    delta_finish = round(finish_score - ref_finish_score, 1)
-    status_finish = "optimal" if finish_score >= 85.0 else ("moderate_diff" if finish_score >= 70.0 else "significant_diff")
-    comparisons.append(PostureMetricComparison(
-        id="finish_balance_stability",
+    u_fin_tilt, u_ft_conf = _compute_spine_tilt_deg(u_fin_lms) if u_fin_lms else (None, 0.0)
+    r_fin_tilt, r_ft_conf = _compute_spine_tilt_deg(r_fin_lms) if r_fin_lms else (None, 0.0)
+    comparisons.append(make_metric(
+        id_="finish_spine_angle",
         phase="finish",
-        phase_zh="收桿階段 (Finish)",
-        metric_name="收桿平衡穩定度評分",
-        user_value=round(finish_score, 1),
-        user_value_display=f"{finish_score:.0f} 分",
-        ref_value=ref_finish_score,
-        ref_value_display=f"{ref_finish_score:.0f} 分",
-        delta=delta_finish,
-        delta_display=f"{delta_finish:+.0f} 分",
-        unit="score",
-        confidence=float(finish_sub.get("confidence", 0.85)),
-        is_reliable=True,
-        status=status_finish,
-        evaluation_text=(
-            "收桿平穩站定，前腳承載完全重心。" if status_finish == "optimal"
-            else f"收桿穩定度 {finish_score:.0f} 分，結束時身體重心有提早向後晃動傾向，建議站定維持 2 秒。"
-        ),
-        target_jump_ms=user_finish_ms,
-        target_jump_phase="finish",
-        recommended_speed=0.5,
+        phase_zh="收桿平衡 (Finish)",
+        name="收桿軀幹直立角",
+        unit="deg_2d",
+        u_val=round(u_fin_tilt, 1) if u_fin_tilt is not None else None,
+        u_conf=u_ft_conf,
+        u_ev={"time_ms": u_fin_t, "formula": "spine_tilt_deg @ finish frame"},
+        r_val=round(r_fin_tilt, 1) if r_fin_tilt is not None else None,
+        r_conf=r_ft_conf,
+        r_ev={"time_ms": r_fin_t, "formula": "spine_tilt_deg @ finish frame"},
+        benchmark="≤ 16.0° (收桿完全立起平衡，重心完全過渡至左腳)",
+        optimal_tol=4.0,
+        moderate_tol=8.0,
+        unit_suffix="°",
+        direction_cue=("更為直立", "身體殘留後傾"),
     ))
 
-    # 找出最大差異項作為優先改善項目 (Priority Fix)
-    diff_ranked = sorted(
-        [c for c in comparisons if c.status in ("significant_diff", "moderate_diff")],
+    # 4. 可靠度總結與覆蓋率 (P0-B)
+    comparable_count = sum(1 for c in comparisons if c.is_comparable)
+    total_metrics = len(comparisons)
+    comparable_ratio = comparable_count / total_metrics if total_metrics > 0 else 0.0
+
+    avg_conf = (
+        sum(c.confidence for c in comparisons if c.is_comparable) / comparable_count
+        if comparable_count > 0 else 0.0
+    )
+
+    if not is_angle_compatible:
+        overall_status = "not_comparable"
+        overall_reliability = "unreliable"
+    elif comparable_count == 0:
+        overall_status = "insufficient_data"
+        overall_reliability = "unreliable"
+    elif comparable_ratio < 0.50 or avg_conf < 0.50:
+        overall_status = "insufficient_data"
+        overall_reliability = "low"
+    elif comparable_ratio < 0.75 or avg_conf < 0.75:
+        overall_status = "ready"
+        overall_reliability = "moderate"
+    else:
+        overall_status = "ready"
+        overall_reliability = "high"
+
+    # 5. Priority Fix 唯一改善重點選擇 (P0-D: 只能建立在真實證據上)
+    # 嚴格條件：必須 is_comparable=True、is_reliable=True，且屬於 significant_diff 或 moderate_diff
+    valid_diffs = [
+        c for c in comparisons
+        if c.is_comparable and c.is_reliable and c.status in ("significant_diff", "moderate_diff")
+    ]
+    # 依照嚴重程度與偏差量排序
+    valid_diffs.sort(
         key=lambda x: (2 if x.status == "significant_diff" else 1, abs(x.delta or 0)),
         reverse=True,
     )
@@ -405,93 +697,97 @@ def compute_quantitative_posture_comparison(
     priority_fix_summary = None
     actionable_drill = None
     retest_metric_target = None
+    priority_fix_obj = None
 
-    if diff_ranked:
-        top_diff = diff_ranked[0]
+    if valid_diffs and overall_reliability in ("high", "moderate"):
+        top_diff = valid_diffs[0]
         priority_fix_id = top_diff.id
-        if top_diff.id == "top_spine_retention":
-            priority_fix_summary = "下桿啟動過程中軀幹前傾維持不足（頂點抬起較示範多），建議使用 0.25× 慢動作同步比較 Top 至 Impact 的背部傾角變化。"
+        obs_item = f"{top_diff.phase_zh} — {top_diff.metric_name}"
+        u_str = top_diff.user_value_display
+        r_str = top_diff.ref_value_display
+        d_str = top_diff.delta_display
+
+        if "spine" in top_diff.id:
+            priority_fix_summary = (
+                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
+                f"建議使用 0.25× 慢動作同步比對從起桿至該階段之背部軸心角度維持。"
+            )
             actionable_drill = {
-                "name": "臀部貼牆維持骨盆深度 Drill",
-                "preparation": "站姿就位時，右臀後方輕觸牆面或球包（距離 2 公分）。",
-                "execution": "上桿時感受右臀持續貼住，下桿由左臀接替貼住支撐物，維持骨盆深度與前傾。",
-                "checkpoint": "錄影檢視 0.25x 慢動作，頂點至擊球瞬間前胸骨保持罩住球位。",
+                "name": "臀部貼牆維持前傾軸心 Drill",
+                "preparation": "站姿就位時，右臀後方輕觸球包或牆面（距離 2 公分）。",
+                "execution": "上桿時感受右臀輕貼，下桿過渡時由左臀接替貼住支撐物，維持骨盆深度。",
+                "checkpoint": "錄影對照 0.25× 慢動作，頂點至擊球瞬間前胸維持罩住球位。",
             }
-            retest_metric_target = "下次練球先練習 5 球，目標：頂點前傾維持變化量 ≤ 3.5°。"
-        elif top_diff.id == "transition_tempo_ratio":
-            priority_fix_summary = f"上下桿過渡較為急促（節奏比 {top_diff.user_value_display}），建議使用 0.5× 慢動作對照頂點換向蓄力感。"
-            actionable_drill = {
-                "name": "「慢上... 自然落」三拍節奏 Drill",
-                "preparation": "正常站姿，心中默念節奏口訣「1-2 上桿... 3 啟動釋放」。",
-                "execution": "頂點給予 0.1 秒的從容過渡感，由下半身重心自然轉移引導球桿下沉，避免雙手急躁下砸。",
-                "checkpoint": "檢視錄影確認上桿頂點有清晰的換向過渡軌跡。",
-            }
-            retest_metric_target = "下組練習 5 球，目標：上下桿時間比維持於 2.7:1 至 3.3:1 區間。"
+            retest_metric_target = f"下次練習 5 球，目標：{top_diff.metric_name} 與示範差距縮減至 ±2.5° 內。"
         elif "head" in top_diff.id:
-            priority_fix_summary = f"擊球瞬間軸心頭部位移明顯（{top_diff.user_value_display}），建議使用 0.25× 慢動作檢視觸球前後視線焦點。"
+            priority_fix_summary = (
+                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
+                f"軸心頭部在空間中有較大浮動，易導致揮桿最低點不穩定。"
+            )
             actionable_drill = {
-                "name": "視線釘球練習法",
-                "preparation": "在球後方 5 公分處設定一固定虛擬硬幣點。",
-                "execution": "擊球全程雙眼緊盯該點，擊球出聲後維持視線停留在地面 0.5 秒。",
-                "checkpoint": "確認擊球瞬間頭部高度與站姿保持一致，無下沉或拔起。",
+                "name": "定點視線鎖定 Drill",
+                "preparation": "在球位後方 5 公分處設定一固定虛擬標記點。",
+                "execution": "揮桿全程視線專注於該標記，擊球出聲後維持視線停留在地面 0.5 秒。",
+                "checkpoint": "以 0.25× 慢動作檢視，上桿頂點頭部高度與站姿保持一致，無下沉或拔起。",
             }
-            retest_metric_target = "下組練習 5 球，目標：擊球頭部位移比維持 ≤ 7.0%。"
+            retest_metric_target = f"下次練習 5 球，目標：{top_diff.metric_name} 控制在 8.0% 身長內。"
+        elif "tempo" in top_diff.id:
+            priority_fix_summary = (
+                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
+                f"上下桿時間比例偏離流暢區間，建議運用慢動作對照頂點換向蓄力感。"
+            )
+            actionable_drill = {
+                "name": "三拍默數節奏轉換 Drill",
+                "preparation": "正常站姿，心中默念節奏口訣「1-2 上桿... 3 啟動釋放」。",
+                "execution": "頂點給予 0.1 秒的從容過渡感，避免雙手急躁下砸。",
+                "checkpoint": "錄影確認上桿頂點有清晰的換向過渡軌跡，非急促折返。",
+            }
+            retest_metric_target = "下次練習 5 球，目標：上下桿時間比維持於 2.7:1 至 3.3:1 區間。"
         else:
-            priority_fix_summary = f"收桿平衡未平穩站定（{top_diff.user_value_display}），建議完成揮桿後維持前腳站立 2~3 秒。"
+            priority_fix_summary = (
+                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
+                f"收桿平衡未完全站定，建議擊球後定格維持 2 秒。"
+            )
             actionable_drill = {
                 "name": "3 秒雕像收桿平衡 Drill",
                 "preparation": "正常全揮桿練習。",
-                "execution": "揮桿結束後維持骨盆朝向目標、右腳鞋底垂直離地的收桿姿勢，心中默數 1-2-3。",
-                "checkpoint": "身體不前後晃動或提早收力放桿。",
+                "execution": "揮桿結束後維持胸口朝向目標、右腳鞋底垂直離地的收桿姿勢，心中默數 1-2-3 不移動雙腳。",
+                "checkpoint": "身體平穩站定，不前後晃動或提早收力放桿。",
             }
-            retest_metric_target = "下組練習 5 球，目標：收桿姿態穩定度達 85 分以上。"
+            retest_metric_target = "下次練習 5 球，目標：收桿完全站定直立，前傾角保持在 16.0° 內。"
+
+        priority_fix_obj = {
+            "focus_area": obs_item,
+            "metric_id": top_diff.id,
+            "user_value": u_str,
+            "ref_value": r_str,
+            "delta": d_str,
+            "summary": priority_fix_summary,
+            "drill": actionable_drill,
+            "target": retest_metric_target,
+            "confidence": top_diff.confidence,
+        }
     else:
-        priority_fix_summary = "恭喜！各項核心 2D 姿勢指標與節奏均與示範標竿高度吻合，動作結構非常穩定。"
-        retest_metric_target = "繼續維持目前流暢體感與收桿平衡，進行同節奏的組間實擊強化肌肉記憶。"
-
-    overall_status = "needs_attention" if diff_ranked else "optimal_alignment"
-
-    priority_fix_dict = None
-    if diff_ranked and actionable_drill:
-        top_diff = diff_ranked[0]
-        drill_steps = [
-            actionable_drill.get("preparation", ""),
-            actionable_drill.get("execution", ""),
-            actionable_drill.get("checkpoint", ""),
-        ]
-        priority_fix_dict = {
-            "phase": top_diff.phase,
-            "metric_name": top_diff.metric_name,
-            "diff_str": top_diff.delta_display,
-            "reliability": "high" if top_diff.confidence >= 0.85 else "medium",
-            "advice": priority_fix_summary or "",
-            "drill_name": actionable_drill.get("name", "推薦練習"),
-            "drill_steps": [s for s in drill_steps if s],
-            "retest_target": retest_metric_target or "",
-        }
-    elif not diff_ranked:
-        priority_fix_dict = {
-            "phase": "full",
-            "metric_name": "核心動作結構維持",
-            "diff_str": "優異吻合",
-            "reliability": "high",
-            "advice": priority_fix_summary or "各項核心 2D 姿勢指標與節奏均與示範標竿高度吻合，動作結構非常穩定。",
-            "drill_name": "組間實擊強化肌肉記憶 Drill",
-            "drill_steps": ["維持目前流暢體感與收桿平衡", "進行同節奏的組間實擊強化肌肉記憶"],
-            "retest_target": retest_metric_target or "持續維持穩定動作品質",
-        }
+        # 資料不足或無顯著差異：誠實揭露，絕不編造假缺陷與假口訣
+        if not is_angle_compatible:
+            priority_fix_summary = "相機視角不相容，無法確立可信的動作改善重點。建議更換標準 DTL 示範影片。"
+        elif comparable_count < 3:
+            priority_fix_summary = "目前有效比對證據不足（缺少清晰 2D 關鍵點），建議使用 0.25× 慢動作手動檢視或上傳更高畫質影片。"
+        else:
+            priority_fix_summary = "目前各項已觀測之 2D 姿勢指標與選定示範球員均在相容區間內，無顯著幾何異常。"
 
     return QuantitativePostureReport(
-        user_swing_id=str(user_swing.get("id", "")),
-        ref_swing_id=str(ref_swing.get("id", "")),
-        club_type=str(ref_swing.get("club_type", user_swing.get("club_type", "7I"))),
+        user_swing_id=user_id,
+        ref_swing_id=ref_id,
+        club_type=club_type,
         overall_status=overall_status,
+        overall_reliability=overall_reliability,
         metrics=comparisons,
         priority_fix_id=priority_fix_id,
         priority_fix_summary=priority_fix_summary,
         actionable_drill=actionable_drill,
         retest_metric_target=retest_metric_target,
-        priority_fix=priority_fix_dict,
-        overall_reliability="high",
+        priority_fix=priority_fix_obj,
+        camera_compatibility=camera_compat_info,
         is_offline_mode=True,
     )
