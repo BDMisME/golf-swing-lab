@@ -34,28 +34,52 @@ from pydantic import BaseModel, Field
 class PostureMetricComparison(BaseModel):
     id: str
     phase: str
-    phase_zh: str
-    metric_name: str
-    user_value: float | None
-    user_value_display: str
-    ref_value: float | None
-    ref_value_display: str
-    delta: float | None
-    delta_display: str
-    unit: str
-    general_benchmark_range: str  # 實驗性參考區間（獨立欄位，不可冒充示範球員數值）
+    phase_zh: str = ""
+    metric_name: str = ""
+    name_zh: str | None = None
+    observation: str | None = None
+    user_value: float | None = None
+    user_value_display: str = ""
+    ref_value: float | None = None
+    ref_value_display: str = ""
+    delta: float | None = None
+    delta_display: str = ""
+    unit: str = ""
+    general_benchmark_range: str = ""  # 實驗性參考區間（獨立欄位，不可冒充示範球員數值）
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     is_reliable: bool = True
     is_comparable: bool = True
     status: str = "optimal"  # optimal | moderate_diff | significant_diff | insufficient_evidence | not_comparable
-    evaluation_text: str
+    evaluation_text: str = ""
+    optimal_tol: float = 0.0
+    moderate_tol: float = 0.0
     geometry_coord_system: str = "isotropic_height_normalized"
     event_accuracy_ms: int | None = None
     user_evidence: dict[str, Any] = Field(default_factory=dict)
     ref_evidence: dict[str, Any] = Field(default_factory=dict)
-    target_jump_ms: int
-    target_jump_phase: str
+    target_jump_ms: int = 0
+    target_jump_phase: str = ""
     recommended_speed: float = 0.5
+
+
+class PriorityFixItem(BaseModel):
+    focus_area: str
+    metric_id: str
+    user_value: str
+    ref_value: str
+    delta: str
+    summary: str
+    drill: dict[str, str] | None = None
+    target: str | None = None
+    confidence: float = 0.0
+
+    @property
+    def actionable_drill(self) -> dict[str, str] | None:
+        return self.drill
+
+    @property
+    def issue_title(self) -> str:
+        return self.focus_area
 
 
 class QuantitativePostureReport(BaseModel):
@@ -69,7 +93,7 @@ class QuantitativePostureReport(BaseModel):
     priority_fix_summary: str | None = None
     actionable_drill: dict[str, str] | None = None
     retest_metric_target: str | None = None
-    priority_fix: dict[str, Any] | None = None
+    priority_fix: PriorityFixItem | dict[str, Any] | None = None
     camera_compatibility: dict[str, Any] = Field(default_factory=dict)
     geometry_calibration: dict[str, Any] = Field(default_factory=dict)
     disclaimer: str = (
@@ -452,6 +476,192 @@ def _find_ref_landmarks_for_phase(
     return None, None, 0.0, None
 
 
+def _metric_severity_score(m: PostureMetricComparison) -> float:
+    """
+    無量綱標準化嚴重度評分（Normalized Defect Severity）。
+    杜絕將度數（°）、百分比（%）、節奏比例（ratio）之原始絕對值混排。
+    """
+    tol = m.moderate_tol if m.moderate_tol > 0 else 1.0
+    abs_d = abs(m.delta or 0.0)
+    norm_ratio = abs_d / tol
+    status_weight = 2.0 if m.status in ("significant_diff", "significant_difference") else 1.0
+    return status_weight * norm_ratio * m.confidence
+
+
+def _build_priority_fix(
+    comparisons: list[PostureMetricComparison],
+    overall_reliability: str = "high",
+    is_aspect_corrected: bool = True,
+    is_angle_compatible: bool = True,
+    comparable_count: int = 8,
+) -> PriorityFixItem | None:
+    """
+    Priority Fix 唯一改善重點選擇。
+    排除不是缺陷（如使用者比示範更穩定）的項目，只納入真正構成需要改善的候選。
+    """
+    valid_diffs = [
+        c for c in comparisons
+        if c.is_comparable and c.is_reliable and c.status in (
+            "significant_diff", "moderate_diff", "significant_difference", "needs_attention"
+        )
+    ]
+
+    valid_diffs.sort(key=_metric_severity_score, reverse=True)
+
+    if not (valid_diffs and overall_reliability in ("high", "moderate") and is_aspect_corrected):
+        return None
+
+    top_diff = valid_diffs[0]
+    obs_item = f"{top_diff.phase_zh or top_diff.phase} — {top_diff.metric_name or top_diff.name_zh}"
+    u_str = top_diff.user_value_display or f"{top_diff.user_value}{top_diff.unit}"
+    r_str = top_diff.ref_value_display or f"{top_diff.ref_value}{top_diff.unit}"
+    d_str = top_diff.delta_display or f"{'+' if (top_diff.delta or 0) > 0 else ''}{top_diff.delta}{top_diff.unit}"
+    delta_val = top_diff.delta or 0.0
+
+    actionable_drill = None
+    retest_metric_target = None
+
+    if top_diff.id == "address_spine_tilt":
+        if delta_val < 0:
+            priority_fix_summary = (
+                f"在準備姿勢（Address）經長寬比等比例校正後，軀幹前傾角為 {u_str}（示範選手為 {r_str}，偏直立 {d_str}）。"
+                f"此為站姿幾何設定差異，建議檢視髖部後推（Hip Hinge）幅度，使胸部自然罩住球位。"
+            )
+        else:
+            priority_fix_summary = (
+                f"在準備姿勢（Address）經長寬比等比例校正後，軀幹前傾角為 {u_str}（示範選手為 {r_str}，前傾較深 {d_str}）。"
+                f"建議確認重心分布，避免身體過度前傾壓迫腳趾。"
+            )
+        actionable_drill = {
+            "name": "站姿髖關節鉸鏈（Hip Hinge）前傾設定 Drill",
+            "preparation": "雙腳與肩同寬自然站立，雙手橫握球桿貼於大腿前側。",
+            "execution": "膝蓋微曲保持彈性，感受髖部向後推動讓桿身順大腿下滑至膝蓋上方，上半身自然前傾約 35°~40°。",
+            "checkpoint": "以 0.25× 慢動作停格檢視準備姿勢，背部維持平直延伸，非彎腰弓背或過度站直。",
+        }
+        retest_metric_target = f"下次練習 5 球，目標：站姿軀幹前傾角調整至 35.0°~42.0° 參考區間。"
+
+    elif top_diff.id == "top_spine_retention":
+        priority_fix_summary = (
+            f"在上桿頂點（Top）觀測到前傾維持變化為 {u_str}（示範選手為 {r_str}，變化偏大 {d_str}）。"
+            f"顯示上桿至頂點時胸部前傾軸心有所抬起，建議在換向過程維持後背角度。"
+        )
+        actionable_drill = {
+            "name": "臀部貼牆維持前傾軸心 Drill",
+            "preparation": "站姿就位時，右臀後方輕觸球包或牆面（距離約 2 公分）。",
+            "execution": "上桿時感受右臀輕貼，維持骨盆深度與軀幹前傾角度，避免頂點提早起立。",
+            "checkpoint": "錄影對照 0.25× 慢動作，頂點瞬間胸口依然朝向球位。",
+        }
+        retest_metric_target = f"下次練習 5 球，目標：頂點前傾維持變化量控制在 ≤3.5° 內。"
+
+    elif top_diff.id == "top_head_displacement":
+        priority_fix_summary = (
+            f"在上桿頂點（Top）觀測到頭部相對位移比為 {u_str}（示範選手為 {r_str}，位移偏大 {d_str}）。"
+            f"上桿過程頭部空間位移較大，建議運用慢動作觀察頂點頭部軸心穩定度。"
+        )
+        actionable_drill = {
+            "name": "定點視線鎖定 Drill",
+            "preparation": "在球位後方 5 公分處設定一固定地面視覺標記點。",
+            "execution": "揮桿全程視線專注於該標記，上桿至頂點維持頭部空間定位。",
+            "checkpoint": "以 0.25× 慢動作檢視，上桿頂點頭部高度與站姿保持一致，無下沉或拔起。",
+        }
+        retest_metric_target = f"下次練習 5 球，目標：頂點頭部位移比控制在 ≤8.0% 身長內。"
+
+    elif top_diff.id == "impact_spine_delta":
+        priority_fix_summary = (
+            f"在擊球瞬間（Impact）觀測到前傾角度變化為 {u_str}（示範選手為 {r_str}，變化偏大 {d_str}）。"
+            f"下桿至觸球瞬間前傾角度變化偏大，顯示有提早起立或脫離原始旋轉平面的傾向。"
+        )
+        actionable_drill = {
+            "name": "擊球維持胸口罩球 Drill",
+            "preparation": "胸前抱一球桿橫放於雙肩，進入標準站姿。",
+            "execution": "啟動下桿轉身至擊球瞬間，確保桿身持續指向球位前方地面，感受前傾維持。",
+            "checkpoint": "對照 0.25× 慢動作，擊球瞬間脊椎角度與站姿相比變化不超過 3.5°。",
+        }
+        retest_metric_target = f"下次練習 5 球，目標：擊球前傾角度變化控制在 ≤3.5° 內。"
+
+    elif top_diff.id == "swing_tempo_ratio":
+        if delta_val > 0:
+            priority_fix_summary = (
+                f"在擊球瞬間（Impact）上下桿節奏時間比為 {u_str}（示範選手為 {r_str}，比例偏大 {d_str}）。"
+                f"上桿耗時相對於下桿較長，轉換啟動偏慢，建議運用慢動作對照頂點換向節奏。"
+            )
+        else:
+            priority_fix_summary = (
+                f"在擊球瞬間（Impact）上下桿節奏時間比為 {u_str}（示範選手為 {r_str}，比例偏小 {d_str}）。"
+                f"上桿轉換過於急促，建議在上桿頂點給予充足時間完成蓄力。"
+            )
+        actionable_drill = {
+            "name": "三拍默數節奏轉換 Drill",
+            "preparation": "正常站姿，心中默念節奏口訣「1-2 上桿... 3 啟動釋放」。",
+            "execution": "頂點給予 0.1 秒的從容過渡感，避免雙手急躁下砸。",
+            "checkpoint": "錄影確認上桿頂點有清晰的換向過渡軌跡，非急促折返。",
+        }
+        retest_metric_target = "下次練習 5 球，目標：上下桿時間比維持於 2.7:1 至 3.3:1 區間。"
+
+    elif top_diff.id == "impact_hip_clearance":
+        priority_fix_summary = (
+            f"在擊球瞬間（Impact）觀測到骨盆深度開放比為 {u_str}（示範選手為 {r_str}，開放較少 {d_str}）。"
+            f"擊球瞬間左髖向後退開幅度相對較小，建議加強骨盆旋轉清出擊球通道。"
+        )
+        actionable_drill = {
+            "name": "左臀後退清開空間 Drill",
+            "preparation": "左腳跟外側後方 5 公分處放置空球盒或標記物。",
+            "execution": "啟動下桿轉身時，感受左髖主動向後旋轉，使左臀後移清出擊球通道。",
+            "checkpoint": "0.25× 慢動作停格檢視擊球瞬間，從後方可看見左臀深度後移。",
+        }
+        retest_metric_target = "下次練習 5 球，目標：擊球骨盆深度開放比達到 14.0% 身長以上。"
+
+    elif top_diff.id == "finish_spine_angle":
+        priority_fix_summary = (
+            f"在收桿平衡（Finish）觀測到軀幹直立角為 {u_str}（示範選手為 {r_str}，差異 {d_str}）。"
+            f"收桿結束時身體未完全隨動力自然站直，可能影響動作平衡與完整性。"
+        )
+        actionable_drill = {
+            "name": "3 秒雕像收桿平衡 Drill",
+            "preparation": "正常全揮桿練習。",
+            "execution": "揮桿結束後維持胸口朝向目標、右腳鞋底垂直離地的收桿姿勢，心中默數 1-2-3 不移動雙腳。",
+            "checkpoint": "身體平穩站定，不前後晃動或提早收力放桿。",
+        }
+        retest_metric_target = "下次練習 5 球，目標：收桿完全站定直立，前傾角保持在 12.0° 內。"
+
+    elif top_diff.id == "address_wrist_height":
+        if delta_val < 0:
+            priority_fix_summary = (
+                f"在準備姿勢（Address）觀測到雙手手腕基準高度為 {u_str}（示範選手為 {r_str}，偏低 {d_str}）。"
+                f"此為個人站姿與手臂自然垂放設定差異，不代表動作缺陷。建議透過慢放跳轉檢視手腕與大腿間距是否自然舒展。"
+            )
+        else:
+            priority_fix_summary = (
+                f"在準備姿勢（Address）觀測到雙手手腕基準高度為 {u_str}（示範選手為 {r_str}，偏高 {d_str}）。"
+                f"此為個人站姿設定差異，顯示手臂向前伸展幅度較大，可對照示範選手觀察站位距離。"
+            )
+        actionable_drill = None
+        retest_metric_target = "建議在 0.25× 慢動作播放器中對照示範選手的準備站姿手腕距離，視擊球舒適度自行微調。"
+
+    else:
+        priority_fix_summary = (
+            f"在 {top_diff.phase_zh or top_diff.phase} 觀測到 {top_diff.metric_name or top_diff.name_zh} 為 {u_str}（示範選手為 {r_str}，差異 {d_str}）。"
+            f"建議使用 0.25× 慢動作同步比對兩者在該影格的姿勢特徵。"
+        )
+        actionable_drill = None
+        retest_metric_target = f"建議透過慢放跳轉至 {top_diff.phase_zh or top_diff.phase} 觀察動作差異。"
+
+    return PriorityFixItem(
+        focus_area=obs_item,
+        metric_id=top_diff.id,
+        user_value=u_str,
+        ref_value=r_str,
+        delta=d_str,
+        summary=priority_fix_summary,
+        drill=actionable_drill,
+        target=retest_metric_target,
+        confidence=top_diff.confidence,
+    )
+
+
+_determine_priority_fix = _build_priority_fix
+
+
 # =========================================================================
 # 主比較引擎
 # =========================================================================
@@ -532,7 +742,17 @@ def compute_quantitative_posture_comparison(
     }
 
     # 4. 提取真實事件時間碼（嚴禁捏造時間碼，缺少即為 None - P0-C）
-    user_events = {e.get("event_name"): int(e.get("time_ms", 0)) for e in (user_swing.get("events") or [])}
+    raw_user_events = user_swing.get("events")
+    if isinstance(raw_user_events, dict):
+        user_events = raw_user_events
+    elif isinstance(raw_user_events, list):
+        user_events = {
+            e.get("event_name"): int(e.get("time_ms", 0))
+            for e in raw_user_events
+            if isinstance(e, dict) and e.get("event_name")
+        }
+    else:
+        user_events = {}
     u_addr_ms = user_events.get("address")
     u_top_ms = user_events.get("top")
     u_impact_ms = user_events.get("impact_estimated") or user_events.get("impact")
@@ -645,6 +865,8 @@ def compute_quantitative_posture_comparison(
         slow_mo_note: str = "",
         direction_cue: tuple[str, str] = ("偏低", "偏高"),
         requires_geometry: bool = True,
+        is_lower_better: bool = False,
+        is_higher_better: bool = False,
     ) -> PostureMetricComparison:
         """安全建構單項量化姿勢比對物件。若任一方缺失，明確設置為不可比。"""
         # 示範是否為慢動作素材
@@ -693,7 +915,16 @@ def compute_quantitative_posture_comparison(
             delta = round(u_val - r_val, 2)
             delta_display = f"{delta:+.1f}" + unit_suffix if "°" in unit_suffix or "%" in unit_suffix else f"{delta:+.2f}"
             abs_d = abs(delta)
-            if abs_d <= optimal_tol:
+
+            if is_lower_better and delta <= 0:
+                # 使用者數值小於或等於示範球員，在「越小越好」指標中代表維持更穩定或更優！
+                status = "optimal"
+                eval_text = f"數值為 {u_val_display}，相較於示範選手（{r_val_display}）維持更佳的穩定度與控制。"
+            elif is_higher_better and delta >= 0:
+                # 使用者數值大於或等於示範球員，在「越大越好」指標中代表表現充分！
+                status = "optimal"
+                eval_text = f"數值為 {u_val_display}，相較於示範選手（{r_val_display}）展現充分的幅度。"
+            elif abs_d <= optimal_tol:
                 status = "optimal"
                 eval_text = f"與示範選手數值高度相符（差距僅 {delta_display}，在常模允許誤差 {optimal_tol}{unit_suffix} 內）。"
             elif abs_d <= moderate_tol:
@@ -734,6 +965,8 @@ def compute_quantitative_posture_comparison(
             is_comparable=is_comparable,
             status=status,
             evaluation_text=eval_text,
+            optimal_tol=optimal_tol,
+            moderate_tol=moderate_tol,
             geometry_coord_system="isotropic_height_normalized" if geometry_ok else "uncalibrated_anisotropic",
             event_accuracy_ms=acc_ms,
             user_evidence=u_ev,
@@ -840,6 +1073,7 @@ def compute_quantitative_posture_comparison(
         moderate_tol=5.0,
         unit_suffix="°",
         direction_cue=("前傾維持更佳", "前傾提早流失"),
+        is_lower_better=True,
     ))
 
     u_top_head, u_th_conf = _compute_head_displacement_pct(u_addr_iso, u_top_iso, u_torso_len or 0.25) if (u_addr_iso and u_top_iso) else (None, 0.0)
@@ -869,6 +1103,7 @@ def compute_quantitative_posture_comparison(
         moderate_tol=6.0,
         unit_suffix="%",
         direction_cue=("頭部更為穩定", "頭部浮動過大"),
+        is_lower_better=True,
     ))
 
     # =========================================================================
@@ -903,6 +1138,7 @@ def compute_quantitative_posture_comparison(
         moderate_tol=5.0,
         unit_suffix="°",
         direction_cue=("前傾維持扎實", "觸球提早起立"),
+        is_lower_better=True,
     ))
 
     # 上下桿節奏比（Tempo）
@@ -984,6 +1220,7 @@ def compute_quantitative_posture_comparison(
         moderate_tol=8.0,
         unit_suffix="%",
         direction_cue=("開放不足", "過度側移"),
+        is_higher_better=True,
     ))
 
     # =========================================================================
@@ -1014,6 +1251,7 @@ def compute_quantitative_posture_comparison(
         moderate_tol=8.0,
         unit_suffix="°",
         direction_cue=("更為直立", "身體殘留後傾"),
+        is_lower_better=True,
     ))
 
     # 7. 可靠度總結與覆蓋率 (P0-B & P1-A)
@@ -1041,91 +1279,24 @@ def compute_quantitative_posture_comparison(
         overall_reliability = "high"
 
     # 8. Priority Fix 唯一改善重點選擇 (P0-D: 嚴格建立在真實等比例幾何證據上)
-    valid_diffs = [
-        c for c in comparisons
-        if c.is_comparable and c.is_reliable and c.status in ("significant_diff", "moderate_diff")
-    ]
-    valid_diffs.sort(
-        key=lambda x: (2 if x.status == "significant_diff" else 1, abs(x.delta or 0)),
-        reverse=True,
+    priority_fix_item = _build_priority_fix(
+        comparisons=comparisons,
+        overall_reliability=overall_reliability,
+        is_aspect_corrected=is_aspect_corrected,
+        is_angle_compatible=is_angle_compatible,
+        comparable_count=comparable_count,
     )
-
-    priority_fix_id = None
-    priority_fix_summary = None
-    actionable_drill = None
-    retest_metric_target = None
-    priority_fix_obj = None
-
-    if valid_diffs and overall_reliability in ("high", "moderate") and is_aspect_corrected:
-        top_diff = valid_diffs[0]
-        priority_fix_id = top_diff.id
-        obs_item = f"{top_diff.phase_zh} — {top_diff.metric_name}"
-        u_str = top_diff.user_value_display
-        r_str = top_diff.ref_value_display
-        d_str = top_diff.delta_display
-
-        if "spine" in top_diff.id:
-            priority_fix_summary = (
-                f"在 {top_diff.phase_zh} 經長寬比等比例校正後觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
-                f"建議使用 0.25× 慢動作同步比對從起桿至該階段之背部軸心角度維持。"
-            )
-            actionable_drill = {
-                "name": "臀部貼牆維持前傾軸心 Drill",
-                "preparation": "站姿就位時，右臀後方輕觸球包或牆面（距離約 2 公分）。",
-                "execution": "上桿時感受右臀輕貼，下桿過渡時由左臀接替貼住支撐物，維持骨盆深度。",
-                "checkpoint": "錄影對照 0.25× 慢動作，頂點至擊球瞬間前胸維持罩住球位。",
-            }
-            retest_metric_target = f"下次練習 5 球，目標：{top_diff.metric_name} 與示範差距縮減至 ±2.5° 內。"
-        elif "head" in top_diff.id:
-            priority_fix_summary = (
-                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
-                f"軸心頭部在空間中有較大浮動，易導致揮桿最低點不穩定。"
-            )
-            actionable_drill = {
-                "name": "定點視線鎖定 Drill",
-                "preparation": "在球位後方 5 公分處設定一固定虛擬標記點。",
-                "execution": "揮桿全程視線專注於該標記，擊球出聲後維持視線停留在地面 0.5 秒。",
-                "checkpoint": "以 0.25× 慢動作檢視，上桿頂點頭部高度與站姿保持一致，無下沉或拔起。",
-            }
-            retest_metric_target = f"下次練習 5 球，目標：{top_diff.metric_name} 控制在 8.0% 身長內。"
-        elif "tempo" in top_diff.id:
-            priority_fix_summary = (
-                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
-                f"上下桿時間比例偏離流暢區間，建議運用慢動作對照頂點換向蓄力感。"
-            )
-            actionable_drill = {
-                "name": "三拍默數節奏轉換 Drill",
-                "preparation": "正常站姿，心中默念節奏口訣「1-2 上桿... 3 啟動釋放」。",
-                "execution": "頂點給予 0.1 秒的從容過渡感，避免雙手急躁下砸。",
-                "checkpoint": "錄影確認上桿頂點有清晰的換向過渡軌跡，非急促折返。",
-            }
-            retest_metric_target = "下次練習 5 球，目標：上下桿時間比維持於 2.7:1 至 3.3:1 區間。"
-        else:
-            priority_fix_summary = (
-                f"在 {top_diff.phase_zh} 觀測到 {top_diff.metric_name} 為 {u_str}（示範為 {r_str}，差異 {d_str}）。"
-                f"收桿平衡未完全站定，建議擊球後定格維持 2 秒。"
-            )
-            actionable_drill = {
-                "name": "3 秒雕像收桿平衡 Drill",
-                "preparation": "正常全揮桿練習。",
-                "execution": "揮桿結束後維持胸口朝向目標、右腳鞋底垂直離地的收桿姿勢，心中默數 1-2-3 不移動雙腳。",
-                "checkpoint": "身體平穩站定，不前後晃動或提早收力放桿。",
-            }
-            retest_metric_target = "下次練習 5 球，目標：收桿完全站定直立，前傾角保持在 16.0° 內。"
-
-        priority_fix_obj = {
-            "focus_area": obs_item,
-            "metric_id": top_diff.id,
-            "user_value": u_str,
-            "ref_value": r_str,
-            "delta": d_str,
-            "summary": priority_fix_summary,
-            "drill": actionable_drill,
-            "target": retest_metric_target,
-            "confidence": top_diff.confidence,
-        }
+    if priority_fix_item:
+        priority_fix_id = priority_fix_item.metric_id
+        priority_fix_summary = priority_fix_item.summary
+        actionable_drill = priority_fix_item.drill
+        retest_metric_target = priority_fix_item.target
+        priority_fix_obj = priority_fix_item
     else:
-        # 資料不足或無顯著差異：誠實揭露，絕不編造假缺陷與假口訣
+        priority_fix_id = None
+        actionable_drill = None
+        retest_metric_target = None
+        priority_fix_obj = None
         if not is_angle_compatible:
             priority_fix_summary = "相機視角不相容，無法確立可信的動作改善重點。建議更換標準 DTL 示範影片。"
         elif not is_aspect_corrected:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +77,7 @@ def generate_report() -> dict[str, Any]:
     final_report = {
         "metadata": {
             "title": "Golf Swing Lab — R3 Real API Posture Comparison Verification Report",
-            "generated_at_utc": "2026-10-30T22:00:00Z",
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             "source": "GET /api/swings/{swing_id}/posture-comparison",
             "user_swing_id": target_swing_id,
             "truthfulness_principles": [

@@ -834,3 +834,189 @@ def test_rotation_metadata_api_integration_no_double_swap():
         assert geom_re["ref_display_aspect"] == 0.5625, "Reference 尺寸在重入時被二次對調！"
 
 
+def test_priority_fix_head_displacement_optimal_when_user_is_smaller():
+    """
+    測試 1：7I 頭部位移較示範小時，不得建議使用者修正「過大頭部位移」。
+    當 User top_head_displacement = 11.1%，Ref = 28.8%（Delta = -17.7%），
+    判定為 optimal，Priority Fix 絕不能判定頭部浮動過大。
+    """
+    user_addr = _make_landmarks(nose_x=0.45, nose_y=0.20)
+    user_top = _make_landmarks(nose_x=0.455, nose_y=0.20)
+    ref_addr = _make_landmarks(nose_x=0.45, nose_y=0.20)
+    ref_top = _make_landmarks(nose_x=0.55, nose_y=0.20)
+
+    user_swing = {
+        "aspect_ratio": 1.7778,
+        "video_width": 1280,
+        "video_height": 720,
+        "video_rotation": 0,
+        "events": [
+            {"event_name": "address", "time_ms": 100},
+            {"event_name": "top", "time_ms": 1000},
+            {"event_name": "impact_estimated", "time_ms": 1300},
+            {"event_name": "finish", "time_ms": 2000},
+        ],
+        "keyframes": [
+            {"time_ms": 100, "landmarks": user_addr, "pose_confidence": 0.95},
+            {"time_ms": 1000, "landmarks": user_top, "pose_confidence": 0.95},
+            {"time_ms": 1300, "landmarks": user_addr, "pose_confidence": 0.95},
+            {"time_ms": 2000, "landmarks": user_addr, "pose_confidence": 0.95},
+        ],
+    }
+    ref_swing = {
+        "id": "ref-head-test",
+        "club_type": "7I",
+        "camera_angle": "DTL",
+        "aspect_ratio": 1.7778,
+        "video_width": 1280,
+        "video_height": 720,
+        "video_rotation": 0,
+        "event_timestamps": {"address": 100, "top": 1000, "impact": 1300, "finish": 2000},
+        "pose_artifact": {
+            "landmarks": {
+                "100": ref_addr,
+                "1000": ref_top,
+                "1300": ref_addr,
+                "2000": ref_addr,
+            }
+        },
+    }
+    report = compute_quantitative_posture_comparison(user_swing, ref_swing)
+    head_metric = next(m for m in report.metrics if m.id == "top_head_displacement")
+    assert head_metric.status == "optimal"
+    assert head_metric.delta < 0
+    if report.priority_fix:
+        assert report.priority_fix.metric_id != "top_head_displacement"
+        assert "頭部" not in report.priority_fix.issue_title
+        assert "浮動過大" not in report.priority_fix.issue_title
+
+
+def test_priority_fix_address_wrist_height_does_not_trigger_finish_drill():
+    """
+    測試 2：Driver Address 手腕高度差異，不得觸發 Finish「3 秒雕像收桿平衡 Drill」。
+    若手腕高度有顯著差異，actionable_drill 應為 None（安全降級為純客觀觀察）。
+    """
+    user_addr = _make_landmarks(wrist_y=0.50)
+    ref_addr = _make_landmarks(wrist_y=0.65)
+
+    user_swing = {
+        "aspect_ratio": 1.7778,
+        "video_width": 1280,
+        "video_height": 720,
+        "video_rotation": 0,
+        "events": [
+            {"event_name": "address", "time_ms": 100},
+            {"event_name": "top", "time_ms": 1000},
+            {"event_name": "impact_estimated", "time_ms": 1300},
+            {"event_name": "finish", "time_ms": 2000},
+        ],
+        "keyframes": [
+            {"time_ms": 100, "landmarks": user_addr, "pose_confidence": 0.95},
+            {"time_ms": 1000, "landmarks": user_addr, "pose_confidence": 0.95},
+            {"time_ms": 1300, "landmarks": user_addr, "pose_confidence": 0.95},
+            {"time_ms": 2000, "landmarks": user_addr, "pose_confidence": 0.95},
+        ],
+    }
+    ref_swing = {
+        "id": "ref-wrist-test",
+        "club_type": "DRIVER",
+        "camera_angle": "DTL",
+        "aspect_ratio": 1.7778,
+        "video_width": 1280,
+        "video_height": 720,
+        "video_rotation": 0,
+        "event_timestamps": {"address": 100, "top": 1000, "impact": 1300, "finish": 2000},
+        "pose_artifact": {
+            "landmarks": {
+                "100": ref_addr,
+                "1000": ref_addr,
+                "1300": ref_addr,
+                "2000": ref_addr,
+            }
+        },
+    }
+    report = compute_quantitative_posture_comparison(user_swing, ref_swing)
+    wrist_metric = next(m for m in report.metrics if m.id == "address_wrist_height")
+    assert wrist_metric.status != "optimal"
+    if report.priority_fix and report.priority_fix.metric_id == "address_wrist_height":
+        assert report.priority_fix.actionable_drill is None
+        assert "收桿" not in report.priority_fix.issue_title
+        assert "3秒雕像" not in str(report.priority_fix)
+
+
+def test_priority_fix_unit_agnostic_severity_sorting():
+    """
+    測試 3：不同單位的指標（度數 vs 百分比 vs 比例）不得依原始差異絕對值直接排序。
+    應以 (|delta| / moderate_tol) 標準化偏離強度排序。
+    """
+    from packages.analysis.posture_comparison import _build_priority_fix
+
+    # Metric A: 單位是百分比，|delta| = 15.0%，moderate_tol = 20.0% -> 偏離比 = 0.75
+    # Metric B: 單位是度數，|delta| = 9.0°，moderate_tol = 6.0° -> 偏離比 = 1.50
+    metric_a = PostureMetricComparison(
+        id="address_wrist_height",
+        name_zh="站姿手腕相對高度",
+        phase="address",
+        unit="%",
+        user_value=15.0,
+        ref_value=0.0,
+        delta=15.0,
+        status="needs_attention",
+        observation="偏高",
+        confidence=0.9,
+        optimal_tol=10.0,
+        moderate_tol=20.0,
+    )
+    metric_b = PostureMetricComparison(
+        id="impact_spine_delta",
+        name_zh="擊球脊椎角度維持",
+        phase="impact",
+        unit="°",
+        user_value=9.0,
+        ref_value=0.0,
+        delta=9.0,
+        status="needs_attention",
+        observation="脊椎角度偏離",
+        confidence=0.9,
+        optimal_tol=3.0,
+        moderate_tol=6.0,
+    )
+
+    # 儘管 metric_a.delta (15.0) > metric_b.delta (9.0)，
+    # 但 metric_b 的標準化倍數 (9.0 / 6.0 = 1.5) > metric_a (15.0 / 20.0 = 0.75)
+    # 故 Priority Fix 必須是 metric_b (impact_spine_delta)
+    p_fix = _build_priority_fix([metric_a, metric_b])
+    assert p_fix is not None
+    assert p_fix.metric_id == "impact_spine_delta"
+    assert p_fix.actionable_drill is not None
+    assert "胸口罩球" in p_fix.actionable_drill["name"]
+
+
+def test_priority_fix_safe_degradation_without_drill():
+    """
+    測試 4：缺乏可靠 Drill 時，Priority Fix 可安全降級為客觀觀察（actionable_drill is None）。
+    """
+    from packages.analysis.posture_comparison import _build_priority_fix
+
+    metric = PostureMetricComparison(
+        id="address_wrist_height",
+        name_zh="站姿手腕相對高度",
+        phase="address",
+        unit="%",
+        user_value=25.0,
+        ref_value=0.0,
+        delta=25.0,
+        status="significant_difference",
+        observation="手腕高度偏高",
+        confidence=0.9,
+        optimal_tol=10.0,
+        moderate_tol=20.0,
+    )
+    p_fix = _build_priority_fix([metric])
+    assert p_fix is not None
+    assert p_fix.metric_id == "address_wrist_height"
+    assert p_fix.actionable_drill is None
+    assert "站姿手腕" in p_fix.issue_title
+
+
+

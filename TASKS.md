@@ -4,6 +4,22 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 22: Golf Swing Lab R3 — Final Coaching Logic Hotfix (2026-10-31) — 全面完成
+- [x] **P0：Priority Fix 判斷與實際數值矛盾修正（Coaching Logic Hotfix）**：
+  - **7I 頭部位移軸心修正**：`top_head_displacement` 設為 `is_lower_better=True`。User 位移比 11.1% 遠小於 Ref 28.8%（Delta = -17.7%），判定為 `optimal`，不列入缺陷，徹底排除「頭部浮動過大」矛盾。
+  - **Driver 手腕高度錯誤 Drill 修正**：`address_wrist_height` 定位為靜態站姿設定個人風格差異，安全降級為客觀觀察（`actionable_drill = None`），杜絕套用 Finish「3 秒雕像收桿平衡 Drill」。
+  - **無量綱偏離度倍數排序（Unit-Agnostic Sorting）**：以標準化偏離強度 `severity = status_weight * (|delta| / moderate_tol) * confidence` 排序，杜絕度數（°）、百分比（%）、節奏比例（ratio）原始絕對值混排。
+  - **方向性客觀描述與無合適 Drill 降級**：依據 Delta 正負方向給出精準客觀描述；缺乏動態 Drill 時安全降級為純觀察。
+- [x] **P1：修正驗收報告一致性與動態 UTC 時間（Dynamic UTC & Real API Consistency）**：
+  - `scripts/generate_real_api_posture_report.py` 改為動態產生 `generated_at_utc`（`datetime.now(timezone.utc).isoformat()`）。
+  - 刷新 `docs/reports/real_api_posture_comparison_report.json`，7I Priority Fix 正確更新為骨盆開放不足（`impact_hip_clearance`，左臀後退清開空間 Drill），Driver Priority Fix 正確降級為手腕設定觀察（`actionable_drill = null`）。
+- [x] **新增專項回歸測試與全量驗證確認**：
+  - `tests/test_quantitative_posture_comparison.py` 新增 4 項專項測試，全數 **22 / 22 PASSED (100%)**。
+  - 後端全量測試：**126 / 126 PASSED (100%)**。
+  - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+  - 18 筆示範素材庫完整性：18 / 18 筆 100% 完整無缺。
+  - 離線 LLM 守衛：9 / 9 PASSED (100%)。
+
 ## Round 21: Golf Swing Lab R3 — Final Release Audit & PR #3 Merge Readiness (2026-10-30) — 全面完成
 - [x] **P0-A：修正旋轉 Metadata 重複套用（Double Rotation Swap Elimination & Idempotent Dimension Contract）**：
   - 統一資料契約，明確定義 `coded_width`, `coded_height`, `display_width`, `display_height`, `display_aspect_ratio` 與 Pose 關鍵點實際座標系。
