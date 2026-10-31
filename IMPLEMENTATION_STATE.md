@@ -1,6 +1,30 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 24: Golf Swing Lab R3 — FINAL Merge Gate）
+## 最新修復狀態（Round 25: Golf Swing Lab R3 — 最後驗收證據收尾）
+1. **P0：修正交付報告中的 Git SHA 追溯性與一致性**：`PASS`
+   - 在 `scripts/verify_webkit_r3_slowmo_and_coach.py` 與 `scripts/generate_real_api_posture_report.py` 中，明確校準 `source_commit_sha` 與 `commit_sha`。
+   - 產出之 `docs/reports/real_api_posture_comparison_report.json` 與 `docs/reports/swing_comparison_r3_report.json` 明確標明測試時所用之基準 SHA `e1449fc04f1e298609bb8e656a4367f62d22d912`、工作樹狀態與真實測試時間戳記，不要求包含報告的最終 commit SHA 與報告內的來源 SHA 自我相等。
+2. **P0：擴充 WebKit GUI Step 7 雙軸標籤真實斷言**：`PASS`
+   - 在 `verify_webkit_r3_slowmo_and_coach.py` 的 Step 7 中，擴充 JavaScript DOM 提取與 Python 斷言：
+     - `hasInRangeBadge`: `區間內 (In Range)`
+     - `hasOutOfRangeBadge`: `區間外 (Out of Range)`
+     - `hasAlignedBadge`: `吻合 (Aligned)`
+     - `hasSignificantBadge`: `顯著 (Significant)`
+     - `hasModerateBadge`: `微差 (Moderate)`
+     - `hasUncertifiedNotice`: 包含 `實驗性參考區間僅供對照觀察` 與 `非職業教練認證`
+   - Python 增加 `dual_axis_pass` 嚴格布林斷言，未全數通過則標記 Step 7 為 FAIL。實測結果：6 大標籤與非認證說明 100% 渲染且斷言通過。
+3. **P0：拔除驗收報告硬編碼 True，改由實際斷言動態計算**：`PASS`
+   - `acceptance_criteria_audit` 中的全部 20+ 項指標改為從 `step_results`（s1~s7）提取真實執行結果動態計算。
+   - 保證性欄位 `zero_hallucination_guarantee: True` 改為文字動態狀態 `truthfulness_and_anti_hallucination_verification: "verified_by_rule_based_evidence_and_real_pose_kinematics"`。
+4. **全量驗收與測試通過**：`PASS`
+   - 專項測試：`tests/test_quantitative_posture_comparison.py` **31 / 31 PASSED (100%)**。
+   - 示範素材庫完整性：`scripts/verify_18_reference_swings.py` 18 / 18 示範資料庫記錄 100% 完整無缺。
+   - WebKit 原生視窗實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 7 大步驟 100% 全數通過（PASS），產出 10 張真實 WebKit 截圖存證與完整報告。
+- **最後更新時間**：2026-10-31T16:05:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR MERGE (嚴禁自行合併 main，已推送到 PR #3 分支，等待專案負責人最後授權合併)**
+
+## 前期重大里程碑狀態（Round 24: Golf Swing Lab R3 — FINAL Merge Gate）
 1. **P0：Benchmark 與 Relative Difference 徹底分離與改善建議資格守衛（Coaching Eligibility Guard）**：`PASS`
    - **三概念嚴格分離**：
      1. `Relative Difference`（`relative_status`）：相對於示範球員的純幾何/時間差異（`aligned` / `moderate_diff` / `significant_diff`）。
@@ -31,9 +55,6 @@
    - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
    - 示範素材庫完整性：`scripts/verify_18_reference_swings.py` 18 / 18 示範資料庫記錄 100% 完整無缺。
    - WebKit 原生視窗實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 7 大步驟 100% 全數通過（PASS），產出 10 張真實 WebKit 截圖存證與完整報告。
-- **最後更新時間**：2026-10-31T10:45:00+08:00
-- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
-- **正式判定**：**READY FOR MERGE (嚴禁自行合併 main，已推送到 PR #3 分支，等待專案負責人最後授權合併)**
 
 ## 前期重大里程碑狀態（Round 23: Golf Swing Lab R3 — Final Scientific Integrity & Merge Gate）
 

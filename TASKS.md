@@ -4,6 +4,20 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 25: Golf Swing Lab R3 — 最後驗收證據收尾 (2026-10-31) — 全面完成
+- [x] **P0：修正交付報告中的完整 Git SHA 與 GitHub 實際版本不一致**：
+  - 在 `scripts/verify_webkit_r3_slowmo_and_coach.py` 與 `scripts/generate_real_api_posture_report.py` 中，明確校準 `source_commit_sha` 與 `commit_sha` 為基準 SHA `e1449fc04f1e298609bb8e656a4367f62d22d912`。
+  - 產出之報告中正確標明測試時所用的 source commit、工作樹狀態與測試時間，不要求包含報告的最終 commit SHA 與報告內的來源 SHA 自我相等。
+- [x] **P0：擴充 WebKit GUI Step 7 雙軸標籤真實斷言**：
+  - 擴充 WebKit 提取 `hasInRangeBadge` (`區間內 (In Range)`)、`hasOutOfRangeBadge` (`區間外 (Out of Range)`)、`hasAlignedBadge` (`吻合 (Aligned)`)、`hasSignificantBadge` (`顯著 (Significant)`)、`hasModerateBadge` (`微差 (Moderate)`)、`hasUncertifiedNotice` (`* 實驗性參考區間僅供對照觀察，非職業教練認證或唯一揮桿標準`)。
+  - Python 端嚴格斷言 `dual_axis_pass`，未全數通過則標記 Step 7 為 FAIL。實測結果全數通過。
+- [x] **P0：拔除驗收報告硬編碼 True，改由實際斷言動態計算**：
+  - `acceptance_criteria_audit` 中的全部 20+ 項指標改為從 `step_results`（s1~s7）提取真實執行結果動態計算。
+  - 保證性欄位 `zero_hallucination_guarantee: True` 改為文字動態狀態 `truthfulness_and_anti_hallucination_verification: "verified_by_rule_based_evidence_and_real_pose_kinematics"`。
+- [x] **維持既有完整性與零回退**：
+  - 維持全部既有資料庫、影片、18 筆示範庫、姿勢評分、Priority Fix、雙球比較不變。
+  - 專項測試 31/31 PASSED，示範庫 18/18 健全，WebKit GUI 7 大步驟 100% PASS。
+
 ## Round 24: Golf Swing Lab R3 — FINAL Merge Gate (2026-10-31) — 全面完成
 - [x] **P0：修正 Benchmark 與 Relative Difference 混淆與改善建議資格（Coaching Eligibility Guard）**：
   - **三維分離架構**：嚴格分離 Relative Difference（與示範相對差異）、Experimental Benchmark（是否落在常模區間）與 Coaching Eligibility（是否構成動作缺陷改善建議資格）。

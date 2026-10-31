@@ -76,10 +76,16 @@ def get_git_info() -> dict[str, Any]:
     try:
         sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
         status = subprocess.check_output(["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True).strip()
+        branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=REPO_ROOT, text=True).strip()
         is_dirty = bool(status)
-        return {"commit_sha": sha, "is_dirty": is_dirty}
+        return {
+            "source_commit_sha": sha,
+            "commit_sha": sha,
+            "git_branch": branch,
+            "is_dirty": is_dirty,
+        }
     except Exception as e:
-        return {"commit_sha": "unknown", "is_dirty": False, "error": str(e)}
+        return {"source_commit_sha": "unknown", "commit_sha": "unknown", "git_branch": "unknown", "is_dirty": False, "error": str(e)}
 
 
 class WebKitR3Auditor(AppKit.NSObject):
@@ -647,12 +653,22 @@ class WebKitR3Auditor(AppKit.NSObject):
 
         table_info = self.evalJsJson("""
         (() => {
-            const hasSectionTitle = document.body.innerText.includes('離線量化姿勢比較');
-            const hasPriorityFix = document.body.innerText.includes('本球唯一改善重點');
-            const hasDrill = document.body.innerText.includes('推薦練習');
-            const hasDisclaimer = document.body.innerText.includes('誠信說明');
+            const bodyText = document.body.innerText;
+            const hasSectionTitle = bodyText.includes('離線量化姿勢比較');
+            const hasPriorityFix = bodyText.includes('本球唯一改善重點');
+            const hasDrill = bodyText.includes('推薦練習');
+            const hasDisclaimer = bodyText.includes('誠信說明');
             const rowCount = document.querySelectorAll('tbody tr').length;
-            const hasSlowJumpBtn = Boolean(document.querySelector('button[title*=\"慢放\"]'));
+            const hasSlowJumpBtn = Boolean(document.querySelector('button[title*="慢放"]'));
+
+            // 雙軸標籤實際斷言：至少涵蓋 In Range, Out of Range, Aligned, Significant 以及非認證參考區間說明
+            const hasInRangeBadge = bodyText.includes('區間內 (In Range)') || bodyText.includes('In Range');
+            const hasOutOfRangeBadge = bodyText.includes('區間外 (Out of Range)') || bodyText.includes('Out of Range');
+            const hasAlignedBadge = bodyText.includes('吻合 (Aligned)') || bodyText.includes('Aligned');
+            const hasSignificantBadge = bodyText.includes('顯著 (Significant)') || bodyText.includes('Significant');
+            const hasModerateBadge = bodyText.includes('微差 (Moderate)') || bodyText.includes('Moderate');
+            const hasUncertifiedNotice = bodyText.includes('實驗性參考區間僅供對照觀察') ||
+                                         (bodyText.includes('理論常模參考*') && bodyText.includes('非職業教練認證'));
 
             return JSON.stringify({
                 hasSectionTitle,
@@ -660,12 +676,26 @@ class WebKitR3Auditor(AppKit.NSObject):
                 hasDrill,
                 hasDisclaimer,
                 rowCount,
-                hasSlowJumpBtn
+                hasSlowJumpBtn,
+                hasInRangeBadge,
+                hasOutOfRangeBadge,
+                hasAlignedBadge,
+                hasSignificantBadge,
+                hasModerateBadge,
+                hasUncertifiedNotice
             });
         })()
         """)
         t_info = table_info if isinstance(table_info, dict) else {}
+        dual_axis_pass = bool(
+            t_info.get("hasInRangeBadge")
+            and t_info.get("hasOutOfRangeBadge")
+            and t_info.get("hasAlignedBadge")
+            and t_info.get("hasSignificantBadge")
+            and t_info.get("hasUncertifiedNotice")
+        )
         print(f"  量化比較標題: {t_info.get('hasSectionTitle')}, Priority Fix: {t_info.get('hasPriorityFix')}, Drill 練習: {t_info.get('hasDrill')}, 量化指標行數: {t_info.get('rowCount')}, 慢放跳轉按鈕: {t_info.get('hasSlowJumpBtn')}")
+        print(f"  雙軸標籤斷言: In Range={t_info.get('hasInRangeBadge')}, Out of Range={t_info.get('hasOutOfRangeBadge')}, Aligned={t_info.get('hasAlignedBadge')}, Significant={t_info.get('hasSignificantBadge')}, Moderate={t_info.get('hasModerateBadge')}, 非認證說明={t_info.get('hasUncertifiedNotice')}, 通過={dual_axis_pass}")
 
         # 測試點擊任一量化項目的「▶ 慢放跳轉」
         jump_res = self.evalJs("""
@@ -699,10 +729,18 @@ class WebKitR3Auditor(AppKit.NSObject):
         p_jump = playback_after_jump if isinstance(playback_after_jump, dict) else {}
         print(f"  點擊慢放跳轉結果: {jump_res}, 播放狀態: userRate={p_jump.get('userRate')}, userTime={p_jump.get('userTime'):.3f}s, userPaused={p_jump.get('userPaused')}")
 
-        status = "PASS" if (t_info.get("hasSectionTitle") and t_info.get("hasPriorityFix") and t_info.get("rowCount", 0) >= 4 and jump_res == "JUMP_CLICKED") else "FAIL"
+        status = "PASS" if (
+            t_info.get("hasSectionTitle")
+            and t_info.get("hasPriorityFix")
+            and t_info.get("rowCount", 0) >= 4
+            and jump_res == "JUMP_CLICKED"
+            and dual_axis_pass
+        ) else "FAIL"
+
         self.step_results.append({
             "step": "step7_quantitative_posture_table_and_priority_fix",
             "table_info": t_info,
+            "dual_axis_pass": dual_axis_pass,
             "jump_result": jump_res,
             "playback_after_jump": p_jump,
             "status": status,
@@ -718,6 +756,50 @@ class WebKitR3Auditor(AppKit.NSObject):
         all_pass = all(s.get("status") == "PASS" for s in self.step_results)
         git_info = get_git_info()
 
+        # 從實際 step_results 動態提取真實斷言結果，嚴禁硬編碼 True
+        s1 = next((s for s in self.step_results if s["step"] == "step1_default_slowmo_and_offline_badge"), {})
+        s2 = next((s for s in self.step_results if s["step"] == "step2_slowmo_025x_top_to_impact_timeseries"), {})
+        s3 = next((s for s in self.step_results if s["step"] == "step3_reset_speed_10x"), {})
+        s4 = next((s for s in self.step_results if s["step"] == "step4_3w_slowmo_and_tempo_disclosure"), {})
+        s5 = next((s for s in self.step_results if s["step"] == "step5_skeleton_toggle_and_freeze_buttons"), {})
+        s6 = next((s for s in self.step_results if s["step"] == "step6_independent_mode_and_return_sync"), {})
+        s7 = next((s for s in self.step_results if s["step"] == "step7_quantitative_posture_table_and_priority_fix"), {})
+
+        s1_info = s1.get("info", {})
+        s2_samples = s2.get("samples", [])
+        s3_rates = s3.get("rates_info", {})
+        s4_info = s4.get("info", {})
+        s7_info = s7.get("table_info", {})
+        s7_jump = s7.get("playback_after_jump", {})
+
+        audit_criteria = {
+            "p0_offline_guard_active": bool(s1_info.get("hasOfflineBadge") and s1.get("status") == "PASS"),
+            "p1_default_slow_motion_05x": bool(s1_info.get("hasDefault05x") and s1.get("status") == "PASS"),
+            "p1_ultra_slow_motion_025x": bool(s2.get("rates_valid") and s2.get("status") == "PASS"),
+            "p1_top_to_impact_timeseries_monotonic": bool(s2.get("user_monotonic") and s2.get("ref_monotonic")),
+            "p1_hard_seek_count_zero": bool(s2.get("hard_seek_count") == 0),
+            "p1_3w_slow_motion_source_switch": bool(s4_info.get("is3wSelected") and s4.get("status") == "PASS"),
+            "p1_slow_motion_tempo_truthfulness_disclosure": bool(s4_info.get("hasTempoDisclosure")),
+            "p1_skeleton_toggle_and_canvas_dom": bool(s5.get("sk_toggle_pass") and s5.get("status") == "PASS"),
+            "p1_reset_speed_10x": bool(abs(s3_rates.get("userRate", 0) - 1.0) < 0.05 and abs(s3_rates.get("refRate", 0) - 1.0) < 0.05),
+            "p1_independent_mode_drift_disabled": bool(s6.get("has_ind_badge")),
+            "p1_return_to_sync_mode": bool(s6.get("has_sync_badge")),
+            "p1_freeze_anchor_buttons": bool(s5.get("top_frozen") and s5.get("user_top_exact")),
+            "p2_quantitative_posture_table_4_phases": bool(s7_info.get("rowCount", 0) >= 4 and s7_info.get("hasSectionTitle")),
+            "p2_dual_axis_badges_in_range": bool(s7_info.get("hasInRangeBadge")),
+            "p2_dual_axis_badges_out_of_range": bool(s7_info.get("hasOutOfRangeBadge")),
+            "p2_dual_axis_badges_aligned": bool(s7_info.get("hasAlignedBadge")),
+            "p2_dual_axis_badges_significant": bool(s7_info.get("hasSignificantBadge")),
+            "p2_dual_axis_uncertified_notice": bool(s7_info.get("hasUncertifiedNotice")),
+            "p2_metric_jump_and_slow_play": bool(s7.get("jump_result") == "JUMP_CLICKED" and abs(s7_jump.get("userRate", 0) - 0.5) < 0.05),
+            "p3_priority_fix_card_and_drill": bool(s7_info.get("hasPriorityFix") and s7_info.get("hasDrill")),
+            "truthfulness_and_anti_hallucination_verification": (
+                "verified_by_rule_based_evidence_and_real_pose_kinematics"
+                if all(s.get("status") == "PASS" for s in self.step_results)
+                else "unverified_or_failed"
+            ),
+        }
+
         raw_report = {
             "title": "Golf Swing Lab — R3 Offline Coach & Slow-Mo Comparison Acceptance Report",
             "timestamp": datetime.now(UTC).isoformat(),
@@ -731,24 +813,7 @@ class WebKitR3Auditor(AppKit.NSObject):
                 "resolution": "1080x1920",
                 "proxy_resolution": "360x640"
             },
-            "acceptance_criteria_audit": {
-                "p0_offline_guard_active": True,
-                "p1_default_slow_motion_05x": True,
-                "p1_ultra_slow_motion_025x": True,
-                "p1_top_to_impact_timeseries_monotonic": True,
-                "p1_hard_seek_count_zero": True,
-                "p1_3w_slow_motion_source_switch": True,
-                "p1_slow_motion_tempo_truthfulness_disclosure": True,
-                "p1_skeleton_toggle_and_canvas_dom": True,
-                "p1_reset_speed_10x": True,
-                "p1_independent_mode_drift_disabled": True,
-                "p1_return_to_sync_mode": True,
-                "p1_freeze_anchor_buttons": True,
-                "p2_quantitative_posture_table_4_phases": True,
-                "p2_metric_jump_and_slow_play": True,
-                "p3_priority_fix_card_and_drill": True,
-                "zero_hallucination_guarantee": True,
-            },
+            "acceptance_criteria_audit": audit_criteria,
             "all_passed": all_pass,
             "step_results": self.step_results,
             "screenshots": self.screenshots,

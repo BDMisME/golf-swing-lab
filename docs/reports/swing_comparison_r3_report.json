@@ -1,8 +1,10 @@
 {
   "title": "Golf Swing Lab — R3 Offline Coach & Slow-Mo Comparison Acceptance Report",
-  "timestamp": "2026-10-31T02:44:42.048140+00:00",
+  "timestamp": "2026-10-31T07:57:28.990766+00:00",
   "git": {
-    "commit_sha": "b831b9100978ece56625e6bbb1d3cfc70d5cc14b",
+    "source_commit_sha": "e1449fc04f1e298609bb8e656a4367f62d22d912",
+    "commit_sha": "e1449fc04f1e298609bb8e656a4367f62d22d912",
+    "git_branch": "feat/r3-offline-coach-and-slow-motion",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -28,9 +30,14 @@
     "p1_return_to_sync_mode": true,
     "p1_freeze_anchor_buttons": true,
     "p2_quantitative_posture_table_4_phases": true,
+    "p2_dual_axis_badges_in_range": true,
+    "p2_dual_axis_badges_out_of_range": true,
+    "p2_dual_axis_badges_aligned": true,
+    "p2_dual_axis_badges_significant": true,
+    "p2_dual_axis_uncertified_notice": true,
     "p2_metric_jump_and_slow_play": true,
     "p3_priority_fix_card_and_drill": true,
-    "zero_hallucination_guarantee": true
+    "truthfulness_and_anti_hallucination_verification": "verified_by_rule_based_evidence_and_real_pose_kinematics"
   },
   "all_passed": true,
   "step_results": [
@@ -51,8 +58,8 @@
       "samples": [
         {
           "sample_idx": 0,
-          "userMs": 120653,
-          "refMs": 1438,
+          "userMs": 120655,
+          "refMs": 1441,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
@@ -62,85 +69,8 @@
         },
         {
           "sample_idx": 1,
-          "userMs": 120686,
-          "refMs": 1471,
-          "userRate": 0.25,
-          "refRate": 0.25,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 0
-        },
-        {
-          "sample_idx": 2,
-          "userMs": 120716,
-          "refMs": 1501,
-          "userRate": 0.25,
-          "refRate": 0.25,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 0
-        },
-        {
-          "sample_idx": 3,
-          "userMs": 120733,
-          "refMs": 1532,
-          "userRate": 0.25,
-          "refRate": 0.25,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 14
-        },
-        {
-          "sample_idx": 4,
-          "userMs": 120743,
-          "refMs": 1532,
-          "userRate": 0.25,
-          "refRate": 0.23,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 4
-        },
-        {
-          "sample_idx": 5,
-          "userMs": 120774,
-          "refMs": 1560,
-          "userRate": 0.25,
-          "refRate": 0.25,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 1
-        },
-        {
-          "sample_idx": 6,
-          "userMs": 120804,
-          "refMs": 1621,
-          "userRate": 0.25,
-          "refRate": 0.25,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 32
-        },
-        {
-          "sample_idx": 7,
-          "userMs": 120835,
-          "refMs": 1621,
-          "userRate": 0.25,
-          "refRate": 0.23,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 1
-        },
-        {
-          "sample_idx": 8,
-          "userMs": 120865,
-          "refMs": 1649,
+          "userMs": 120691,
+          "refMs": 1476,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
@@ -149,20 +79,97 @@
           "drift_progress_ms": -1
         },
         {
-          "sample_idx": 9,
-          "userMs": 120895,
-          "refMs": 1709,
+          "sample_idx": 2,
+          "userMs": 120722,
+          "refMs": 1507,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": 29
+          "drift_progress_ms": -1
+        },
+        {
+          "sample_idx": 3,
+          "userMs": 120722,
+          "refMs": 1538,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 30
+        },
+        {
+          "sample_idx": 4,
+          "userMs": 120750,
+          "refMs": 1539,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 3
+        },
+        {
+          "sample_idx": 5,
+          "userMs": 120781,
+          "refMs": 1567,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 6,
+          "userMs": 120811,
+          "refMs": 1627,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 30
+        },
+        {
+          "sample_idx": 7,
+          "userMs": 120842,
+          "refMs": 1628,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 8,
+          "userMs": 120872,
+          "refMs": 1656,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -2
+        },
+        {
+          "sample_idx": 9,
+          "userMs": 120903,
+          "refMs": 1716,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 27
         },
         {
           "sample_idx": 10,
-          "userMs": 120926,
-          "refMs": 1709,
+          "userMs": 120933,
+          "refMs": 1717,
           "userRate": 0.25,
           "refRate": 0.23,
           "userPaused": false,
@@ -172,43 +179,43 @@
         },
         {
           "sample_idx": 11,
-          "userMs": 120956,
-          "refMs": 1737,
+          "userMs": 120964,
+          "refMs": 1745,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": -4
+          "drift_progress_ms": -5
         },
         {
           "sample_idx": 12,
-          "userMs": 120986,
-          "refMs": 1737,
+          "userMs": 120994,
+          "refMs": 1805,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": -34
+          "drift_progress_ms": 25
         },
         {
           "sample_idx": 13,
-          "userMs": 121017,
-          "refMs": 1828,
+          "userMs": 121025,
+          "refMs": 1806,
           "userRate": 0.25,
-          "refRate": 0.25,
+          "refRate": 0.23,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": 26
+          "drift_progress_ms": -5
         }
       ],
       "user_monotonic": true,
       "ref_monotonic": true,
       "rates_valid": true,
       "hard_seek_count": 0,
-      "max_drift_abs_ms": 34,
+      "max_drift_abs_ms": 30,
       "status": "PASS"
     },
     {
@@ -258,15 +265,22 @@
         "hasDrill": true,
         "hasDisclaimer": true,
         "rowCount": 8,
-        "hasSlowJumpBtn": true
+        "hasSlowJumpBtn": true,
+        "hasInRangeBadge": true,
+        "hasOutOfRangeBadge": true,
+        "hasAlignedBadge": true,
+        "hasSignificantBadge": true,
+        "hasModerateBadge": true,
+        "hasUncertifiedNotice": true
       },
+      "dual_axis_pass": true,
       "jump_result": "JUMP_CLICKED",
       "playback_after_jump": {
         "userRate": 0.5,
         "refRate": 0.46,
         "userPaused": false,
         "refPaused": false,
-        "userTime": 119.71414131307975
+        "userTime": 119.71603712495417
       },
       "status": "PASS"
     }

@@ -1,8 +1,8 @@
 {
   "metadata": {
     "title": "Golf Swing Lab — R3 Real API Posture Comparison Verification Report",
-    "generated_at_utc": "2026-10-31T02:46:03.268918+00:00",
-    "git_head_sha": "b831b9100978ece56625e6bbb1d3cfc70d5cc14b",
+    "generated_at_utc": "2026-10-31T07:57:46.884280+00:00",
+    "git_head_sha": "e1449fc04f1e298609bb8e656a4367f62d22d912",
     "git_branch": "feat/r3-offline-coach-and-slow-motion",
     "git_working_tree_clean": false,
     "source": "GET /api/swings/{swing_id}/posture-comparison",
