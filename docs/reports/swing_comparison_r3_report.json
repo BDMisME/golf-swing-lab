@@ -1,8 +1,8 @@
 {
   "title": "Golf Swing Lab — R3 Offline Coach & Slow-Mo Comparison Acceptance Report",
-  "timestamp": "2026-10-30T20:02:49.590326+00:00",
+  "timestamp": "2026-10-31T02:44:42.048140+00:00",
   "git": {
-    "commit_sha": "83e9aa6384fae11be537bbbf602c9d46ac8e5b38",
+    "commit_sha": "b831b9100978ece56625e6bbb1d3cfc70d5cc14b",
     "is_dirty": true
   },
   "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
@@ -51,8 +51,8 @@
       "samples": [
         {
           "sample_idx": 0,
-          "userMs": 120654,
-          "refMs": 1440,
+          "userMs": 120653,
+          "refMs": 1438,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
@@ -62,19 +62,19 @@
         },
         {
           "sample_idx": 1,
-          "userMs": 120690,
-          "refMs": 1475,
+          "userMs": 120686,
+          "refMs": 1471,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": -1
+          "drift_progress_ms": 0
         },
         {
           "sample_idx": 2,
-          "userMs": 120720,
-          "refMs": 1506,
+          "userMs": 120716,
+          "refMs": 1501,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
@@ -84,30 +84,63 @@
         },
         {
           "sample_idx": 3,
-          "userMs": 120732,
-          "refMs": 1536,
+          "userMs": 120733,
+          "refMs": 1532,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": 18
+          "drift_progress_ms": 14
         },
         {
           "sample_idx": 4,
-          "userMs": 120749,
-          "refMs": 1537,
+          "userMs": 120743,
+          "refMs": 1532,
           "userRate": 0.25,
           "refRate": 0.23,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": 2
+          "drift_progress_ms": 4
         },
         {
           "sample_idx": 5,
-          "userMs": 120780,
-          "refMs": 1565,
+          "userMs": 120774,
+          "refMs": 1560,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 1
+        },
+        {
+          "sample_idx": 6,
+          "userMs": 120804,
+          "refMs": 1621,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 32
+        },
+        {
+          "sample_idx": 7,
+          "userMs": 120835,
+          "refMs": 1621,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 1
+        },
+        {
+          "sample_idx": 8,
+          "userMs": 120865,
+          "refMs": 1649,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
@@ -116,99 +149,66 @@
           "drift_progress_ms": -1
         },
         {
-          "sample_idx": 6,
-          "userMs": 120811,
-          "refMs": 1627,
+          "sample_idx": 9,
+          "userMs": 120895,
+          "refMs": 1709,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": 30
+          "drift_progress_ms": 29
         },
         {
-          "sample_idx": 7,
-          "userMs": 120841,
-          "refMs": 1627,
+          "sample_idx": 10,
+          "userMs": 120926,
+          "refMs": 1709,
           "userRate": 0.25,
           "refRate": 0.23,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 0
-        },
-        {
-          "sample_idx": 8,
-          "userMs": 120872,
-          "refMs": 1656,
-          "userRate": 0.25,
-          "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
           "drift_progress_ms": -2
         },
         {
-          "sample_idx": 9,
-          "userMs": 120902,
-          "refMs": 1716,
-          "userRate": 0.25,
-          "refRate": 0.25,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": 28
-        },
-        {
-          "sample_idx": 10,
-          "userMs": 120933,
-          "refMs": 1716,
-          "userRate": 0.25,
-          "refRate": 0.23,
-          "userPaused": false,
-          "refPaused": false,
-          "seekCount": 0,
-          "drift_progress_ms": -3
-        },
-        {
           "sample_idx": 11,
-          "userMs": 120964,
-          "refMs": 1744,
+          "userMs": 120956,
+          "refMs": 1737,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": -6
+          "drift_progress_ms": -4
         },
         {
           "sample_idx": 12,
-          "userMs": 120994,
-          "refMs": 1805,
+          "userMs": 120986,
+          "refMs": 1737,
           "userRate": 0.25,
           "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": 25
+          "drift_progress_ms": -34
         },
         {
           "sample_idx": 13,
-          "userMs": 121025,
-          "refMs": 1806,
+          "userMs": 121017,
+          "refMs": 1828,
           "userRate": 0.25,
-          "refRate": 0.23,
+          "refRate": 0.25,
           "userPaused": false,
           "refPaused": false,
           "seekCount": 0,
-          "drift_progress_ms": -5
+          "drift_progress_ms": 26
         }
       ],
       "user_monotonic": true,
       "ref_monotonic": true,
       "rates_valid": true,
       "hard_seek_count": 0,
-      "max_drift_abs_ms": 30,
+      "max_drift_abs_ms": 34,
       "status": "PASS"
     },
     {
@@ -266,7 +266,7 @@
         "refRate": 0.46,
         "userPaused": false,
         "refPaused": false,
-        "userTime": 119.71469889590517
+        "userTime": 119.71414131307975
       },
       "status": "PASS"
     }

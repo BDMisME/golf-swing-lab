@@ -531,24 +531,27 @@ def _build_priority_fix(
        若選中則安全降級為客觀觀察（actionable_drill = None），嚴禁配發方向性假 Drill。
     4. 若所有指標皆在容許相容區間內或無可靠缺陷，回傳 None。
     """
-    if not (comparisons and overall_reliability in ("high", "moderate") and is_aspect_corrected):
+    if not (comparisons and overall_reliability in ("high", "moderate") and is_aspect_corrected and is_angle_compatible):
         return None
 
-    # 篩選有效且偏離的指標
-    all_diffs = [
-        c for c in comparisons
-        if c.is_comparable and c.is_reliable and c.status in (
-            "significant_diff", "moderate_diff", "significant_difference", "needs_attention"
-        )
-    ]
-
-    # 排除不是缺陷（使用者表現優於或等於示範球員）的項目
+    # 篩選具備改善建議資格（Coaching Eligibility）的真實動作缺陷
     real_defects = []
-    for c in all_diffs:
-        # 若為 lower_better 且 delta <= 0（使用者數值小於示範），不是使用者缺陷
+    for c in comparisons:
+        if not (c.is_comparable and c.is_reliable):
+            continue
+        # 【P0 守衛】：若使用者數值落在實驗性參考區間內 (within_benchmark)，
+        # 即使與示範選手有差異，亦代表個人風格差異，絕不得視為使用者動作缺陷，嚴禁配發 Drill！
+        if c.benchmark_status == "within_benchmark":
+            continue
+        # 若為 lower_better 且 delta <= 0（使用者數值小於或等於示範），使用者維持更佳，絕非動作缺陷
         if c.id in ("top_spine_retention", "top_head_displacement", "impact_spine_delta", "finish_spine_angle") and (c.delta or 0.0) <= 0:
             continue
-        real_defects.append(c)
+        # 若差異極小（abs_d <= optimal_tol），差距在允許誤差內，非顯著缺陷
+        if c.delta is not None and abs(c.delta) <= c.optimal_tol:
+            continue
+        # 必須具有偏離狀態（significant_diff 或 moderate_diff）
+        if c.status in ("significant_diff", "moderate_diff", "significant_difference", "needs_attention") or c.relative_status in ("significant_diff", "moderate_diff"):
+            real_defects.append(c)
 
     # 分離具備 Actionable Drill 之診斷指標與純觀察指標
     actionable_candidates = [c for c in real_defects if c.id in ACTIONABLE_DRILL_METRICS]
@@ -996,33 +999,45 @@ def compute_quantitative_posture_comparison(
             else:
                 relative_status = "significant_diff"
 
-            # 綜合品質判定 (結合相對差異與常模區間)
+            # 綜合品質判定 (結合相對差異與常模區間，分離 Relative Difference 與 Experimental Benchmark)
             if is_lower_better and delta <= 0:
                 if benchmark_status == "within_benchmark":
                     status = "optimal"
                     eval_text = f"數值為 {u_val_display}，落在實驗性參考區間內且相較示範選手（{r_val_display}）維持更佳穩定度。"
                 else:
                     # 使用者數值小於示範，但超出實驗性參考區間，絕不可盲目判定為 optimal
-                    status = "moderate_diff"
+                    status = "aligned" if abs_d <= optimal_tol else "moderate_diff"
                     eval_text = f"數值為 {u_val_display}，相較示範選手（{r_val_display}）位移或變化量較小，但仍超出實驗性參考區間（{benchmark}）。"
             elif is_higher_better and delta >= 0:
                 if benchmark_status == "within_benchmark":
                     status = "optimal"
                     eval_text = f"數值為 {u_val_display}，落在實驗性參考區間內且相較示範選手（{r_val_display}）展現充分幅度。"
                 else:
-                    status = "moderate_diff"
+                    status = "aligned" if abs_d <= optimal_tol else "moderate_diff"
                     eval_text = f"數值為 {u_val_display}，相較示範選手（{r_val_display}）幅度較大，但超出實驗性參考區間（{benchmark}）。"
             elif abs_d <= optimal_tol:
-                status = "optimal"
-                eval_text = f"與示範選手數值高度相符（差距僅 {delta_display}，在常模允許誤差 {optimal_tol}{unit_suffix} 內）。"
+                # 雙方數值高度相符 (abs_d <= optimal_tol)
+                if benchmark_status in ("within_benchmark", "not_applicable"):
+                    # 落在參考區間內且與示範高度相符 -> 始可宣稱為最佳 (optimal)
+                    status = "optimal"
+                    eval_text = f"落在實驗性參考區間內且與示範選手數值高度相符（差距僅 {delta_display}）。"
+                else:
+                    # 超出實驗性參考區間，即使與示範高度相符，亦僅為與示範相符 (aligned)，絕不可冒稱動作品質最佳 (optimal)
+                    status = "aligned"
+                    eval_text = f"與示範選手數值高度相符（差距僅 {delta_display}），但目前數值（{u_val_display}）在實驗性參考區間（{benchmark}）之外。"
+            elif benchmark_status == "within_benchmark":
+                # 使用者自身落在實驗性參考區間內，但與示範選手存在差異 (如節奏 3.27:1 vs 1.90:1)
+                # 此為個人揮桿風格差異，無動作缺陷證據，不可列為缺陷或配發矯正 Drill
+                status = "aligned"
+                eval_text = f"數值（{u_val_display}）位於實驗性參考區間內；示範選手（{r_val_display}）數值不同，此為個人揮桿風格差異，無動作缺陷證據。"
             elif abs_d <= moderate_tol:
                 status = "moderate_diff"
                 cue = direction_cue[1] if delta > 0 else direction_cue[0]
-                eval_text = f"較示範選手{cue} {abs_d:.1f}{unit_suffix}，落在可微調區間。"
+                eval_text = f"較示範選手{cue} {abs_d:.1f}{unit_suffix}，且數值超出實驗性參考區間，落在可微調區間。"
             else:
                 status = "significant_diff"
                 cue = direction_cue[1] if delta > 0 else direction_cue[0]
-                eval_text = f"較示範選手明顯{cue} {abs_d:.1f}{unit_suffix}，為本階段核心結構差異。"
+                eval_text = f"較示範選手明顯{cue} {abs_d:.1f}{unit_suffix}，且超出實驗性參考區間，為本階段核心結構差異。"
 
         target_jump_map = {
             "address": u_addr_t or u_addr_ms or 0,

@@ -1981,7 +1981,7 @@ export function SwingComparisonPlayer({
                 <tr className="border-b border-gray-800 text-gray-400 text-[11px]">
                   <th className="py-2 px-2 font-semibold">動作階段</th>
                   <th className="py-2 px-2 font-semibold">檢測項目</th>
-                  <th className="py-2 px-2 font-semibold">理論常模參考</th>
+                  <th className="py-2 px-2 font-semibold">理論常模參考*</th>
                   <th className="py-2 px-2 font-semibold">我的數值</th>
                   <th className="py-2 px-2 font-semibold">示範數值</th>
                   <th className="py-2 px-2 font-semibold">幾何差異</th>
@@ -2028,7 +2028,16 @@ export function SwingComparisonPlayer({
                         )}
                       </td>
                       <td className="py-2 px-2 text-gray-400 font-sans text-[11px]">
-                        {benchmark}
+                        <div>{benchmark}</div>
+                        {m.benchmark_status && m.benchmark_status !== "unassessed" && m.benchmark_status !== "not_applicable" && (
+                          <span className={`inline-block mt-0.5 text-[9px] px-1.5 py-0.2 rounded font-sans font-medium border ${
+                            m.benchmark_status === "within_benchmark"
+                              ? "bg-emerald-950/70 text-emerald-300 border-emerald-800/40"
+                              : "bg-gray-800/80 text-amber-300/90 border-amber-800/40"
+                          }`}>
+                            {m.benchmark_status === "within_benchmark" ? "區間內 (In Range)" : "區間外 (Out of Range)"}
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 px-2 text-emerald-400 font-bold">
                         {userValStr}
@@ -2037,19 +2046,34 @@ export function SwingComparisonPlayer({
                         {refValStr}
                       </td>
                       <td className="py-2 px-2">
-                        <span
+                        <div
                           className={`font-bold ${
                             !isComparable || m.delta === null
                               ? "text-gray-500"
-                              : m.status === "optimal"
+                              : m.status === "optimal" || m.relative_status === "aligned"
                               ? "text-emerald-400"
-                              : m.status === "moderate_diff"
+                              : m.status === "moderate_diff" || m.relative_status === "moderate_diff"
                               ? "text-amber-400"
                               : "text-rose-400"
                           }`}
                         >
                           {diffStr}
-                        </span>
+                        </div>
+                        {isComparable && m.delta !== null && (
+                          <span className={`inline-block mt-0.5 text-[9px] px-1.5 py-0.2 rounded font-sans font-medium border ${
+                            m.relative_status === "aligned"
+                              ? "bg-emerald-950/70 text-emerald-300 border-emerald-800/40"
+                              : m.relative_status === "moderate_diff"
+                              ? "bg-amber-950/70 text-amber-300 border-amber-800/40"
+                              : "bg-rose-950/70 text-rose-300 border-rose-800/40"
+                          }`}>
+                            {m.relative_status === "aligned"
+                              ? "吻合 (Aligned)"
+                              : m.relative_status === "moderate_diff"
+                              ? "微差 (Moderate)"
+                              : "顯著 (Significant)"}
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 px-2 font-sans">
                         <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${relBadgeClass}`}>
@@ -2071,6 +2095,9 @@ export function SwingComparisonPlayer({
                 })}
               </tbody>
             </table>
+            <div className="text-[10px] text-gray-500 px-2 py-1.5">
+              * 實驗性參考區間僅供對照觀察，非職業教練認證或唯一揮桿標準。
+            </div>
           </div>
         ) : (
           <div className="text-center py-4 text-gray-500 text-xs">

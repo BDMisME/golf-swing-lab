@@ -309,10 +309,11 @@ def test_priority_fix_requires_real_evidence_no_random_drill():
     ref_swing["pose_artifact"]["landmarks"]["1550"] = _make_landmarks(sh_x=0.45, hp_x=0.58)
 
     report = compute_quantitative_posture_comparison(user_swing, ref_swing)
-    # 所有指標都在 optimal 範圍內
+    # 所有指標均與示範相符（optimal 或 aligned），且 relative_status 為 aligned
     for m in report.metrics:
         if m.is_comparable:
-            assert m.status == "optimal", f"Metric {m.id} status is {m.status}"
+            assert m.status in ("optimal", "aligned"), f"Metric {m.id} status is {m.status}"
+            assert m.relative_status == "aligned", f"Metric {m.id} relative_status is {m.relative_status}"
 
     # 無 significant_diff 或 moderate_diff 時，priority_fix 誠實為 None
     assert report.priority_fix_id is None
@@ -1255,6 +1256,196 @@ def test_priority_fix_diagnosability_and_7i_spine_tilt_precedence():
     assert p_fix.drill is not None
     assert "髖關節鉸鏈" in p_fix.drill["name"]
     assert "前傾" in p_fix.focus_area
+
+
+# =========================================================================
+# 第四階段：R3 FINAL Merge Gate 6 大專項回歸測試
+# =========================================================================
+
+def test_regression_case_1_user_in_benchmark_ref_out_large_diff():
+    """
+    專項測試 1:
+    使用者在參考區間內、示範在區間外、雙方差異大。
+    模擬 7I 上下桿節奏比：User = 3.27:1 (常模 2.7~3.3)，Ref = 1.90:1，Delta = +1.37。
+    驗證：
+    - benchmark_status 必須為 within_benchmark
+    - relative_status 為 significant_diff
+    - status 為 aligned（絕非缺陷狀態）
+    - evaluation_text 明確指出為風格差異，無動作缺陷證據
+    - 絕不得被選為 Priority Fix，絕不得配發 Drill
+    """
+    from packages.analysis.posture_comparison import _build_priority_fix
+
+    user_swing = _make_standard_user_swing(aspect_ratio=0.5625)
+    # 設定使用者節奏為 3.27:1 (例如 backswing=1100ms, downswing=336ms)
+    user_swing["events"] = [
+        {"event_name": "address", "time_ms": 1000},
+        {"event_name": "top", "time_ms": 2100},
+        {"event_name": "impact_estimated", "time_ms": 2436},
+        {"event_name": "finish", "time_ms": 3400},
+    ]
+
+    ref_swing = _make_standard_ref_swing(aspect_ratio=1.7778)
+    # 設定示範選手節奏為 1.90:1 (例如 backswing=950ms, downswing=500ms)
+    ref_swing["event_timestamps"] = {
+        "address": 100,
+        "top": 1050,
+        "impact": 1550,
+        "finish": 2500,
+    }
+
+    report = compute_quantitative_posture_comparison(user_swing, ref_swing)
+    tempo_m = next(m for m in report.metrics if m.id == "swing_tempo_ratio")
+
+    assert tempo_m.user_value == 3.27
+    assert tempo_m.ref_value == 1.90
+    assert tempo_m.benchmark_status == "within_benchmark"
+    assert tempo_m.relative_status == "significant_diff"
+    assert tempo_m.status == "aligned"
+    assert "個人揮桿風格差異" in tempo_m.evaluation_text
+    assert "無動作缺陷證據" in tempo_m.evaluation_text
+
+    # Priority Fix 絕不得為 swing_tempo_ratio
+    assert report.priority_fix_id != "swing_tempo_ratio"
+    if report.actionable_drill:
+        assert "節奏" not in report.actionable_drill.get("name", "")
+
+
+def test_regression_case_2_both_outside_benchmark_but_close():
+    """
+    專項測試 2:
+    使用者超出區間、示範同樣超出但雙方十分接近。
+    模擬 Driver 站姿前傾：User = 27.1° (常模 36~44°)，Ref = 26.9°，Delta = +0.2°。
+    驗證：
+    - benchmark_status 為 outside_benchmark
+    - relative_status 為 aligned
+    - status 為 aligned（絕不得為 optimal 假最優）
+    - evaluation_text 明確指出與示範選手相符但超出實驗性參考區間
+    """
+    user_swing = _make_standard_user_swing(addr_tilt_x=0.45, aspect_ratio=0.5625)
+    ref_swing = _make_standard_ref_swing(addr_tilt_x=0.45, aspect_ratio=0.5625)
+
+    report = compute_quantitative_posture_comparison(user_swing, ref_swing)
+    spine_m = next(m for m in report.metrics if m.id == "address_spine_tilt")
+
+    # 在 9:16 直式下計算出來的前傾約 10.6°，雙方均低於 36.0° 常模
+    assert spine_m.benchmark_status == "outside_benchmark"
+    assert spine_m.relative_status == "aligned"
+    assert spine_m.status == "aligned", f"預期 aligned，實際為 {spine_m.status}（絕不得為 optimal 假最優）"
+    assert "在實驗性參考區間" in spine_m.evaluation_text
+    assert "之外" in spine_m.evaluation_text
+
+
+def test_regression_case_3_both_within_benchmark_and_aligned():
+    """
+    專項測試 3:
+    使用者與示範差異小且都在區間內。
+    模擬頂點維持或節奏都在區間內且差異在 optimal_tol 內。
+    驗證：
+    - benchmark_status 為 within_benchmark
+    - relative_status 為 aligned
+    - status 為 optimal
+    - evaluation_text 肯定數值落在參考區間內且高度相符
+    """
+    user_swing = _make_standard_user_swing(aspect_ratio=0.5625)
+    # 設定節奏 3.0:1 (常模 2.7~3.3:1)
+    user_swing["events"] = [
+        {"event_name": "address", "time_ms": 1000},
+        {"event_name": "top", "time_ms": 2200},
+        {"event_name": "impact_estimated", "time_ms": 2600},
+        {"event_name": "finish", "time_ms": 3400},
+    ]
+
+    ref_swing = _make_standard_ref_swing(aspect_ratio=0.5625)
+    # 示範節奏 3.0:1
+    ref_swing["event_timestamps"] = {
+        "address": 100,
+        "top": 1300,
+        "impact": 1700,
+        "finish": 2500,
+    }
+
+    report = compute_quantitative_posture_comparison(user_swing, ref_swing)
+    tempo_m = next(m for m in report.metrics if m.id == "swing_tempo_ratio")
+
+    assert tempo_m.benchmark_status == "within_benchmark"
+    assert tempo_m.relative_status == "aligned"
+    assert tempo_m.status == "optimal"
+    assert "落在實驗性參考區間內且與示範選手數值高度相符" in tempo_m.evaluation_text
+
+
+def test_regression_case_4_insufficient_ref_data_no_drill():
+    """
+    專項測試 4:
+    示範影片資料品質不足（無 Pose、慢動作無 Tempo、視角不相容）。
+    驗證：
+    - 禁止產生任何矯正性 Drill
+    - 報告誠實輸出 not_comparable / insufficient_evidence
+    """
+    user_swing = _make_standard_user_swing(aspect_ratio=0.5625)
+    # 視角不相容示範
+    ref_swing_close = _make_standard_ref_swing(camera_angle="close_up")
+
+    report = compute_quantitative_posture_comparison(user_swing, ref_swing_close)
+    assert not report.camera_compatibility["is_compatible"]
+    assert report.priority_fix is None
+    assert report.actionable_drill is None
+
+    # 示範無 Pose
+    ref_swing_nopose = _make_standard_ref_swing(has_pose=False)
+    report2 = compute_quantitative_posture_comparison(user_swing, ref_swing_nopose)
+    assert report2.actionable_drill is None
+
+
+def test_regression_case_5_reference_switch_consistency():
+    """
+    專項測試 5:
+    Reference 切換後評估結果動態變更，不得殘留舊數值或捏造使用者動作缺陷。
+    """
+    user_swing = _make_standard_user_swing(aspect_ratio=0.5625)
+    ref_7i = _make_standard_ref_swing(ref_id="ref-7i", addr_tilt_x=0.40)
+    ref_drv = _make_standard_ref_swing(ref_id="ref-drv", addr_tilt_x=0.45)
+
+    rep_7i = compute_quantitative_posture_comparison(user_swing, ref_7i)
+    rep_drv = compute_quantitative_posture_comparison(user_swing, ref_drv)
+
+    m_7i = next(m for m in rep_7i.metrics if m.id == "address_spine_tilt")
+    m_drv = next(m for m in rep_drv.metrics if m.id == "address_spine_tilt")
+
+    assert m_7i.ref_value != m_drv.ref_value, "示範選手更換時，示範數值必須真實改變"
+    assert m_7i.delta != m_drv.delta, "相對差異必須隨示範選手真實變更"
+
+
+def test_regression_case_6_priority_fix_consistent_with_evaluation_text():
+    """
+    專項測試 6:
+    優先改善重點不得與同一指標客觀評估文字矛盾。
+    若某指標（如頂點頭部位移）使用者表現比示範好 (delta <= 0)，
+    評估文字為「維持更佳穩定度」或「位移較小」，
+    系統絕不得反過來將其選為 Priority Fix 宣稱頭部浮動過大或配發鎖定視線 Drill。
+    """
+    from packages.analysis.posture_comparison import _build_priority_fix
+
+    m_head = PostureMetricComparison(
+        id="top_head_displacement",
+        metric_name="頂點頭部相對位移比",
+        phase="top",
+        unit="torso_pct",
+        user_value=11.1,
+        ref_value=28.8,
+        delta=-17.7,
+        status="aligned",
+        relative_status="aligned",
+        benchmark_status="outside_benchmark",
+        confidence=0.90,
+        optimal_tol=3.0,
+        moderate_tol=6.0,
+        evaluation_text="數值為 11.1%，相較示範選手（28.8%）位移或變化量較小，但仍超出實驗性參考區間（≤ 8.0% 身長）。",
+    )
+
+    p_fix = _build_priority_fix([m_head])
+    assert p_fix is None, "使用者位移小於示範選手，絕不得選為缺陷配發 Drill！"
+
 
 
 

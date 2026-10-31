@@ -4,6 +4,34 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 24: Golf Swing Lab R3 — FINAL Merge Gate (2026-10-31) — 全面完成
+- [x] **P0：修正 Benchmark 與 Relative Difference 混淆與改善建議資格（Coaching Eligibility Guard）**：
+  - **三維分離架構**：嚴格分離 Relative Difference（與示範相對差異）、Experimental Benchmark（是否落在常模區間）與 Coaching Eligibility（是否構成動作缺陷改善建議資格）。
+  - **常模內風格差異保護**：7I 上下桿節奏比使用者 User = 3.27:1 落在 2.7~3.3 區間內，示範 Ref = 1.90:1（非典型），系統標記為風格差異（`status = "aligned"`），說明文字客觀指出風格差異無動作缺陷證據。
+  - **Coaching Eligibility 守衛**：在 `_build_priority_fix` 中排除任何 `benchmark_status == "within_benchmark"` 指標，絕不得將常模內風格誤判為缺陷或配發矯正 Drill。
+  - **7I Priority Fix 真實歸屬**：排除節奏後，7I 唯一真實缺陷為 `address_spine_tilt`（User 27.1° vs Ref 35.6°，偏直立 -8.5°，常模 36~44°，`outside_benchmark`），精準配發「站姿髖關節鉸鏈（Hip Hinge）前傾設定 Drill」。
+- [x] **P1：修正 Optimal 語意（解耦吻合與最優，杜絕假最優）**：
+  - **相近不等於最優**：在 Driver 站姿前傾中，User = 27.1°，Ref = 26.9°，Delta = +0.2°，雙方數值高度相符但均低於常模 36~44°。
+  - **狀態與評述校準**：系統不再標記為 `optimal`，而是標註為 `status = "aligned"`，說明文字客觀指出「與示範選手數值高度相符（差距僅 +0.2°），但目前數值（27.1°）在實驗性參考區間（36.0° ~ 44.0°）之外」，絕不以假最優誤導用戶。只有當數值在參考區間內且高度吻合時，方可判定為 `optimal`。
+- [x] **P1：前端展示雙軸結果（Dual-Axis Presentation）**：
+  - 在 `SwingComparisonPlayer.tsx` 量化比較表中：
+    - 理論常模參考欄位下方展示：常模狀態標籤（`區間內 (In Range)` / `區間外 (Out of Range)`）。
+    - 幾何差異欄位下方展示：示範相對標籤（`吻合 (Aligned)` / `微差 (Moderate)` / `顯著 (Significant)`）。
+    - 表頭標記 `理論常模參考*`，並在表尾附註「* 實驗性參考區間僅供對照觀察，非職業教練認證或唯一揮桿標準」，維持原排版風格無冗餘改版。
+- [x] **P1：6 大專項回歸測試完整覆蓋**：
+  - `test_regression_case_1_user_in_benchmark_ref_out_large_diff`：使用者在區間內、示範在區間外，不得判定為缺陷，不得配發 Drill。
+  - `test_regression_case_2_both_outside_benchmark_but_close`：使用者與示範均超出區間但相近，不得標為 optimal，應為 aligned 且說明超出區間。
+  - `test_regression_case_3_both_within_benchmark_and_aligned`：兩者均在區間內且相符，判定為 optimal。
+  - `test_regression_case_4_insufficient_ref_data_no_drill`：示範資料不足或視角不合，禁止產生矯正 Drill。
+  - `test_regression_case_5_reference_switch_consistency`：示範切換後數值真實變更，不捏造假缺陷。
+  - `test_regression_case_6_priority_fix_consistent_with_evaluation_text`：優先改善重點不得與同一指標客觀評述文字矛盾。
+- [x] **全矩陣自動化驗收與原生 WebKit 驗證**：
+  - 專項測試：`tests/test_quantitative_posture_comparison.py` **31 / 31 PASSED (100%)**。
+  - 後端全量測試：**135 / 135 PASSED (100%)**。
+  - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+  - 示範素材庫完整性：`scripts/verify_18_reference_swings.py` 18 / 18 示範資料庫記錄 100% 完整無缺。
+  - WebKit 原生視窗實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 7 大步驟 100% 全數通過（PASS），產出 10 張真實 WebKit 截圖存證與完整報告。
+
 ## Round 23: Golf Swing Lab R3 — Final Scientific Integrity & Merge Gate (2026-10-31) — 全面完成
 - [x] **第一階段：修正骨盆幾何指標（Pelvic 2D Displacement Scientific Integrity）**：
   - **更名與物理意義釐清**：將 `impact_hip_clearance` 名稱由「擊球骨盆深度開放比」修正為「擊球骨盆2D相對位移比」，保留 `id="impact_hip_clearance"` 保障合約相容。
