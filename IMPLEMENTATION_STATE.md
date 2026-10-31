@@ -1,6 +1,162 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 17: PR #2 正式授權合併、Mac 原生 App 更新與 Personal Beta 正式部署）
+## 最新修復狀態（Round 25: Golf Swing Lab R3 — 最後驗收證據收尾）
+1. **P0：修正交付報告中的 Git SHA 追溯性與一致性**：`PASS`
+   - 在 `scripts/verify_webkit_r3_slowmo_and_coach.py` 與 `scripts/generate_real_api_posture_report.py` 中，明確校準 `source_commit_sha` 與 `commit_sha`。
+   - 產出之 `docs/reports/real_api_posture_comparison_report.json` 與 `docs/reports/swing_comparison_r3_report.json` 明確標明測試時所用之基準 SHA `e1449fc04f1e298609bb8e656a4367f62d22d912`、工作樹狀態與真實測試時間戳記，不要求包含報告的最終 commit SHA 與報告內的來源 SHA 自我相等。
+2. **P0：擴充 WebKit GUI Step 7 雙軸標籤真實斷言**：`PASS`
+   - 在 `verify_webkit_r3_slowmo_and_coach.py` 的 Step 7 中，擴充 JavaScript DOM 提取與 Python 斷言：
+     - `hasInRangeBadge`: `區間內 (In Range)`
+     - `hasOutOfRangeBadge`: `區間外 (Out of Range)`
+     - `hasAlignedBadge`: `吻合 (Aligned)`
+     - `hasSignificantBadge`: `顯著 (Significant)`
+     - `hasModerateBadge`: `微差 (Moderate)`
+     - `hasUncertifiedNotice`: 包含 `實驗性參考區間僅供對照觀察` 與 `非職業教練認證`
+   - Python 增加 `dual_axis_pass` 嚴格布林斷言，未全數通過則標記 Step 7 為 FAIL。實測結果：6 大標籤與非認證說明 100% 渲染且斷言通過。
+3. **P0：拔除驗收報告硬編碼 True，改由實際斷言動態計算**：`PASS`
+   - `acceptance_criteria_audit` 中的全部 20+ 項指標改為從 `step_results`（s1~s7）提取真實執行結果動態計算。
+   - 保證性欄位 `zero_hallucination_guarantee: True` 改為文字動態狀態 `truthfulness_and_anti_hallucination_verification: "verified_by_rule_based_evidence_and_real_pose_kinematics"`。
+4. **全量驗收與測試通過**：`PASS`
+   - 專項測試：`tests/test_quantitative_posture_comparison.py` **31 / 31 PASSED (100%)**。
+   - 示範素材庫完整性：`scripts/verify_18_reference_swings.py` 18 / 18 示範資料庫記錄 100% 完整無缺。
+   - WebKit 原生視窗實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 7 大步驟 100% 全數通過（PASS），產出 10 張真實 WebKit 截圖存證與完整報告。
+- **最後更新時間**：2026-10-31T16:05:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR MERGE (嚴禁自行合併 main，已推送到 PR #3 分支，等待專案負責人最後授權合併)**
+
+## 前期重大里程碑狀態（Round 24: Golf Swing Lab R3 — FINAL Merge Gate）
+1. **P0：Benchmark 與 Relative Difference 徹底分離與改善建議資格守衛（Coaching Eligibility Guard）**：`PASS`
+   - **三概念嚴格分離**：
+     1. `Relative Difference`（`relative_status`）：相對於示範球員的純幾何/時間差異（`aligned` / `moderate_diff` / `significant_diff`）。
+     2. `Experimental Benchmark`（`benchmark_status`）：是否落在實驗性參考區間（`within_benchmark` / `outside_benchmark` / `not_applicable`）。
+     3. `Coaching Eligibility`：是否有充分證據將差異轉化為改善建議與矯正 Drill。
+   - **禁止將常模內個人風格誤判為動作缺陷**：
+     - 在 7I 上下桿節奏比（`swing_tempo_ratio`）中：使用者 User = 3.27:1 落在 2.7~3.3 參考區間內（`within_benchmark`），示範 Reference = 1.90:1（非典型節奏），兩者雖有顯著時間差異（delta = +1.37），但系統明確標記為個人揮桿風格差異，綜合 `status` 為 `aligned`，說明文字客觀指出「數值（3.27:1）位於實驗性參考區間內；示範選手（1.90:1）數值不同，此為個人揮桿風格差異，無動作缺陷證據。」
+     - **Coaching Eligibility 守衛**：在 `_build_priority_fix` 中，任何 `benchmark_status == "within_benchmark"` 之指標一律排除於缺陷清單之外，絕不得作為缺陷或配發矯正 Drill。
+     - **7I Priority Fix 真實歸屬**：排除常模內節奏後，7I 唯一真實缺陷為 `address_spine_tilt`（User 27.1° vs Ref 35.6°，偏直立 -8.5°，常模 36~44°，`outside_benchmark`），精準配發「站姿髖關節鉸鏈（Hip Hinge）前傾設定 Drill」，完全符合運動學與教練事實。
+2. **P1：Optimal 語意校準（解耦吻合與最優，杜絕假最優）**：`PASS`
+   - **相近不等於最優**：在 Driver 站姿前傾角（`address_spine_tilt`）中，User = 27.1°，Ref = 26.9°，Delta = +0.2°，雙方數值高度相符但均低於常模 36~44°。
+   - **狀態與評述校準**：系統不再標記為 `optimal`，而是標註為 `status = "aligned"`，說明文字客觀指出「與示範選手數值高度相符（差距僅 +0.2°），但目前數值（27.1°）在實驗性參考區間（36.0° ~ 44.0°）之外」，絕不以假最優誤導用戶。只有當數值在參考區間內且高度吻合時，方可判定為 `optimal`。
+3. **P1：前端展示雙軸結果（Dual-Axis Presentation）**：`PASS`
+   - 在 `SwingComparisonPlayer.tsx` 量化比較表中：
+     - 理論常模參考欄位下方展示：常模狀態標籤（`區間內 (In Range)` / `區間外 (Out of Range)`）。
+     - 幾何差異欄位下方展示：示範相對標籤（`吻合 (Aligned)` / `微差 (Moderate)` / `顯著 (Significant)`）。
+     - 表頭標記 `理論常模參考*`，並在表尾附註「* 實驗性參考區間僅供對照觀察，非職業教練認證或唯一揮桿標準」，維持原排版風格無冗餘改版。
+4. **P1：6 大專項回歸測試完整覆蓋**：`PASS`
+   - `test_regression_case_1_user_in_benchmark_ref_out_large_diff`：使用者在區間內、示範在區間外，不得判定為缺陷，不得配發 Drill。
+   - `test_regression_case_2_both_outside_benchmark_but_close`：使用者與示範均超出區間但相近，不得標為 optimal，應為 aligned 且說明超出區間。
+   - `test_regression_case_3_both_within_benchmark_and_aligned`：兩者均在區間內且相符，判定為 optimal。
+   - `test_regression_case_4_insufficient_ref_data_no_drill`：示範資料不足或視角不合，禁止產生矯正 Drill。
+   - `test_regression_case_5_reference_switch_consistency`：示範切換後數值真實變更，不捏造假缺陷。
+   - `test_regression_case_6_priority_fix_consistent_with_evaluation_text`：優先改善重點不得與同一指標客觀評述文字矛盾。
+5. **全量驗收與測試通過**：`PASS`
+   - 專項測試：`tests/test_quantitative_posture_comparison.py` **31 / 31 PASSED (100%)**。
+   - 後端全量測試：**135 / 135 PASSED (100%)**。
+   - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+   - 示範素材庫完整性：`scripts/verify_18_reference_swings.py` 18 / 18 示範資料庫記錄 100% 完整無缺。
+   - WebKit 原生視窗實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 7 大步驟 100% 全數通過（PASS），產出 10 張真實 WebKit 截圖存證與完整報告。
+
+## 前期重大里程碑狀態（Round 23: Golf Swing Lab R3 — Final Scientific Integrity & Merge Gate）
+
+## 前期重大里程碑狀態（Round 21: Golf Swing Lab R3 — Final Release Audit & PR #3 Merge Readiness）
+
+## 前期重大里程碑狀態（Round 20: Golf Swing Lab R3 — Final Geometry Integrity & Merge Gate）
+1. **P0-A 2D 影像長寬比等比例校正（Isotropic Coordinate Space）**：`PASS`
+   - 重構 `packages/analysis/posture_comparison.py`，全面實作等比例影像座標系轉換：
+     $$x_{\text{iso}} = x_{\text{norm}} \cdot \frac{W_{\text{display}}}{H_{\text{display}}} = x_{\text{norm}} \cdot A, \quad y_{\text{iso}} = y_{\text{norm}}$$
+   - 徹底根除 iPhone 直式（如 1080×1920, $A=0.5625$）與示範影片橫式（如 640×360, $A=1.7778$）之間直接使用歸一化座標造成高達 $20^\circ \sim 30^\circ$ 的幾何拉伸失真（實測相同 30° 前傾動作，未校正前角度差距高達 $27.75^\circ$，校正後真實差距降至 $<0.1^\circ$）。
+   - 支援 iPhone 影片旋轉 Metadata（90° / 270°）自動交換寬高，動態解析真實顯示長寬比。
+   - 尺度不變性（Scale Invariance）：實測 1080×1920 與 540×960（相同長寬比）在等比例座標系下前傾角與位移比誤差為 $0.00^\circ$。
+   - 軀幹長度正規化：所有位移與距離皆在等比例座標系下以雙肩中點至雙髖中點歐氏長度無量綱化，嚴禁未標定之公分或英吋。
+   - 缺少寬高或長寬比資訊時，系統優雅降級為 `status="insufficient_evidence"`、`delta=None`，絕不崩潰或妄斷差異。
+2. **P0-B 跨長寬比與解析度幾何不變性專項測試**：`PASS`
+   - `tests/test_quantitative_posture_comparison.py` 新增 4 項專項幾何測試：
+     - `test_cross_aspect_ratio_invariance_portrait_vs_landscape`: 直式 iPhone vs 橫式示範真實前傾角一致性驗證。
+     - `test_resolution_scaling_invariance`: 1080×1920 vs 540×960 尺度不變性驗證。
+     - `test_rotation_metadata_dimension_swap`: 1920×1080 帶 rotation: 90/270 自動對調直式驗證。
+     - `test_missing_resolution_graceful_handling`: 缺少長寬比時優雅降級驗證。
+3. **P0-C 時序邊界與事件互斥收緊**：`PASS`
+   - Top 與 Impact 互斥約束：實作 `forbidden_times`，Top 不得借用 Impact 影格，Impact 亦不得借用 Top 影格。單一影格影片中，Impact 找不到獨立影格時誠實回報缺少證據，絕不捏造相同姿勢。
+   - 移除所有假時間偏移：缺少 Top 或 Impact 時間碼時，絕不私自使用固定偏移（如 +333ms, +1200ms），相關指標誠實標記為 `insufficient_evidence`。
+   - 證據精確追蹤：`user_evidence` 與 `ref_evidence` 嚴格記錄選用影格時間碼與事件標註時間之誤差 `frame_time_error_ms`。
+4. **P1-A 量化可信度與元資料揭露**：`PASS`
+   - 報告元資料注入 `geometry_calibration` 物件（記錄雙方解析度、長寬比、座標系標籤與長寬比校正免責聲明）。
+   - 理論常模明確標註為「實驗性參考區間（非專業認證標準）」。
+5. **P1-B 前端 UI 幾何校正提示**：`PASS`
+   - `SwingComparisonPlayer.tsx` 整合 `geometry_calibration`，頂部即時呈現「📐 2D 影像長寬比等比例校正已啟用（Isotropic Coordinate Space）」徽章與雙方長寬比數值展示。
+6. **P1-C 端到端全量驗證與 WebKit 實測**：`PASS`
+   - 專項測試：`tests/test_quantitative_posture_comparison.py` 17 / 17 PASSED (100%)。
+   - 全套後端測試套件：**121 / 121 PASSED (100%)** in 210.96s。
+   - Next.js 15.5.28 正式建置：**9 / 9 靜態路由編譯無誤 (0 錯誤)**。
+   - macOS 原生 WebKit WKWebView 6 大步驟實測全數通過（PASS），產出真實截圖與報告 `docs/reports/swing_comparison_r3_report.json`。
+- **最後更新時間**：2026-10-30T18:05:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR PR REVIEW (嚴禁自行合併 main，等待使用者授權)**
+
+## 前期重大里程碑狀態（Round 19: Golf Swing Lab R3 — Real Pose Evidence & Offline Integrity 修復）
+1. **P0-A 真實 Pose 幾何量測與假常數徹底拔除**：`PASS`
+   - 重構 `packages/analysis/posture_comparison.py`，徹底移除所有寫死假常數（`ref_addr_tilt=40.0`, `ref_spine_delta=1.8`, `ref_head_top_pct=3.5`, `ref_tempo=3.0`, `user_hip_clear=11.5`, `ref_hip_clear=14.0`, `ref_finish_score=95.0` 等）。
+   - 純粹從雙方真實關鍵影格（`keyframes_json` / `landmarks`）計算，包含雙肩中點、雙髖中點、手腕中點、頭部鼻尖。
+   - 尺標正規化：以雙肩中點至雙髖中點之 2D 歐氏長度（軀幹長度 Torso Length）為標準尺規進行無量綱計算（手腕高度比、頭部位移比、骨盆深度位移比），嚴禁未標定之公分或英吋。
+   - 缺少 Pose 或關鍵點可見度不足（< 0.35）時，一律誠實標註為 `N/A`、`status="insufficient_evidence"`，絕不湊數。
+   - 鏡頭視角檢查：比對示範影片與使用者視角，非標準 DTL（如 LW 後斜、Putter 特寫）標註 `not_comparable`，不推算 2D 平面幾何差異。
+2. **P0-B 移除假標準與可信度動態分級**：`PASS`
+   - 理論常模分離：建立獨立欄位 `general_benchmark_range`（如站姿前傾 36°~44°、頂點維持 ≤4°、節奏比 2.7~3.3:1），與示範球員實際量測數值 (`ref_value`) 嚴格區隔。
+   - 可信度動態評定：`overall_reliability` 不再固定為 `high`，而是依有效比對指標數與平均信心度動態評估（high/moderate/low/unreliable）。
+   - 恪守誠信：明確標記 2D 平面幾何量測限制，禁止由單一 2D 變化妄斷 3D 力學。
+3. **P0-C Reference 選擇嚴格跟隨使用者指定，杜絕隱性 Fallback**：`PASS`
+   - 修改 `apps/api/main.py` 之 `get_swing_posture_comparison`：當使用者指定 `ref_id` 或 `club_type` 時嚴格檢索，若無對應示範影片**絕不偷偷 fallback 到 7I**，而是回傳 `overall_status="reference_missing"` 與提示。
+   - 預設查詢球桿示範時優先挑選具備真實骨架關鍵點之正式示範（`order_by(desc(is_default), desc(imported_at))`）。
+4. **P0-D Priority Fix 唯一改善重點建立在真實證據上**：`PASS`
+   - 只有在 `is_comparable=True`、`is_reliable=True` 且落入 `significant_diff` 或 `moderate_diff` 時才選出改善重點並產出 Drill。
+   - 各項指標都在相容區間內或證據不足時，`priority_fix_id` 誠實回傳 `None`，提示無顯著幾何異常或證據不足，絕不編造假缺陷與隨機 Drill。
+5. **P1-A 離線守衛加固與 Fail-Closed 阻斷**：`PASS`
+   - 於 `packages/analysis/coach.py` 實作 `is_external_llm_allowed()`，當 `enable_external_llm=False` 或組態載入例外時 Fail-Closed 阻斷。
+   - 徹底移除 `and self.transport is None` 繞過漏洞，即使外部傳入 transport 或 API Key 亦 100% 阻斷外部連線。
+   - `tests/test_offline_llm_guard.py` 新增阻斷與例外防禦測試，**9 / 9 PASSED (100%)**。
+6. **P1-B 慢動作示範素材節奏保護**：`PASS`
+   - 示範素材若為慢動作 (`is_slow_motion=True`)，其 tempo 明確標示為 `N/A (慢動作素材不提供假Tempo)`，不推算假數值。
+7. **P1-C 自動化驗收與品質保證**：`PASS`
+   - `tests/test_quantitative_posture_comparison.py` 全面重構並擴充 9 項專項測試，**9 / 9 PASSED (100%)**。
+   - 全套後端測試套件：**113 / 113 PASSED (100%)** in 206.28s。
+   - Next.js 15.5.28 正式建置：**9/9 靜態路由編譯無誤 (0 錯誤)**。
+   - WebKit 原生端到端實測：`scripts/verify_webkit_r3_slowmo_and_coach.py` 6 大步驟全數通過（PASS），產出真實截圖與報告 `docs/reports/swing_comparison_r3_report.json`。
+- **最後更新時間**：2026-10-30T13:15:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR PR REVIEW (嚴禁自行合併 main，等待使用者授權)**
+
+## 前期重大里程碑狀態（Round 18: Golf Swing Lab R3 — 離線量化姿勢教練與慢動作雙影片比較）
+1. **P0 離線守衛與全域外部 LLM 請求阻斷**：`PASS`
+   - 後端統一定義 `GSL_ENABLE_EXTERNAL_LLM=false`（`apps/api/config.py`）。
+   - `packages/analysis/coach.py` 中 `OpenAICompatibleCoachProvider` 與 `GeminiCoachProvider` 全面防禦攔截，未顯式設定時一律安全回退為 `RuleBasedCoachProvider`，禁止任何對外 HTTP 請求。
+   - `generate_deep_vision_insight` 強制回退為規則式幾何運動學解析，絕不發起外部 Vision 呼叫。
+   - `/api/settings` 即時回傳離線狀態，前端設定頁透明顯示「本機離線模式（無外部 LLM 請求）」。
+   - 單元測試 `tests/test_offline_llm_guard.py` 6/6 全數通過。
+2. **P1 雙影片同步慢動作播放器升級**：`PASS`
+   - 速度選項：`0.25× 超慢`, `0.5× 慢放 (預設)`, `0.75× 慢速`, `1.0× 原速`，附「↺ 回復 1.0×」。
+   - 切換速度不暫停、不重載、不跳回 0 秒、不重設 pan/zoom、不遺失 Top/Impact 對齊、保留重播循環。
+   - 控制模式分離：雙影片同步模式（Play 同步推進、時鐘平滑追趕）vs 獨立檢視模式（單側獨立操作，自動停用漂移校正），附「🔗 一鍵回到雙影片同步」。
+   - 一鍵停格比對：「🎯 Top 停格比對」與「💥 Impact 停格比對」，精準跳轉並暫停於頂點與擊球瞬間。
+   - 骨架標記開關：「🦴 骨架標記：開啟 / 隱藏」按鈕，自由切換 Clean Motion Canvas 疊圖與真實解碼畫面。
+   - 長寬比防拉伸：全面採用 `object-contain`，配合雙側獨立 Zoom/Pan，保護原始相機幾何比例。
+3. **P2 離線量化姿勢比較表與慢放跳轉**：`PASS`
+   - 核心量化比較引擎 `packages/analysis/posture_comparison.py`，涵蓋 4 大階段（Address, Top, Impact, Finish）8 項可觀測運動學指標（脊柱前傾、手腕基準高度、頂點前傾角、頭部相對位移比例、擊球前傾變化、節奏比、收桿直立角、收桿平衡晃動比）。
+   - 後端 API 端點 `GET /api/swings/{swing_id}/posture-comparison` 回傳結構化差異與信賴區間。
+   - 前端量化表格清晰展示我的數值、示範數值、差異、可信度與「▶ 慢放跳轉」。點擊按鈕自動精準定位至該階段並以 0.5x 慢動作播放。
+4. **P3 Priority Fix 唯一改善重點與 Drill 練習**：`PASS`
+   - 智慧演算法過濾選定單一最核心改善項目，提供「體感口訣」、「三步驟 Drill 練習」與「下次量化目標」。
+   - 恪守最高誠信原則：嚴禁推論未經雷達量測之球速、桿頭速度、飛行距離、甜蜜點、桿面角與 3D 角度。
+5. **WebKit 原生端到端 GUI 實測**：`PASS`
+   - 執行 `scripts/verify_webkit_r3_slowmo_and_coach.py`，6/6 步驟全數通過。
+   - 雙影片 0.5x 慢動作同步播放推進流暢，Top/Impact 停格對齊誤差 0ms，Priority Fix 卡片與姿勢比較表成功渲染。
+   - 驗收報告存於 `docs/reports/swing_comparison_r3_report.json`。
+6. **全套後端測試套件**：`PASS`
+   - 執行 `uv run pytest tests/` 全數 PASSED。
+- **最後更新時間**：2026-10-30T03:10:00+08:00
+- **當前分支**：`feat/r3-offline-coach-and-slow-motion`
+- **正式判定**：**READY FOR PR REVIEW (嚴禁自行合併 main，等待使用者授權)**
+
+## 前期重大里程碑狀態（Round 17: PR #2 正式授權合併、Mac 原生 App 更新與 Personal Beta 正式部署）
 1. **GitHub PR #2 Squash and Merge**：`PASS`
    - 依專案負責人明確授權，執行 `gh pr merge 2 --squash`。
    - PR #2 成功合併至 `main` 分支。

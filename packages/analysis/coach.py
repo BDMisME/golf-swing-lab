@@ -217,6 +217,20 @@ class RuleBasedCoachProvider:
         )
 
 
+def is_external_llm_allowed() -> bool:
+    """
+    全域離線守衛：
+    嚴格遵循產品設定。只要 enable_external_llm 為 False，或設定載入失敗（Fail-Closed），
+    一律回傳 False，禁止任何外部 LLM 網路請求（不論是否配置 transport 或 api_key）。
+    """
+    try:
+        from apps.api.config import get_settings
+        return bool(get_settings().enable_external_llm)
+    except Exception:
+        # 設定載入失敗時 Fail-Closed，絕對拒絕外部呼叫
+        return False
+
+
 class OpenAICompatibleCoachProvider:
     """
     相容 OpenAI Chat Completions 之可插拔 LLM 教練 Provider。
@@ -250,6 +264,8 @@ class OpenAICompatibleCoachProvider:
         keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport:
         base_report = await self.fallback.generate_feedback(session_summary, swing_evidence, keyframe_images)
+        if not is_external_llm_allowed():
+            return base_report
         if not self.api_key or self.max_budget_usd <= 0:
             return base_report
 
@@ -434,6 +450,8 @@ class GeminiCoachProvider:
         keyframe_images: list[dict[str, Any]] | None = None,
     ) -> CoachReport:
         base_report = await self.fallback.generate_feedback(session_summary, swing_evidence, keyframe_images)
+        if not is_external_llm_allowed():
+            return base_report
         if not self.api_key:
             return base_report
 
@@ -679,6 +697,10 @@ def generate_deep_vision_insight(
     針對使用者點選的單一動作差異，產出結構化之深度運動學解讀。
     若無外部多模態模型，明確標註為 rule_based_advice，絕不冒充 AI 已看過影像。
     """
+    if not is_external_llm_allowed():
+        llm_provider = None
+        keyframe_images = None
+
     phase_zh = {
         "address": "準備姿勢 (Address)",
         "takeaway": "起桿 (Takeaway)",

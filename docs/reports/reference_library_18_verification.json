@@ -338,6 +338,78 @@
       }
     },
     {
+      "id": "8528adee-06ff-4e3f-842f-c1641ab712e9",
+      "club_type": "Driver",
+      "title": "開球木桿打擊區特寫 (Driver Strike Close-up)",
+      "storage_key": "references/driver/pexels_driver_6541451.mp4",
+      "file_exists": true,
+      "file_size_bytes": 961947,
+      "codec": "h264",
+      "resolution": "1280x720",
+      "fps": "25/1",
+      "top_event_ms": 2100,
+      "impact_event_ms": 2500,
+      "impact_status": "confirmed_strike",
+      "event_source": "fixture_default",
+      "tempo_ratio": "3.0:1",
+      "sync_compatible": true,
+      "active_events": {
+        "address": 500,
+        "takeaway": 1200,
+        "top": 2100,
+        "downswing": 2350,
+        "impact": 2500,
+        "follow_through": 3100,
+        "finish": 4200
+      },
+      "has_candidate_events": false,
+      "six_dimensions": {
+        "media_processed": true,
+        "pose_analyzed": true,
+        "is_valid_clip": true,
+        "events_reliable": true,
+        "supports_realtime_sync": true,
+        "supports_phase_sync": true
+      }
+    },
+    {
+      "id": "839c7956-72cc-48f7-abf6-a5fc60df966a",
+      "club_type": "Driver",
+      "title": "DJ Watts Driver DTL 示範",
+      "storage_key": "references/driver/ref_driver_01_Driver_clean.mp4",
+      "file_exists": true,
+      "file_size_bytes": 176663,
+      "codec": "h264",
+      "resolution": "640x360",
+      "fps": "30000/1001",
+      "top_event_ms": 1502,
+      "impact_event_ms": 1735,
+      "impact_status": "confirmed_strike",
+      "event_source": "developer_visual_annotated",
+      "tempo_ratio": "3.0:1",
+      "sync_compatible": true,
+      "active_events": {
+        "address": 734,
+        "takeaway": 1101,
+        "backswing": 1301,
+        "top": 1502,
+        "downswing": 1602,
+        "impact": 1735,
+        "follow_through": 2653,
+        "finish": 3570,
+        "downswing_ms": 233
+      },
+      "has_candidate_events": true,
+      "six_dimensions": {
+        "media_processed": true,
+        "pose_analyzed": true,
+        "is_valid_clip": true,
+        "events_reliable": true,
+        "supports_realtime_sync": true,
+        "supports_phase_sync": true
+      }
+    },
+    {
       "id": "9b08f5e5-cbbe-45be-86a6-093d8178031b",
       "club_type": "Driver",
       "title": "DJ Watts Driver MCS Classic 示範",
@@ -375,41 +447,6 @@
       }
     },
     {
-      "id": "8528adee-06ff-4e3f-842f-c1641ab712e9",
-      "club_type": "Driver",
-      "title": "開球木桿打擊區特寫 (Driver Strike Close-up)",
-      "storage_key": "references/driver/pexels_driver_6541451.mp4",
-      "file_exists": true,
-      "file_size_bytes": 961947,
-      "codec": "h264",
-      "resolution": "1280x720",
-      "fps": "25/1",
-      "top_event_ms": 2100,
-      "impact_event_ms": 2500,
-      "impact_status": "confirmed_strike",
-      "event_source": "fixture_default",
-      "tempo_ratio": "3.0:1",
-      "sync_compatible": true,
-      "active_events": {
-        "address": 500,
-        "takeaway": 1200,
-        "top": 2100,
-        "downswing": 2350,
-        "impact": 2500,
-        "follow_through": 3100,
-        "finish": 4200
-      },
-      "has_candidate_events": false,
-      "six_dimensions": {
-        "media_processed": true,
-        "pose_analyzed": true,
-        "is_valid_clip": true,
-        "events_reliable": true,
-        "supports_realtime_sync": true,
-        "supports_phase_sync": true
-      }
-    },
-    {
       "id": "bb0f79da-9375-4d43-9f9e-56a5b037adc8",
       "club_type": "Driver",
       "title": "Louis Golf 開球木桿 DTL 示範 (直式)",
@@ -435,43 +472,6 @@
         "follow_through": 2200,
         "finish": 2667,
         "downswing_ms": 366
-      },
-      "has_candidate_events": true,
-      "six_dimensions": {
-        "media_processed": true,
-        "pose_analyzed": true,
-        "is_valid_clip": true,
-        "events_reliable": true,
-        "supports_realtime_sync": true,
-        "supports_phase_sync": true
-      }
-    },
-    {
-      "id": "839c7956-72cc-48f7-abf6-a5fc60df966a",
-      "club_type": "Driver",
-      "title": "DJ Watts Driver DTL 示範",
-      "storage_key": "references/driver/ref_driver_01_Driver_clean.mp4",
-      "file_exists": true,
-      "file_size_bytes": 176663,
-      "codec": "h264",
-      "resolution": "640x360",
-      "fps": "30000/1001",
-      "top_event_ms": 1502,
-      "impact_event_ms": 1735,
-      "impact_status": "confirmed_strike",
-      "event_source": "developer_visual_annotated",
-      "tempo_ratio": "3.0:1",
-      "sync_compatible": true,
-      "active_events": {
-        "address": 734,
-        "takeaway": 1101,
-        "backswing": 1301,
-        "top": 1502,
-        "downswing": 1602,
-        "impact": 1735,
-        "follow_through": 2653,
-        "finish": 3570,
-        "downswing_ms": 233
       },
       "has_candidate_events": true,
       "six_dimensions": {
@@ -595,43 +595,6 @@
       }
     },
     {
-      "id": "d4559355-1978-4bf5-9bdd-aff740b7f74f",
-      "club_type": "SW",
-      "title": "Milo Lines SW 90碼 Pitch 慢動作示範",
-      "storage_key": "references/sw/ref_sw_15_SW_clean.mp4",
-      "file_exists": true,
-      "file_size_bytes": 97093,
-      "codec": "h264",
-      "resolution": "640x360",
-      "fps": "30000/1001",
-      "top_event_ms": 2603,
-      "impact_event_ms": 3136,
-      "impact_status": "confirmed_strike",
-      "event_source": "developer_visual_annotated",
-      "tempo_ratio": "3.0:1",
-      "sync_compatible": true,
-      "active_events": {
-        "address": 767,
-        "takeaway": 1668,
-        "backswing": 2135,
-        "top": 2603,
-        "downswing": 2870,
-        "impact": 3136,
-        "follow_through": 3237,
-        "finish": 3337,
-        "downswing_ms": 533
-      },
-      "has_candidate_events": true,
-      "six_dimensions": {
-        "media_processed": true,
-        "pose_analyzed": true,
-        "is_valid_clip": true,
-        "events_reliable": true,
-        "supports_realtime_sync": false,
-        "supports_phase_sync": true
-      }
-    },
-    {
       "id": "572847b6-939a-451f-956a-396396a804b7",
       "club_type": "SW",
       "title": "Trillium Rose 沙坑 SW 示範",
@@ -665,6 +628,43 @@
         "is_valid_clip": true,
         "events_reliable": true,
         "supports_realtime_sync": true,
+        "supports_phase_sync": true
+      }
+    },
+    {
+      "id": "d4559355-1978-4bf5-9bdd-aff740b7f74f",
+      "club_type": "SW",
+      "title": "Milo Lines SW 90碼 Pitch 慢動作示範",
+      "storage_key": "references/sw/ref_sw_15_SW_clean.mp4",
+      "file_exists": true,
+      "file_size_bytes": 97093,
+      "codec": "h264",
+      "resolution": "640x360",
+      "fps": "30000/1001",
+      "top_event_ms": 2603,
+      "impact_event_ms": 3136,
+      "impact_status": "confirmed_strike",
+      "event_source": "developer_visual_annotated",
+      "tempo_ratio": "3.0:1",
+      "sync_compatible": true,
+      "active_events": {
+        "address": 767,
+        "takeaway": 1668,
+        "backswing": 2135,
+        "top": 2603,
+        "downswing": 2870,
+        "impact": 3136,
+        "follow_through": 3237,
+        "finish": 3337,
+        "downswing_ms": 533
+      },
+      "has_candidate_events": true,
+      "six_dimensions": {
+        "media_processed": true,
+        "pose_analyzed": true,
+        "is_valid_clip": true,
+        "events_reliable": true,
+        "supports_realtime_sync": false,
         "supports_phase_sync": true
       }
     }

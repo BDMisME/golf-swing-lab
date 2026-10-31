@@ -45,9 +45,11 @@ from apps.api.models import (
     User,
     UserSetting,
     Video,
+    ReferenceSwing,
 )
 from apps.api.routers.audit import router as audit_router
 from apps.api.routers.reference_swings import router as reference_swings_router
+from packages.analysis.posture_comparison import compute_quantitative_posture_comparison
 from apps.api.schemas import (
     CreateExportRequest,
     CreateManualSwingRequest,
@@ -1245,6 +1247,16 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
     event_map = {e.event_name: e.time_ms for e in events}
 
     video_row = db.get(Video, seg.video_id)
+    coded_w = video_row.width if video_row else 0
+    coded_h = video_row.height if video_row else 0
+    vrot = (video_row.rotation or 0) if video_row else 0
+
+    if vrot in (90, 270, -90, -270) and coded_w > 0 and coded_h > 0:
+        disp_w, disp_h = coded_h, coded_w
+    else:
+        disp_w, disp_h = coded_w, coded_h
+    aspect_val = round(disp_w / disp_h, 4) if (disp_w > 0 and disp_h > 0) else None
+
     cov_val = score.coverage if score else 0.0
     q_meta = (artifact.quality_metadata if artifact and artifact.quality_metadata else {}) or {}
     r_flags = seg.review_flags_json or []
@@ -1259,6 +1271,16 @@ def _serialize_segment(db: Session, seg: SwingSegment, include_detail: bool = Fa
         "id": seg.id,
         "video_id": seg.video_id,
         "session_id": video_row.session_id if video_row else "",
+        "coded_width": coded_w,
+        "coded_height": coded_h,
+        "display_width": disp_w,
+        "display_height": disp_h,
+        "display_aspect_ratio": aspect_val,
+        "is_display_dimensions": True,
+        "video_width": disp_w,
+        "video_height": disp_h,
+        "video_rotation": vrot,
+        "aspect_ratio": aspect_val,
         "sequence_no": seg.sequence_no,
         "start_ms": seg.start_ms,
         "end_ms": seg.end_ms,
@@ -1544,6 +1566,85 @@ def get_swing_detail(
     return _serialize_segment(db, seg, include_detail=True)
 
 
+@app.get("/api/swings/{swing_id}/posture-comparison")
+def get_swing_posture_comparison(
+    swing_id: str,
+    ref_id: str | None = Query(None, description="特定示範揮桿 ID"),
+    club_type: str | None = Query(None, description="球桿分類篩選"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    R3: 離線量化姿勢比較端點 (Offline Quantitative Posture Comparison)
+    回傳 4 大階段（Address, Top, Impact, Finish）客觀可解釋的 2D 骨架與運動學差異。
+    """
+    seg = db.get(SwingSegment, swing_id)
+    if not seg:
+        raise APIError(404, "SWING_NOT_FOUND", "找不到指定的揮桿片段")
+    verify_owner(db, current_user, seg.owner_id, "swing_segment", seg.id)
+
+    ref = None
+    target_club = club_type
+
+    if ref_id:
+        # 使用者指定特定 Reference ID 時，嚴格依該 ID 檢索，不存在則不 fallback
+        ref = db.get(ReferenceSwing, ref_id)
+        if ref:
+            target_club = ref.club_type
+    elif club_type:
+        # 使用者指定球桿時，僅在該球桿類別中尋找預設或合格示範，絕不跨球桿 fallback
+        ref = db.scalar(
+            select(ReferenceSwing)
+            .where(ReferenceSwing.club_type == club_type)
+            .order_by(desc(ReferenceSwing.is_default), desc(ReferenceSwing.imported_at))
+        )
+    else:
+        # 預設依揮桿所屬場次之球桿尋找
+        sess = db.get(PracticeSession, seg.video.session_id) if (seg.video and seg.video.session_id) else None
+        target_club = getattr(sess, "club", "7I") or "7I"
+        ref = db.scalar(
+            select(ReferenceSwing)
+            .where(ReferenceSwing.club_type == target_club)
+            .order_by(desc(ReferenceSwing.is_default), desc(ReferenceSwing.imported_at))
+        )
+
+    ref_calib = dict(ref.calibration_params or {}) if ref else {}
+    ref_w = ref_calib.get("video_width") or 0
+    ref_h = ref_calib.get("video_height") or 0
+    ref_rot = ref_calib.get("video_rotation") or 0
+    ref_aspect = ref_calib.get("aspect_ratio")
+
+    if ref_rot in (90, 270, -90, -270) and ref_w > 0 and ref_h > 0:
+        if not ref_calib.get("is_display_dimensions"):
+            ref_disp_w, ref_disp_h = ref_h, ref_w
+        else:
+            ref_disp_w, ref_disp_h = ref_w, ref_h
+    else:
+        ref_disp_w, ref_disp_h = ref_w, ref_h
+    ref_aspect_val = ref_aspect or (round(ref_disp_w / ref_disp_h, 4) if (ref_disp_w > 0 and ref_disp_h > 0) else None)
+
+    ref_dict = {
+        "id": ref.id if ref else "",
+        "club_type": target_club or "7I",
+        "title": ref.title if ref else "",
+        "camera_angle": ref.camera_angle if ref else "DTL",
+        "event_timestamps": ref.event_timestamps if ref else {},
+        "calibration_params": ref_calib,
+        "pose_artifact": ref.pose_artifact if ref else {},
+        "display_width": ref_disp_w,
+        "display_height": ref_disp_h,
+        "display_aspect_ratio": ref_aspect_val,
+        "is_display_dimensions": True,
+        "video_width": ref_disp_w,
+        "video_height": ref_disp_h,
+        "video_rotation": ref_rot,
+        "aspect_ratio": ref_aspect_val,
+    }
+    user_serialized = _serialize_segment(db, seg, include_detail=True)
+    report = compute_quantitative_posture_comparison(user_serialized, ref_dict)
+    return report.model_dump()
+
+
 @app.post("/api/swings/{swing_id}/deep-insight")
 def get_swing_deep_insight(
     swing_id: str,
@@ -1818,7 +1919,7 @@ async def get_session_report(
     }
 
     coach_provider: GolfCoachProvider
-    if provider_type == "gemini" and api_key:
+    if s_cfg.enable_external_llm and provider_type == "gemini" and api_key:
         chosen_model = (
             (user_setting.llm_model.strip() if user_setting and user_setting.llm_model else None)
             or s_cfg.gemini_model
@@ -1828,7 +1929,7 @@ async def get_session_report(
             api_key=api_key,
             model=chosen_model,
         )
-    elif provider_type == "openai-compatible" and api_key:
+    elif s_cfg.enable_external_llm and provider_type == "openai-compatible" and api_key:
         coach_provider = OpenAICompatibleCoachProvider(
             api_key=api_key,
             base_url=(user_setting.llm_base_url if user_setting else s_cfg.llm_base_url),
@@ -1839,7 +1940,8 @@ async def get_session_report(
         coach_provider = RuleBasedCoachProvider()
 
     regenerate = request.query_params.get("regenerate") in ("true", "1")
-    cache_key = f"{sess.id}:{len(serialized_swings)}:{provider_type}"
+    active_provider = provider_type if s_cfg.enable_external_llm else "none"
+    cache_key = f"{sess.id}:{len(serialized_swings)}:{active_provider}"
 
     if not regenerate and cache_key in _COACH_REPORT_CACHE:
         coach_report_data = _COACH_REPORT_CACHE[cache_key]
@@ -2047,6 +2149,8 @@ def get_user_settings(
         "llm_model": st.llm_model,
         "has_llm_api_key": bool(st.llm_api_key_secret or get_settings().llm_api_key),
         "llm_consent_frames": st.llm_consent_frames,
+        "enable_external_llm": get_settings().enable_external_llm,
+        "coach_mode": "offline" if not get_settings().enable_external_llm else "external_allowed",
     }
 
 

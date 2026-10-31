@@ -19,6 +19,7 @@ import {
   SyncAnchor,
   SyncMode,
 } from "@/lib/syncEngine";
+import { CleanMotionOverlay } from "@/components/CleanMotionOverlay";
 
 export interface ReferenceSwingData {
   id: string;
@@ -54,7 +55,6 @@ export interface ReferenceSwingData {
   is_default: boolean;
   notes: string;
   stream_url: string;
-  // 六維度技術狀態旗標
   media_processed?: boolean;
   pose_analyzed?: boolean;
   is_valid_clip?: boolean;
@@ -68,6 +68,89 @@ export interface ClubCatalogItem {
   status: "available" | "missing_reference";
   reference_count: number;
   default_reference?: ReferenceSwingData | null;
+}
+
+export interface PostureMetricItem {
+  id: string;
+  phase: string;
+  phase_zh?: string;
+  phase_label?: string;
+  metric_name?: string;
+  name?: string;
+  user_value: number | null;
+  user_value_display?: string;
+  ref_value: number | null;
+  ref_value_display?: string;
+  delta?: number | null;
+  delta_display?: string;
+  diff?: number | null;
+  unit: string;
+  general_benchmark_range?: string;
+  description?: string;
+  evaluation_text?: string;
+  confidence?: number;
+  reliability?: "high" | "medium" | "low" | "unreliable";
+  is_reliable?: boolean;
+  is_comparable?: boolean;
+  target_jump_ms?: number;
+  target_ms?: number;
+  status: "optimal" | "moderate_diff" | "significant_diff" | "insufficient_evidence" | "not_comparable" | "good" | "warning" | "needs_work" | "unknown";
+}
+
+export interface PriorityFixItem {
+  phase?: string;
+  metric_name?: string;
+  focus_area?: string;
+  diff_str?: string;
+  delta?: string;
+  reliability?: string;
+  confidence?: number;
+  advice?: string;
+  summary?: string;
+  drill_name?: string;
+  drill_steps?: string[];
+  drill?: {
+    name: string;
+    preparation: string;
+    execution: string;
+    checkpoint: string;
+  };
+  retest_target?: string;
+  target?: string;
+}
+
+export interface QuantitativePostureReport {
+  user_swing_id?: string;
+  swing_id?: string;
+  ref_swing_id?: string | null;
+  ref_id?: string;
+  ref_title?: string;
+  club_type: string;
+  overall_status?: string;
+  is_offline_mode: boolean;
+  overall_reliability: string;
+  metrics: PostureMetricItem[];
+  priority_fix?: PriorityFixItem;
+  priority_fix_summary?: string | null;
+  actionable_drill?: any;
+  retest_metric_target?: string | null;
+  camera_compatibility?: {
+    user_camera?: string;
+    ref_camera?: string;
+    is_compatible?: boolean;
+    reason?: string;
+  };
+  geometry_calibration?: {
+    is_aspect_corrected?: boolean;
+    user_resolution?: string;
+    user_aspect_ratio?: number;
+    ref_resolution?: string;
+    ref_aspect_ratio?: number;
+    coordinate_system?: string;
+    disclaimer?: string;
+  };
+  disclaimer: string;
+  truthfulness_notice?: string;
 }
 
 interface SwingComparisonPlayerProps {
@@ -84,6 +167,13 @@ const ALL_CLUBS = [
   "Putter",
 ];
 
+const SPEED_OPTIONS = [
+  { label: "0.25× 超慢", value: 0.25 },
+  { label: "0.5× 慢放", value: 0.5 },
+  { label: "0.75× 慢速", value: 0.75 },
+  { label: "1.0× 原速", value: 1.0 },
+];
+
 export function SwingComparisonPlayer({
   userSwing,
   defaultClub = "7I",
@@ -96,16 +186,20 @@ export function SwingComparisonPlayer({
   const [loading, setLoading] = useState<boolean>(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
-  // 2. 佈局與播放控制狀態
+  // 2. 佈局與播放控制狀態 (R3: 預設 0.5x 慢動作播放，支援同步與獨立模式)
   const [layout, setLayout] = useState<ComparisonLayout>("side_by_side");
   const [syncMode, setSyncMode] = useState<SyncMode>("real_time");
   const [syncAnchor, setSyncAnchor] = useState<SyncAnchor>("impact");
   const [manualOffsetMs, setManualOffsetMs] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLooping, setIsLooping] = useState<boolean>(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(0.5); // 預設 0.5x 慢放
   const [ghostOpacity, setGhostOpacity] = useState<number>(0.5);
-  const [showIndividualControls, setShowIndividualControls] = useState<boolean>(false);
+
+  // 控制模式：同步控制 vs 獨立檢視
+  const [controlMode, setControlMode] = useState<"sync" | "independent">("sync");
+  const [userSpeed, setUserSpeed] = useState<number>(0.5);
+  const [refSpeed, setRefSpeed] = useState<number>(0.5);
 
   // 3. 畫面對齊 (Auto-Framing & Manual Calibration)
   const [calibration, setCalibration] = useState<FramingCalibration>({
@@ -116,15 +210,28 @@ export function SwingComparisonPlayer({
   });
   const [autoFramingStatus, setAutoFramingStatus] = useState<AutoFramingResult | null>(null);
 
-  // 4. 當前播放時間 (ms)
+  // 個人影片 Zoom & Pan
+  const [userZoom, setUserZoom] = useState<number>(1.0);
+  const [userOffsetX, setUserOffsetX] = useState<number>(0);
+  const [userOffsetY, setUserOffsetY] = useState<number>(0);
+
+  // 4. 骨架顯示開關
+  const [showSkeleton, setShowSkeleton] = useState<boolean>(true);
+
+  // 5. 當前播放時間 (ms)
   const [userCurrentMs, setUserCurrentMs] = useState<number>(userSwing.start_ms);
   const [refCurrentMs, setRefCurrentMs] = useState<number>(0);
 
-  // 5. 影片 Element 參照
+  // 6. 影片 Element 參照
   const userVideoRef = useRef<HTMLVideoElement | null>(null);
   const refVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 6. 手動匯入 / 上傳 Modal 狀態
+  // 7. 量化姿勢比較報告狀態 (P2)
+  const [postureReport, setPostureReport] = useState<QuantitativePostureReport | null>(null);
+  const [postureLoading, setPostureLoading] = useState<boolean>(false);
+  const [postureError, setPostureError] = useState<string | null>(null);
+
+  // 8. 手動匯入 / 上傳 Modal 狀態
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
   const [importMode, setImportMode] = useState<"path" | "file">("file");
   const [importFilePath, setImportFilePath] = useState<string>("");
@@ -136,7 +243,7 @@ export function SwingComparisonPlayer({
   const [importing, setImporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  // 7. 載入 17 種球桿目錄與當前球桿示範影片
+  // 載入 17 種球桿目錄與當前球桿示範影片
   const fetchCatalog = useCallback(async () => {
     try {
       setLoading(true);
@@ -187,6 +294,30 @@ export function SwingComparisonPlayer({
       setRefSwing(null);
     }
   };
+
+  // 載入離線量化姿勢比較報告 (P2)
+  const fetchPostureComparison = useCallback(async () => {
+    try {
+      setPostureLoading(true);
+      setPostureError(null);
+      const queryParams = new URLSearchParams();
+      if (refSwing?.id) queryParams.set("ref_id", refSwing.id);
+      queryParams.set("club_type", selectedClub);
+
+      const res = await apiFetch<QuantitativePostureReport>(
+        `/api/swings/${userSwing.id}/posture-comparison?${queryParams.toString()}`
+      );
+      setPostureReport(res);
+    } catch (err: any) {
+      setPostureError(err.message || "載入量化姿勢比較失敗");
+    } finally {
+      setPostureLoading(false);
+    }
+  }, [userSwing.id, refSwing?.id, selectedClub]);
+
+  useEffect(() => {
+    fetchPostureComparison();
+  }, [fetchPostureComparison]);
 
   // 建立兩方時間軸對照模型
   const userTimeline = useMemo<SwingTimingTimeline>(() => {
@@ -247,7 +378,7 @@ export function SwingComparisonPlayer({
     };
   }, [refSwing]);
 
-  // 檢核 Phase Sync 是否合法（若示範片無事件標籤，強制降級為 real_time）
+  // 檢核 Phase Sync 是否合法
   const phaseValidation = useMemo(() => {
     return SwingSynchronizationEngine.validatePhaseTimeline(refTimeline);
   }, [refTimeline]);
@@ -322,8 +453,9 @@ export function SwingComparisonPlayer({
     if (uVid.currentTime < targetSec - 0.1 || uVid.currentTime > userTimeline.endMs / 1000) {
       uVid.currentTime = targetSec;
     }
+    uVid.playbackRate = controlMode === "independent" ? userSpeed : playbackSpeed;
     setUserCurrentMs(userTimeline.startMs);
-  }, [userTimeline.startMs, userTimeline.endMs]);
+  }, [userTimeline.startMs, userTimeline.endMs, controlMode, userSpeed, playbackSpeed]);
 
   const handleRefLoadedMetadata = useCallback(() => {
     const rVid = refVideoRef.current;
@@ -333,10 +465,11 @@ export function SwingComparisonPlayer({
     if (Math.abs(rVid.currentTime - targetSec) > 0.1) {
       rVid.currentTime = targetSec;
     }
+    rVid.playbackRate = controlMode === "independent" ? refSpeed : playbackSpeed;
     setRefCurrentMs(targetRefMs);
-  }, [refSwing, userTimeline.startMs, computeExpectedRefMs]);
+  }, [refSwing, userTimeline.startMs, computeExpectedRefMs, controlMode, refSpeed, playbackSpeed]);
 
-  // 當 userSwing.id 或 selectedClub 改變時，主動確保定位在 startMs
+  // 切換揮桿或球桿時重置定位
   const prevSwingKeyRef = useRef<string>(`${userSwing.id}_${selectedClub}`);
   useEffect(() => {
     const currentKey = `${userSwing.id}_${selectedClub}`;
@@ -345,16 +478,31 @@ export function SwingComparisonPlayer({
       const uVid = userVideoRef.current;
       if (uVid && uVid.readyState >= 1) {
         uVid.currentTime = userTimeline.startMs / 1000;
+        uVid.playbackRate = controlMode === "independent" ? userSpeed : playbackSpeed;
         setUserCurrentMs(userTimeline.startMs);
       }
       const rVid = refVideoRef.current;
       if (rVid && rVid.readyState >= 1 && refSwing) {
         const targetRefMs = computeExpectedRefMs(userTimeline.startMs);
         rVid.currentTime = targetRefMs / 1000;
+        rVid.playbackRate = controlMode === "independent" ? refSpeed : playbackSpeed;
         setRefCurrentMs(targetRefMs);
       }
     }
-  }, [userSwing.id, selectedClub, refSwing, userTimeline.startMs, computeExpectedRefMs]);
+  }, [userSwing.id, selectedClub, refSwing, userTimeline.startMs, computeExpectedRefMs, controlMode, userSpeed, refSpeed, playbackSpeed]);
+
+  // 慢動作速度變更控制 (P1: 不暫停、不 reload、不跳 0、不重設 zoom/pan)
+  const handleSpeedChange = (speed: number) => {
+    setPlaybackSpeed(speed);
+    const uVid = userVideoRef.current;
+    const rVid = refVideoRef.current;
+    if (uVid) {
+      uVid.playbackRate = speed;
+    }
+    if (rVid && controlMode === "sync") {
+      rVid.playbackRate = speed;
+    }
+  };
 
   // 同步播放生命週期控制：同時發動 play()
   const handlePlay = useCallback(async () => {
@@ -423,6 +571,23 @@ export function SwingComparisonPlayer({
     handlePlay();
   };
 
+  // 一鍵回到雙影片同步 (P1)
+  const handleReturnToSync = () => {
+    setControlMode("sync");
+    const uVid = userVideoRef.current;
+    const rVid = refVideoRef.current;
+    if (!uVid) return;
+
+    const curUMs = Math.round(uVid.currentTime * 1000);
+    if (rVid && refSwing) {
+      const targetRefMs = computeExpectedRefMs(curUMs);
+      rVid.currentTime = targetRefMs / 1000;
+      setRefCurrentMs(targetRefMs);
+      rVid.playbackRate = playbackSpeed;
+    }
+    uVid.playbackRate = playbackSpeed;
+  };
+
   // 同步跳轉至指定關鍵事件錨點
   const jumpSyncAnchor = (anchor: SyncAnchor) => {
     handlePause();
@@ -445,6 +610,12 @@ export function SwingComparisonPlayer({
       rVid.currentTime = targetRefMs / 1000;
       setRefCurrentMs(targetRefMs);
     }
+  };
+
+  // 一鍵停格：Top 停格 / Impact 停格 (P1)
+  const freezeAtAnchor = (anchor: "top" | "impact") => {
+    handlePause();
+    jumpSyncAnchor(anchor);
   };
 
   // 同步逐格步進 (依使用者與示範各自真實 FPS 計算單影格時間)
@@ -477,6 +648,7 @@ export function SwingComparisonPlayer({
     const uVid = userVideoRef.current;
     if (!uVid) return;
     if (uVid.paused) {
+      uVid.playbackRate = userSpeed;
       uVid.play().catch(() => {});
     } else {
       uVid.pause();
@@ -504,7 +676,15 @@ export function SwingComparisonPlayer({
     if (!uVid) return;
     uVid.currentTime = userTimeline.startMs / 1000;
     setUserCurrentMs(userTimeline.startMs);
+    uVid.playbackRate = userSpeed;
     uVid.play().catch(() => {});
+  };
+
+  const handleUserSpeedChange = (speed: number) => {
+    setUserSpeed(speed);
+    if (userVideoRef.current) {
+      userVideoRef.current.playbackRate = speed;
+    }
   };
 
   // 單獨控制示範影片 (Individual Reference Video Controls)
@@ -512,6 +692,7 @@ export function SwingComparisonPlayer({
     const rVid = refVideoRef.current;
     if (!rVid) return;
     if (rVid.paused) {
+      rVid.playbackRate = refSpeed;
       rVid.play().catch(() => {});
     } else {
       rVid.pause();
@@ -537,7 +718,15 @@ export function SwingComparisonPlayer({
     if (!rVid) return;
     rVid.currentTime = 0;
     setRefCurrentMs(0);
+    rVid.playbackRate = refSpeed;
     rVid.play().catch(() => {});
+  };
+
+  const handleRefSpeedChange = (speed: number) => {
+    setRefSpeed(speed);
+    if (refVideoRef.current) {
+      refVideoRef.current.playbackRate = speed;
+    }
   };
 
   // 畫面位置與等比例縮放微調
@@ -569,9 +758,48 @@ export function SwingComparisonPlayer({
       offsetX: 0,
       offsetY: 0,
     });
+    setUserZoom(1.0);
+    setUserOffsetX(0);
+    setUserOffsetY(0);
     setManualOffsetMs(0);
   };
 
+  // 點擊量化項目跳轉慢放 (P2 & P3)
+  const jumpAndSlowPlayMetric = (targetMs: number, speed: number = 0.5) => {
+    handlePause();
+    setControlMode("sync");
+    setPlaybackSpeed(speed);
+
+    const uVid = userVideoRef.current;
+    const rVid = refVideoRef.current;
+    if (!uVid) return;
+
+    uVid.currentTime = targetMs / 1000;
+    setUserCurrentMs(targetMs);
+    uVid.playbackRate = speed;
+
+    if (rVid && refSwing) {
+      const targetRefMs = computeExpectedRefMs(targetMs);
+      rVid.currentTime = targetRefMs / 1000;
+      setRefCurrentMs(targetRefMs);
+      rVid.playbackRate = speed;
+    }
+
+    setTimeout(async () => {
+      try {
+        if (rVid && refSwing) {
+          await Promise.all([uVid.play(), rVid.play()]);
+        } else {
+          await uVid.play();
+        }
+        uVid.playbackRate = speed;
+        if (rVid) rVid.playbackRate = speed;
+        setIsPlaying(true);
+      } catch (e) {
+        console.warn("慢放跳轉播放失敗:", e);
+      }
+    }, 150);
+  };
 
   // 核心時鐘監聽與平滑漂移校正循環 (Drift Monitor Loop via requestAnimationFrame)
   useEffect(() => {
@@ -591,12 +819,15 @@ export function SwingComparisonPlayer({
       if (uCurSec >= userTimeline.endMs / 1000) {
         if (isLooping) {
           uVid.currentTime = userTimeline.startMs / 1000;
-          if (rVid && refSwing) {
+          if (rVid && refSwing && controlMode === "sync") {
             const targetRefMs = computeExpectedRefMs(userTimeline.startMs);
             rVid.currentTime = targetRefMs / 1000;
           }
+          uVid.playbackRate = playbackSpeed;
           uVid.play().catch(() => {});
-          rVid?.play().catch(() => {});
+          if (controlMode === "sync") {
+            rVid?.play().catch(() => {});
+          }
         } else {
           uVid.pause();
           rVid?.pause();
@@ -605,25 +836,25 @@ export function SwingComparisonPlayer({
         }
       }
 
-      // 若有參考影片，進行平滑漂移校正（拒絕無條件 seek，以調速平滑修正）
-      if (rVid && refSwing && !rVid.paused) {
+      // 只有在「同步模式」下才執行漂移校正 (獨立檢視模式下嚴格停用，防止強行覆蓋)
+      if (controlMode === "sync" && rVid && refSwing && !rVid.paused) {
         const expectedRefSec = computeExpectedRefMs(uMs) / 1000;
         setRefCurrentMs(Math.round(rVid.currentTime * 1000));
 
         const driftRes = PlaybackDriftController.evaluateDrift(
           rVid.currentTime,
           expectedRefSec,
-          uVid.playbackRate
+          playbackSpeed
         );
 
         if (driftRes.action === "adjust_rate") {
           rVid.playbackRate = driftRes.recommendedPlaybackRate;
         } else if (driftRes.action === "hard_seek") {
           rVid.currentTime = driftRes.targetRefTimeSec;
-          rVid.playbackRate = uVid.playbackRate;
+          rVid.playbackRate = playbackSpeed;
         } else {
-          if (Math.abs(rVid.playbackRate - uVid.playbackRate) > 0.01) {
-            rVid.playbackRate = uVid.playbackRate;
+          if (Math.abs(rVid.playbackRate - playbackSpeed) > 0.01) {
+            rVid.playbackRate = playbackSpeed;
           }
         }
       }
@@ -633,7 +864,7 @@ export function SwingComparisonPlayer({
 
     animId = requestAnimationFrame(syncTick);
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, isLooping, userTimeline, refSwing, computeExpectedRefMs]);
+  }, [isPlaying, isLooping, userTimeline, refSwing, computeExpectedRefMs, controlMode, playbackSpeed]);
 
   // 手動匯入 / 上傳示範影片表單送出
   const handleImportSubmit = async (e: React.FormEvent) => {
@@ -710,11 +941,22 @@ export function SwingComparisonPlayer({
     }`;
   }, [refSwing?.id, refSwing?.stream_url]);
 
+  // 計算當前動作階段
+  const currentPhaseName = useMemo(() => {
+    if (userCurrentMs < userTimeline.takeawayMs) return "Address (站姿設定)";
+    if (userCurrentMs < userTimeline.topMs - 80) return "Backswing (上桿引導)";
+    if (userCurrentMs <= userTimeline.topMs + 80) return "Top (上桿頂點)";
+    if (userCurrentMs < userTimeline.impactMs - 50) return "Downswing (下桿加速)";
+    if (userCurrentMs <= userTimeline.impactMs + 50) return "Impact (擊球瞬間)";
+    if (userCurrentMs < userTimeline.finishMs - 200) return "Follow Through (送桿)";
+    return "Finish (收桿平衡)";
+  }, [userCurrentMs, userTimeline]);
+
   return (
     <div className="rounded-2xl border border-sky-800/80 bg-gradient-to-b from-[#0a141f] to-[#070d14] p-4 text-white shadow-xl space-y-4">
-      {/* 頂部標題與關閉列 (P0-3 誠信標題) */}
+      {/* 頂部標題與狀態列 (P0-3 誠信標題 + 離線模式提示) */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="flex h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
           <h2 className="text-base font-bold text-white tracking-wide">
             {refSwing?.is_verified_standard
@@ -722,11 +964,23 @@ export function SwingComparisonPlayer({
               : "揮桿雙影片對照 (Dual Swing Comparison)"}
           </h2>
           <span className="rounded bg-sky-950 px-2 py-0.5 text-xs text-sky-300 font-mono border border-sky-800/50">
-            Mode: {syncMode === "real_time" ? "自然時間同步" : "階段線性同步"}
+            {controlMode === "sync" ? "雙影片同步模式" : "獨立檢視模式"}
+          </span>
+          <span className="rounded bg-emerald-950/80 px-2 py-0.5 text-xs text-emerald-300 font-semibold border border-emerald-800/40">
+            🔒 離線量化姿勢教練 (Offline Mode)
           </span>
         </div>
 
         <div className="flex items-center gap-2">
+          {controlMode === "independent" && (
+            <button
+              type="button"
+              onClick={handleReturnToSync}
+              className="rounded-lg border border-cyan-500 bg-cyan-950/70 px-2.5 py-1 text-xs font-bold text-cyan-300 hover:bg-cyan-900 transition shadow-[0_0_8px_rgba(6,182,212,0.3)]"
+            >
+              🔗 一鍵回到雙影片同步
+            </button>
+          )}
           {onClose && (
             <button
               type="button"
@@ -820,7 +1074,7 @@ export function SwingComparisonPlayer({
         </div>
       )}
 
-      {/* 示範影片資訊列與真偽標記 */}
+      {/* 示範影片資訊列與六維度狀態標記 */}
       {refSwing ? (
         <div className="flex flex-col gap-2 rounded-xl bg-black/40 border border-gray-800/80 px-3 py-2 text-xs">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -828,7 +1082,6 @@ export function SwingComparisonPlayer({
               <span className="font-bold text-cyan-300">示範素材：{refSwing.title}</span>
               <span className="text-gray-400">作者：{refSwing.reference_author}</span>
 
-              {/* 素材分類標籤 (恪守最高誠信原則) */}
               {refSwing.reference_category === "test_fixture" && (
                 <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-700/60 flex items-center gap-1">
                   ⚠️ 技術測試素材 (Test Fixture)
@@ -858,7 +1111,7 @@ export function SwingComparisonPlayer({
             </div>
           </div>
 
-          {/* 六維度技術狀態徽章 (最高誠信與可重現運動學驗收) */}
+          {/* 六維度技術狀態徽章 */}
           <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-gray-800/60">
             <span className="text-[10px] text-gray-400 font-semibold mr-1">狀態驗證：</span>
             <span
@@ -939,7 +1192,46 @@ export function SwingComparisonPlayer({
         </div>
       )}
 
-      {/* 影片播放區域 (單一 DOM 樹架構，切換 layout 永不銷毀重建物件，防止黑屏) */}
+      {/* 動作階段高亮條 (Progress Phase Indicator) */}
+      <div className="rounded-xl bg-black/60 border border-gray-800 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-400">當前動作階段：</span>
+          <span className="font-bold text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/50">
+            {currentPhaseName}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => freezeAtAnchor("top")}
+            className="rounded-lg border border-cyan-800/60 bg-cyan-950/40 px-2 py-1 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/60 transition"
+            title="一鍵雙側暫停並停格在 Top 上桿頂點"
+          >
+            🎯 Top 停格比對
+          </button>
+          <button
+            type="button"
+            onClick={() => freezeAtAnchor("impact")}
+            className="rounded-lg border border-amber-800/60 bg-amber-950/40 px-2 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-900/60 transition"
+            title="一鍵雙側暫停並停格在 Impact 擊球瞬間"
+          >
+            💥 Impact 停格比對
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowSkeleton(!showSkeleton)}
+            className={`rounded-lg border px-2 py-1 text-xs font-semibold transition ${
+              showSkeleton
+                ? "border-emerald-600 bg-emerald-950/60 text-emerald-300"
+                : "border-gray-800 bg-black/40 text-gray-500 hover:border-gray-700"
+            }`}
+          >
+            {showSkeleton ? "🦴 骨架標記：開啟" : "🦴 骨架標記：隱藏"}
+          </button>
+        </div>
+      </div>
+
+      {/* 影片播放區域 (單一 DOM 樹架構，維持 object-contain 原始長寬比防拉伸) */}
       <div className="relative rounded-xl overflow-hidden bg-black border border-gray-800">
         <div
           className={
@@ -973,16 +1265,6 @@ export function SwingComparisonPlayer({
                 {Boolean(refSwing?.calibration_params?.is_slow_motion || (refSwing?.pose_artifact as any)?.is_slow_motion) && (
                   <span className="rounded bg-amber-950/80 px-2 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-800/40">
                     ⏱️ 慢動作示範 (僅供姿勢影格比較，不計真實節奏)
-                  </span>
-                )}
-                {refSwing?.shot_type && refSwing.shot_type !== "full_swing" && (
-                  <span className="rounded bg-purple-950/80 px-2 py-0.5 text-[10px] font-semibold text-purple-300 border border-purple-800/40">
-                    ⚠️ 非全揮桿 ({refSwing.shot_type === "pitch_90yd" ? "90碼 Pitch" : refSwing.shot_type === "flop_shot" ? "高拋 Flop" : refSwing.shot_type === "putt" ? "推桿特寫" : refSwing.shot_type === "bunker_shot" ? "沙坑示範" : refSwing.shot_type})
-                  </span>
-                )}
-                {refSwing?.camera_angle && refSwing.camera_angle !== "DTL" && (
-                  <span className="rounded bg-blue-950/80 px-2 py-0.5 text-[10px] font-semibold text-blue-300 border border-blue-800/40">
-                    📷 非標準 DTL ({refSwing.camera_angle})
                   </span>
                 )}
               </div>
@@ -1040,14 +1322,26 @@ export function SwingComparisonPlayer({
               onLoadedMetadata={handleUserLoadedMetadata}
               onCanPlay={handleUserLoadedMetadata}
               className="w-full h-full object-contain"
+              style={{
+                transform: `scale(${userZoom}) translate(${userOffsetX}px, ${userOffsetY}px)`,
+              }}
             />
+            {showSkeleton && (
+              <CleanMotionOverlay
+                videoRef={userVideoRef}
+                keyframes={(userSwing.keyframes as any) || []}
+                events={userSwing.events || []}
+                startMs={userTimeline.startMs}
+                endMs={userTimeline.endMs}
+              />
+            )}
           </div>
         </div>
       </div>
 
-      {/* 播放控制與時間軸 */}
+      {/* 慢動作與同步播放控制台 (P1 強化版) */}
       <div className="space-y-3 bg-black/50 p-3 rounded-xl border border-gray-800/80">
-        {/* 進度顯示列 */}
+        {/* 進度顯示與時鐘狀態 */}
         <div className="flex flex-wrap items-center justify-between text-xs text-gray-300 gap-2 font-mono">
           <div className="flex items-center gap-2">
             <span className="text-emerald-400 font-bold">
@@ -1060,8 +1354,12 @@ export function SwingComparisonPlayer({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* 階段線性同步警告或資訊 */}
-            {syncMode === "phase_sync" && (
+            {controlMode === "independent" && (
+              <span className="text-[11px] text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40 font-sans">
+                ⚡ 獨立檢視模式中（停用自動漂移校正）
+              </span>
+            )}
+            {syncMode === "phase_sync" && controlMode === "sync" && (
               <span className="text-[11px] text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40 font-sans">
                 ⚡ 時間正規化比較中（各動作階段強制同步，非真實揮桿速度）
               </span>
@@ -1072,194 +1370,283 @@ export function SwingComparisonPlayer({
           </div>
         </div>
 
-        {/* 控制按鈕群 */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800">
+        {/* 慢動作速度選項群 (P1: 0.25x / 0.5x (預設) / 0.75x / 1.0x / 一鍵回復 1.0x) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800 text-xs">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-gray-400 font-semibold mr-1">慢動作播放速度：</span>
+            {SPEED_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleSpeedChange(opt.value)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border ${
+                  playbackSpeed === opt.value
+                    ? "bg-cyan-500 text-black border-cyan-400 font-bold shadow-[0_0_8px_rgba(6,182,212,0.4)]"
+                    : "bg-black/60 text-gray-300 border-gray-800 hover:border-gray-600"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            {playbackSpeed !== 1.0 && (
+              <button
+                type="button"
+                onClick={() => handleSpeedChange(1.0)}
+                className="px-2 py-1 rounded-lg text-xs font-semibold border border-gray-700 bg-gray-900 text-gray-300 hover:text-white transition"
+                title="一鍵回復原速 (1.0x)"
+              >
+                ↺ 回復 1.0×
+              </button>
+            )}
+          </div>
+
           <div className="flex items-center gap-1.5">
+            <span className="text-gray-400 font-semibold mr-1">控制模式：</span>
             <button
               type="button"
-              onClick={toggleSyncPlay}
-              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 font-bold text-white hover:bg-emerald-500 transition shadow-sm text-xs"
-              title={isPlaying ? "暫停同步播放" : "啟動雙影片同步播放"}
-            >
-              <span>{isPlaying ? "❚❚ 暫停" : "▶ 同步播放"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSyncReplay}
-              className="flex items-center gap-1 rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-2.5 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/60 transition"
-              title="兩段影片同步由對齊起點重新播放"
-            >
-              <span>↺ 重新播放</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsLooping(!isLooping)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition border ${
-                isLooping
-                  ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
-                  : "border-gray-800 bg-black/40 text-gray-400 hover:border-gray-700"
-              }`}
-              title="開啟/關閉同步循環播放"
-            >
-              {isLooping ? "⟲ 循環開啟" : "⟲ 循環關閉"}
-            </button>
-          </div>
-
-          {/* 逐幀步進 (±1f, ±5f) */}
-          <div className="flex items-center gap-1 text-xs">
-            <button
-              type="button"
-              onClick={() => stepSyncFrame(-5)}
-              className="rounded-lg border border-gray-800 bg-black/60 px-2 py-1 text-gray-300 hover:border-gray-600"
-              title="後退 5 幀 (~167ms)"
-            >
-              &larr; -5f
-            </button>
-            <button
-              type="button"
-              onClick={() => stepSyncFrame(-1)}
-              className="rounded-lg border border-gray-700 bg-black/50 px-2 py-1 font-semibold text-white hover:border-cyan-500"
-              title="後退 1 幀 (~33ms)"
-            >
-              &larr; -1f
-            </button>
-            <button
-              type="button"
-              onClick={() => stepSyncFrame(1)}
-              className="rounded-lg border border-gray-700 bg-black/50 px-2 py-1 font-semibold text-white hover:border-cyan-500"
-              title="前進 1 幀 (~33ms)"
-            >
-              +1f &rarr;
-            </button>
-            <button
-              type="button"
-              onClick={() => stepSyncFrame(5)}
-              className="rounded-lg border border-gray-800 bg-black/60 px-2 py-1 text-gray-300 hover:border-gray-600"
-              title="前進 5 幀 (~167ms)"
-            >
-              +5f &rarr;
-            </button>
-          </div>
-
-          {/* 佈局切換 */}
-          <div className="flex items-center gap-1 bg-black/60 p-0.5 rounded-lg border border-gray-800 text-xs">
-            <button
-              type="button"
-              onClick={() => setLayout("side_by_side")}
-              className={`px-2 py-1 rounded ${
-                layout === "side_by_side" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+              onClick={() => {
+                if (controlMode === "independent") {
+                  handleReturnToSync();
+                } else {
+                  setControlMode("sync");
+                }
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border ${
+                controlMode === "sync"
+                  ? "bg-sky-600 text-white border-sky-500 font-bold"
+                  : "bg-black/60 text-gray-400 border-gray-800 hover:border-gray-700"
               }`}
             >
-              左右並列
+              雙影片同步
             </button>
             <button
               type="button"
-              onClick={() => setLayout("stacked")}
-              className={`px-2 py-1 rounded ${
-                layout === "stacked" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+              onClick={() => setControlMode("independent")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border ${
+                controlMode === "independent"
+                  ? "bg-amber-600 text-white border-amber-500 font-bold"
+                  : "bg-black/60 text-gray-400 border-gray-800 hover:border-gray-700"
               }`}
+              title="展開各影片獨立控制"
             >
-              上下堆疊
-            </button>
-            <button
-              type="button"
-              onClick={() => setLayout("ghost_overlay")}
-              className={`px-2 py-1 rounded ${
-                layout === "ghost_overlay" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
-              }`}
-            >
-              疊影透視
+              {controlMode === "independent" ? "獨立檢視" : "展開各影片獨立控制"}
             </button>
           </div>
         </div>
 
-        {/* 雙影片個別獨立控制開關與面板 */}
-        <div className="flex items-center justify-between pt-1 border-t border-gray-800/40 text-xs">
-          <button
-            type="button"
-            onClick={() => setShowIndividualControls(!showIndividualControls)}
-            className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-cyan-300 transition"
-          >
-            <span>{showIndividualControls ? "▾ 收起各影片獨立控制" : "▸ 展開各影片獨立控制 (個別播放/逐格/重播)"}</span>
-          </button>
-        </div>
+        {/* 同步模式主控制按鈕群 */}
+        {controlMode === "sync" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={toggleSyncPlay}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 font-bold text-white hover:bg-emerald-500 transition shadow-sm text-xs"
+                title={isPlaying ? "暫停同步播放" : "啟動雙影片同步播放"}
+              >
+                <span>{isPlaying ? "❚❚ 暫停" : `▶ 同步播放 (${playbackSpeed}×)`}</span>
+              </button>
 
-        {showIndividualControls && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-2 bg-black/40 rounded-lg border border-gray-800/60 text-xs">
+              <button
+                type="button"
+                onClick={handleSyncReplay}
+                className="flex items-center gap-1 rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-2.5 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/60 transition"
+                title="兩段影片同步由對齊起點重新播放"
+              >
+                <span>↺ 重新播放</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsLooping(!isLooping)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition border ${
+                  isLooping
+                    ? "border-emerald-500 bg-emerald-950/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                    : "border-gray-800 bg-black/40 text-gray-400 hover:border-gray-700"
+                }`}
+                title="開啟/關閉同步循環播放"
+              >
+                {isLooping ? "⟲ 循環開啟" : "⟲ 循環關閉"}
+              </button>
+            </div>
+
+            {/* 逐幀步進 (±1f, ±5f) */}
+            <div className="flex items-center gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => stepSyncFrame(-5)}
+                className="rounded-lg border border-gray-800 bg-black/60 px-2 py-1 text-gray-300 hover:border-gray-600"
+                title="後退 5 幀 (~167ms)"
+              >
+                &larr; -5f
+              </button>
+              <button
+                type="button"
+                onClick={() => stepSyncFrame(-1)}
+                className="rounded-lg border border-gray-700 bg-black/50 px-2 py-1 font-semibold text-white hover:border-cyan-500"
+                title="後退 1 幀 (~33ms)"
+              >
+                &larr; -1f
+              </button>
+              <button
+                type="button"
+                onClick={() => stepSyncFrame(1)}
+                className="rounded-lg border border-gray-700 bg-black/50 px-2 py-1 font-semibold text-white hover:border-cyan-500"
+                title="前進 1 幀 (~33ms)"
+              >
+                +1f &rarr;
+              </button>
+              <button
+                type="button"
+                onClick={() => stepSyncFrame(5)}
+                className="rounded-lg border border-gray-800 bg-black/60 px-2 py-1 text-gray-300 hover:border-gray-600"
+                title="前進 5 幀 (~167ms)"
+              >
+                +5f &rarr;
+              </button>
+            </div>
+
+            {/* 佈局切換 */}
+            <div className="flex items-center gap-1 bg-black/60 p-0.5 rounded-lg border border-gray-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setLayout("side_by_side")}
+                className={`px-2 py-1 rounded ${
+                  layout === "side_by_side" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                左右並列
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayout("stacked")}
+                className={`px-2 py-1 rounded ${
+                  layout === "stacked" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                上下堆疊
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayout("ghost_overlay")}
+                className={`px-2 py-1 rounded ${
+                  layout === "ghost_overlay" ? "bg-cyan-600 text-white font-bold" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                疊影透視
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* 獨立檢視模式控制面板 (P1) */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-gray-800 text-xs">
             {/* 示範影片獨立控制 */}
-            <div className="flex items-center justify-between p-1.5 rounded bg-cyan-950/20 border border-cyan-900/30">
-              <span className="text-cyan-300 font-semibold text-[11px]">示範影片 ({selectedClub})</span>
-              <div className="flex items-center gap-1 text-[11px]">
+            <div className="p-2.5 rounded-lg bg-cyan-950/20 border border-cyan-900/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-cyan-300 font-bold text-xs">示範影片 ({selectedClub}) 獨立控制</span>
+                <span className="text-gray-400 font-mono text-[11px]">{formatMsToTimestamp(refCurrentMs)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   type="button"
                   onClick={toggleRefPlay}
-                  className="rounded bg-cyan-900/50 px-2 py-0.5 text-cyan-200 hover:bg-cyan-800"
+                  className="rounded bg-cyan-800 px-3 py-1 font-semibold text-white hover:bg-cyan-700"
                 >
-                  ▶/⏸
+                  ▶/⏸ 播放/暫停
                 </button>
                 <button
                   type="button"
                   onClick={() => stepRefFrame(-1)}
-                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-cyan-500"
+                  className="rounded bg-black/60 px-2 py-1 border border-gray-800 text-gray-300 hover:border-cyan-500"
                 >
                   -1f
                 </button>
                 <button
                   type="button"
                   onClick={() => stepRefFrame(1)}
-                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-cyan-500"
+                  className="rounded bg-black/60 px-2 py-1 border border-gray-800 text-gray-300 hover:border-cyan-500"
                 >
                   +1f
                 </button>
                 <button
                   type="button"
                   onClick={replayRef}
-                  className="rounded bg-cyan-950 px-1.5 py-0.5 border border-cyan-800 text-cyan-300"
+                  className="rounded bg-cyan-950 px-2 py-1 border border-cyan-800 text-cyan-300"
                 >
                   ↺ 重播
                 </button>
+                <div className="flex items-center gap-1 ml-auto">
+                  <span className="text-gray-400 text-[10px]">速度:</span>
+                  {[0.25, 0.5, 1.0].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handleRefSpeedChange(s)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] ${
+                        refSpeed === s ? "bg-cyan-500 text-black font-bold" : "bg-black/50 text-gray-400"
+                      }`}
+                    >
+                      {s}x
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* 個人影片獨立控制 */}
-            <div className="flex items-center justify-between p-1.5 rounded bg-emerald-950/20 border border-emerald-900/30">
-              <span className="text-emerald-300 font-semibold text-[11px]">個人揮桿 (#{userSwing.sequence_no})</span>
-              <div className="flex items-center gap-1 text-[11px]">
+            <div className="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-900/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-emerald-300 font-bold text-xs">個人揮桿 (#{userSwing.sequence_no}) 獨立控制</span>
+                <span className="text-gray-400 font-mono text-[11px]">{formatMsToTimestamp(userCurrentMs)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   type="button"
                   onClick={toggleUserPlay}
-                  className="rounded bg-emerald-900/50 px-2 py-0.5 text-emerald-200 hover:bg-emerald-800"
+                  className="rounded bg-emerald-800 px-3 py-1 font-semibold text-white hover:bg-emerald-700"
                 >
-                  ▶/⏸
+                  ▶/⏸ 播放/暫停
                 </button>
                 <button
                   type="button"
                   onClick={() => stepUserFrame(-1)}
-                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-emerald-500"
+                  className="rounded bg-black/60 px-2 py-1 border border-gray-800 text-gray-300 hover:border-emerald-500"
                 >
                   -1f
                 </button>
                 <button
                   type="button"
                   onClick={() => stepUserFrame(1)}
-                  className="rounded bg-black/60 px-1.5 py-0.5 border border-gray-800 text-gray-300 hover:border-emerald-500"
+                  className="rounded bg-black/60 px-2 py-1 border border-gray-800 text-gray-300 hover:border-emerald-500"
                 >
                   +1f
                 </button>
                 <button
                   type="button"
                   onClick={replayUser}
-                  className="rounded bg-emerald-950 px-1.5 py-0.5 border border-emerald-800 text-emerald-300"
+                  className="rounded bg-emerald-950 px-2 py-1 border border-emerald-800 text-emerald-300"
                 >
                   ↺ 重播
                 </button>
+                <div className="flex items-center gap-1 ml-auto">
+                  <span className="text-gray-400 text-[10px]">速度:</span>
+                  {[0.25, 0.5, 1.0].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handleUserSpeedChange(s)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] ${
+                        userSpeed === s ? "bg-emerald-500 text-black font-bold" : "bg-black/50 text-gray-400"
+                      }`}
+                    >
+                      {s}x
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         )}
-
 
         {/* 關鍵事件錨點跳轉與同步模式切換 */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-800/60 text-xs">
@@ -1285,7 +1672,7 @@ export function SwingComparisonPlayer({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">同步模式：</span>
+            <span className="text-gray-400">同步演算法：</span>
             <div className="flex rounded-lg border border-gray-800 bg-black/60 p-0.5 text-[11px]">
               <button
                 type="button"
@@ -1343,7 +1730,7 @@ export function SwingComparisonPlayer({
           </div>
         )}
 
-        {/* 等比例畫面對齊 (Auto-Framing) 與手動微調控制項 */}
+        {/* 等比例畫面對齊與雙側 Zoom / Pan 控制 */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-800/60 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-gray-400">畫面對齊狀態：</span>
@@ -1362,28 +1749,40 @@ export function SwingComparisonPlayer({
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-[11px]">
-            <span>縮放: {calibration.scale.toFixed(2)}x</span>
+          <div className="flex items-center gap-2 text-[11px] flex-wrap">
+            <span>示範縮放: {calibration.scale.toFixed(2)}x</span>
             <button
               type="button"
-              onClick={() =>
-                setCalibration((prev) => ({ ...prev, scale: Math.max(0.6, prev.scale - 0.05) }))
-              }
+              onClick={() => adjustScale(-0.05)}
               className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
             >
               -
             </button>
             <button
               type="button"
-              onClick={() =>
-                setCalibration((prev) => ({ ...prev, scale: Math.min(1.8, prev.scale + 0.05) }))
-              }
+              onClick={() => adjustScale(0.05)}
               className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
             >
               +
             </button>
 
-            <span className="ml-2">手動時間偏移:</span>
+            <span className="ml-2">個人縮放: {userZoom.toFixed(2)}x</span>
+            <button
+              type="button"
+              onClick={() => setUserZoom((prev) => Math.max(0.6, parseFloat((prev - 0.05).toFixed(2))))}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={() => setUserZoom((prev) => Math.min(2.0, parseFloat((prev + 0.05).toFixed(2))))}
+              className="rounded bg-black px-1.5 py-0.5 border border-gray-800 hover:border-gray-600"
+            >
+              +
+            </button>
+
+            <span className="ml-2">時間微偏:</span>
             <button
               type="button"
               onClick={() => setManualOffsetMs((prev) => prev - 50)}
@@ -1439,16 +1838,278 @@ export function SwingComparisonPlayer({
             >
               Y↓
             </button>
+
             <button
               type="button"
               onClick={resetAlignment}
-              className="rounded bg-black px-1.5 py-0.5 border border-cyan-900/60 text-cyan-400 hover:border-cyan-600 text-[10px]"
+              className="rounded bg-black px-1.5 py-0.5 border border-cyan-900/60 text-cyan-400 hover:border-cyan-600 text-[10px] ml-2"
               title="重設位置與縮放"
             >
-              重設
+              全部重設
             </button>
           </div>
+        </div>
+      </div>
 
+      {/* P2: 離線量化姿勢比較表 (Quantitative Posture Comparison Table) */}
+      {/* P2: 離線量化姿勢比較表 (Quantitative Posture Comparison Table) */}
+      <div className="rounded-xl border border-sky-800/60 bg-black/60 p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-cyan-400 text-base">📊</span>
+            <h3 className="font-bold text-white text-sm">
+              離線量化姿勢比較 (Quantitative Posture Comparison)
+            </h3>
+            <span className="text-[10px] bg-sky-950 text-sky-300 px-2 py-0.5 rounded border border-sky-800/50">
+              Address / Top / Impact / Finish 四大階段
+            </span>
+          </div>
+          <div className="text-[11px] text-gray-400 flex items-center gap-2">
+            <span>可信度：</span>
+            <strong
+              className={
+                postureReport?.overall_reliability === "high"
+                  ? "text-emerald-400"
+                  : postureReport?.overall_reliability === "moderate"
+                  ? "text-amber-400"
+                  : "text-rose-400"
+              }
+            >
+              {postureReport?.overall_reliability === "high"
+                ? "高度可信 (High)"
+                : postureReport?.overall_reliability === "moderate"
+                ? "中度可信 (Moderate)"
+                : postureReport?.overall_reliability === "low"
+                ? "證據偏低 (Low)"
+                : "無法可靠比對 (Unreliable)"}
+            </strong>
+          </div>
+        </div>
+
+        {/* 視角或球桿不相容警示 (P0-A #6 & P0-C) */}
+        {postureReport?.camera_compatibility && !postureReport.camera_compatibility.is_compatible && (
+          <div className="rounded-lg border border-rose-800/60 bg-rose-950/30 p-2.5 text-xs text-rose-300 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{postureReport.camera_compatibility.reason || "視角不相容，未進行 2D 平面幾何差異計算。"}</span>
+          </div>
+        )}
+
+        {/* 缺少示範影片提示 (P0-C) */}
+        {postureReport?.overall_status === "reference_missing" && (
+          <div className="rounded-lg border border-amber-800/60 bg-amber-950/30 p-3 text-xs text-amber-300 space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <span>⚠️</span>
+              <span>尚無 {selectedClub} 的合格示範素材</span>
+            </div>
+            <p className="text-[11px] text-gray-300">
+              系統嚴格拒絕使用其他球桿偷偷替代。您可以點擊上方「匯入示範」手動新增，或切換至 7I、Driver 等已有示範的球桿。
+            </p>
+          </div>
+        )}
+
+        {/* 幾何座標長寬比等比例校正提示 (P0-A) */}
+        {postureReport?.geometry_calibration?.is_aspect_corrected ? (
+          <div className="rounded-lg bg-emerald-950/20 border border-emerald-900/40 p-2 text-[11px] text-emerald-300 flex flex-wrap items-center justify-between gap-1">
+            <div className="flex items-center gap-1.5">
+              <span>📐</span>
+              <span className="font-medium">2D 影像長寬比等比例校正已啟用（Isotropic Coordinate Space）</span>
+            </div>
+            <div className="text-[10px] text-gray-400 font-mono">
+              我方: {postureReport.geometry_calibration.user_resolution} (A={postureReport.geometry_calibration.user_aspect_ratio}) ⇄ 示範: {postureReport.geometry_calibration.ref_resolution} (A={postureReport.geometry_calibration.ref_aspect_ratio})
+            </div>
+          </div>
+        ) : postureReport?.geometry_calibration && !postureReport.geometry_calibration.is_aspect_corrected && postureReport?.overall_status !== "reference_missing" && (
+          <div className="rounded-lg border border-amber-800/60 bg-amber-950/30 p-2.5 text-xs text-amber-300 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>缺少影像長寬比資訊，無法建立等比例座標系消除拉伸失真，2D 平面幾何差異已標記為 N/A。</span>
+          </div>
+        )}
+
+        {/* Priority Fix (唯一改善重點卡片 - P0-D) */}
+        {postureReport?.priority_fix ? (
+          <div className="rounded-xl border border-amber-600/70 bg-gradient-to-r from-amber-950/40 to-black/60 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-amber-400 font-bold text-xs flex items-center gap-1.5">
+                <span>🎯</span>
+                <span>
+                  本球唯一改善重點 (Priority Fix)：
+                  {postureReport.priority_fix.focus_area || postureReport.priority_fix.metric_name}
+                </span>
+              </span>
+              <span className="text-[10px] bg-amber-900/60 text-amber-200 px-2 py-0.5 rounded border border-amber-700/40">
+                差異：{postureReport.priority_fix.delta || postureReport.priority_fix.diff_str}
+              </span>
+            </div>
+            <p className="text-xs text-gray-200 leading-relaxed">
+              {postureReport.priority_fix.summary || postureReport.priority_fix.advice}
+            </p>
+            {postureReport.priority_fix.drill && (
+              <div className="p-2.5 rounded-lg bg-black/50 border border-amber-900/40 space-y-1">
+                <div className="text-[11px] font-bold text-amber-300">
+                  推薦練習：{postureReport.priority_fix.drill.name}
+                </div>
+                <div className="text-[11px] text-gray-300 space-y-0.5">
+                  <div>• 準備：{postureReport.priority_fix.drill.preparation}</div>
+                  <div>• 執行：{postureReport.priority_fix.drill.execution}</div>
+                  <div>• 檢核：{postureReport.priority_fix.drill.checkpoint}</div>
+                </div>
+                {postureReport.priority_fix.target && (
+                  <div className="text-[10px] text-gray-400 pt-1">
+                    下次重測目標：
+                    <span className="text-emerald-400">{postureReport.priority_fix.target}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : postureReport?.priority_fix_summary ? (
+          <div className="rounded-lg border border-sky-900/60 bg-sky-950/20 p-2.5 text-xs text-sky-200 flex items-center gap-2">
+            <span>ℹ️</span>
+            <span>{postureReport.priority_fix_summary}</span>
+          </div>
+        ) : null}
+
+        {/* 量化指標清單表格 */}
+        {postureLoading ? (
+          <div className="text-center py-6 text-gray-400 text-xs animate-pulse">
+            正在計算離線 2D 骨架真實幾何量測數值...
+          </div>
+        ) : postureReport?.metrics && postureReport.metrics.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-gray-800 text-gray-400 text-[11px]">
+                  <th className="py-2 px-2 font-semibold">動作階段</th>
+                  <th className="py-2 px-2 font-semibold">檢測項目</th>
+                  <th className="py-2 px-2 font-semibold">理論常模參考*</th>
+                  <th className="py-2 px-2 font-semibold">我的數值</th>
+                  <th className="py-2 px-2 font-semibold">示範數值</th>
+                  <th className="py-2 px-2 font-semibold">幾何差異</th>
+                  <th className="py-2 px-2 font-semibold">可信度</th>
+                  <th className="py-2 px-2 font-semibold text-right">慢動作跳轉</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/60 font-mono">
+                {postureReport.metrics.map((m: any) => {
+                  const phaseLabel = m.phase_zh || m.phase_label || m.phase;
+                  const metricName = m.metric_name || m.name;
+                  const benchmark = m.general_benchmark_range || "--";
+                  const userValStr = m.user_value_display || (m.user_value !== null ? `${m.user_value}` : "N/A");
+                  const refValStr = m.ref_value_display || (m.ref_value !== null ? `${m.ref_value}` : "N/A");
+                  const diffStr = m.delta_display || "--";
+                  const targetMs = m.target_jump_ms || m.target_ms || userTimeline.startMs;
+                  const evalText = m.evaluation_text || m.description || "";
+                  const isComparable = m.is_comparable ?? (m.status !== "not_comparable" && m.status !== "insufficient_evidence");
+
+                  let relBadgeClass = "bg-gray-800 text-gray-400 border-gray-700";
+                  let relText = "證據不足";
+                  if (m.status === "not_comparable") {
+                    relText = "視角不合";
+                  } else if (m.confidence >= 0.75) {
+                    relBadgeClass = "bg-emerald-950/80 text-emerald-300 border-emerald-800/40";
+                    relText = "高";
+                  } else if (m.confidence >= 0.50) {
+                    relBadgeClass = "bg-amber-950/80 text-amber-300 border-amber-800/40";
+                    relText = "中";
+                  } else if (m.confidence > 0) {
+                    relBadgeClass = "bg-rose-950/80 text-rose-300 border-rose-800/40";
+                    relText = "低";
+                  }
+
+                  return (
+                    <tr key={m.id} className="hover:bg-white/[0.02] transition">
+                      <td className="py-2 px-2 font-sans text-gray-300 font-semibold">
+                        {phaseLabel}
+                      </td>
+                      <td className="py-2 px-2 font-sans text-white">
+                        <div className="font-semibold">{metricName}</div>
+                        {evalText && (
+                          <div className="text-[10px] text-gray-500 font-normal mt-0.5">{evalText}</div>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-gray-400 font-sans text-[11px]">
+                        <div>{benchmark}</div>
+                        {m.benchmark_status && m.benchmark_status !== "unassessed" && m.benchmark_status !== "not_applicable" && (
+                          <span className={`inline-block mt-0.5 text-[9px] px-1.5 py-0.2 rounded font-sans font-medium border ${
+                            m.benchmark_status === "within_benchmark"
+                              ? "bg-emerald-950/70 text-emerald-300 border-emerald-800/40"
+                              : "bg-gray-800/80 text-amber-300/90 border-amber-800/40"
+                          }`}>
+                            {m.benchmark_status === "within_benchmark" ? "區間內 (In Range)" : "區間外 (Out of Range)"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-emerald-400 font-bold">
+                        {userValStr}
+                      </td>
+                      <td className="py-2 px-2 text-cyan-400">
+                        {refValStr}
+                      </td>
+                      <td className="py-2 px-2">
+                        <div
+                          className={`font-bold ${
+                            !isComparable || m.delta === null
+                              ? "text-gray-500"
+                              : m.status === "optimal" || m.relative_status === "aligned"
+                              ? "text-emerald-400"
+                              : m.status === "moderate_diff" || m.relative_status === "moderate_diff"
+                              ? "text-amber-400"
+                              : "text-rose-400"
+                          }`}
+                        >
+                          {diffStr}
+                        </div>
+                        {isComparable && m.delta !== null && (
+                          <span className={`inline-block mt-0.5 text-[9px] px-1.5 py-0.2 rounded font-sans font-medium border ${
+                            m.relative_status === "aligned"
+                              ? "bg-emerald-950/70 text-emerald-300 border-emerald-800/40"
+                              : m.relative_status === "moderate_diff"
+                              ? "bg-amber-950/70 text-amber-300 border-amber-800/40"
+                              : "bg-rose-950/70 text-rose-300 border-rose-800/40"
+                          }`}>
+                            {m.relative_status === "aligned"
+                              ? "吻合 (Aligned)"
+                              : m.relative_status === "moderate_diff"
+                              ? "微差 (Moderate)"
+                              : "顯著 (Significant)"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 font-sans">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${relBadgeClass}`}>
+                          {relText}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => jumpAndSlowPlayMetric(targetMs, 0.5)}
+                          className="rounded bg-sky-900/60 hover:bg-sky-800 border border-sky-700/60 px-2 py-1 text-[11px] font-semibold text-sky-200 transition"
+                          title="跳轉至該動作階段並以 0.5x 慢放"
+                        >
+                          ▶ 慢放跳轉
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="text-[10px] text-gray-500 px-2 py-1.5">
+              * 實驗性參考區間僅供對照觀察，非職業教練認證或唯一揮桿標準。
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-4 text-gray-500 text-xs">
+            {postureError || (postureReport?.overall_status === "reference_missing" ? "尚無可用的示範影片" : "暫無量化數據")}
+          </div>
+        )}
+
+        {/* 誠信原則免責聲明 */}
+        <div className="rounded-lg bg-gray-950/70 border border-gray-800/80 p-2.5 text-[11px] text-gray-400 leading-relaxed">
+          <span className="text-gray-300 font-bold">誠信說明：</span>
+          {postureReport?.disclaimer ||
+            "本分析嚴格基於 2D DTL 影像之可觀測人體骨架幾何，以雙肩雙髖軀幹長度正規化。本系統不推算球速、桿頭速度、飛行距離、甜蜜點或精確桿面角度。"}
         </div>
       </div>
 

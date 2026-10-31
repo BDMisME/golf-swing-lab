@@ -69,5 +69,6 @@ assets/reference_videos/*.png
 
 # WebKit verification screenshots containing raw user frames or third-party swing stills
 docs/screenshots/webkit_r2/
+docs/screenshots/webkit_r3/
 
 

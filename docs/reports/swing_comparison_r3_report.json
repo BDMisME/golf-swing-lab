@@ -1,0 +1,330 @@
+{
+  "title": "Golf Swing Lab — R3 Offline Coach & Slow-Mo Comparison Acceptance Report",
+  "timestamp": "2026-10-31T07:57:28.990766+00:00",
+  "git": {
+    "source_commit_sha": "e1449fc04f1e298609bb8e656a4367f62d22d912",
+    "commit_sha": "e1449fc04f1e298609bb8e656a4367f62d22d912",
+    "git_branch": "feat/r3-offline-coach-and-slow-motion",
+    "is_dirty": true
+  },
+  "target_swing_id": "cfd10e17-4604-4b9d-b84e-a7a9d1e55bbf",
+  "video_metadata": {
+    "video_id": "39608133-6f60-42aa-9fb3-a20326a3a94a",
+    "video_name": "2分鐘.mov",
+    "sha256": "4993a3b695ad96a261795d52673e46de81ed19c7d079dff86d6fc60a7d34f0c9",
+    "duration_ms": 139053,
+    "resolution": "1080x1920",
+    "proxy_resolution": "360x640"
+  },
+  "acceptance_criteria_audit": {
+    "p0_offline_guard_active": true,
+    "p1_default_slow_motion_05x": true,
+    "p1_ultra_slow_motion_025x": true,
+    "p1_top_to_impact_timeseries_monotonic": true,
+    "p1_hard_seek_count_zero": true,
+    "p1_3w_slow_motion_source_switch": true,
+    "p1_slow_motion_tempo_truthfulness_disclosure": true,
+    "p1_skeleton_toggle_and_canvas_dom": true,
+    "p1_reset_speed_10x": true,
+    "p1_independent_mode_drift_disabled": true,
+    "p1_return_to_sync_mode": true,
+    "p1_freeze_anchor_buttons": true,
+    "p2_quantitative_posture_table_4_phases": true,
+    "p2_dual_axis_badges_in_range": true,
+    "p2_dual_axis_badges_out_of_range": true,
+    "p2_dual_axis_badges_aligned": true,
+    "p2_dual_axis_badges_significant": true,
+    "p2_dual_axis_uncertified_notice": true,
+    "p2_metric_jump_and_slow_play": true,
+    "p3_priority_fix_card_and_drill": true,
+    "truthfulness_and_anti_hallucination_verification": "verified_by_rule_based_evidence_and_real_pose_kinematics"
+  },
+  "all_passed": true,
+  "step_results": [
+    {
+      "step": "step1_default_slowmo_and_offline_badge",
+      "info": {
+        "hasOfflineBadge": true,
+        "hasSlowMoSection": true,
+        "hasDefault05x": true,
+        "hasFreezeBtns": true,
+        "hasSkeletonBtn": true
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step2_slowmo_025x_top_to_impact_timeseries",
+      "samples_count": 14,
+      "samples": [
+        {
+          "sample_idx": 0,
+          "userMs": 120655,
+          "refMs": 1441,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 1,
+          "userMs": 120691,
+          "refMs": 1476,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -1
+        },
+        {
+          "sample_idx": 2,
+          "userMs": 120722,
+          "refMs": 1507,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -1
+        },
+        {
+          "sample_idx": 3,
+          "userMs": 120722,
+          "refMs": 1538,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 30
+        },
+        {
+          "sample_idx": 4,
+          "userMs": 120750,
+          "refMs": 1539,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 3
+        },
+        {
+          "sample_idx": 5,
+          "userMs": 120781,
+          "refMs": 1567,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 6,
+          "userMs": 120811,
+          "refMs": 1627,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 30
+        },
+        {
+          "sample_idx": 7,
+          "userMs": 120842,
+          "refMs": 1628,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 0
+        },
+        {
+          "sample_idx": 8,
+          "userMs": 120872,
+          "refMs": 1656,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -2
+        },
+        {
+          "sample_idx": 9,
+          "userMs": 120903,
+          "refMs": 1716,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 27
+        },
+        {
+          "sample_idx": 10,
+          "userMs": 120933,
+          "refMs": 1717,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -2
+        },
+        {
+          "sample_idx": 11,
+          "userMs": 120964,
+          "refMs": 1745,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -5
+        },
+        {
+          "sample_idx": 12,
+          "userMs": 120994,
+          "refMs": 1805,
+          "userRate": 0.25,
+          "refRate": 0.25,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": 25
+        },
+        {
+          "sample_idx": 13,
+          "userMs": 121025,
+          "refMs": 1806,
+          "userRate": 0.25,
+          "refRate": 0.23,
+          "userPaused": false,
+          "refPaused": false,
+          "seekCount": 0,
+          "drift_progress_ms": -5
+        }
+      ],
+      "user_monotonic": true,
+      "ref_monotonic": true,
+      "rates_valid": true,
+      "hard_seek_count": 0,
+      "max_drift_abs_ms": 30,
+      "status": "PASS"
+    },
+    {
+      "step": "step3_reset_speed_10x",
+      "rates_info": {
+        "userRate": 1,
+        "refRate": 1
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step4_3w_slowmo_and_tempo_disclosure",
+      "info": {
+        "is3wSelected": true,
+        "hasSlowMoBadge": true,
+        "hasTempoDisclosure": true
+      },
+      "status": "PASS"
+    },
+    {
+      "step": "step5_skeleton_toggle_and_freeze_buttons",
+      "initial_state": {
+        "btnText": "🦴 骨架標記：開啟",
+        "canvasCount": 2
+      },
+      "hidden_state": {
+        "btnText": "🦴 骨架標記：隱藏",
+        "canvasCount": 1
+      },
+      "sk_toggle_pass": true,
+      "top_frozen": true,
+      "user_top_exact": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step6_independent_mode_and_return_sync",
+      "has_ind_badge": true,
+      "has_return_btn": true,
+      "has_sync_badge": true,
+      "status": "PASS"
+    },
+    {
+      "step": "step7_quantitative_posture_table_and_priority_fix",
+      "table_info": {
+        "hasSectionTitle": true,
+        "hasPriorityFix": true,
+        "hasDrill": true,
+        "hasDisclaimer": true,
+        "rowCount": 8,
+        "hasSlowJumpBtn": true,
+        "hasInRangeBadge": true,
+        "hasOutOfRangeBadge": true,
+        "hasAlignedBadge": true,
+        "hasSignificantBadge": true,
+        "hasModerateBadge": true,
+        "hasUncertifiedNotice": true
+      },
+      "dual_axis_pass": true,
+      "jump_result": "JUMP_CLICKED",
+      "playback_after_jump": {
+        "userRate": 0.5,
+        "refRate": 0.46,
+        "userPaused": false,
+        "refPaused": false,
+        "userTime": 119.71603712495417
+      },
+      "status": "PASS"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "r3_01_default_slowmo_and_offline_badge",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_01_default_slowmo_and_offline_badge.png"
+    },
+    {
+      "name": "r3_02_slowmo_025x_top_to_impact_timeseries",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_02_slowmo_025x_top_to_impact_timeseries.png"
+    },
+    {
+      "name": "r3_03_speed_reset_10x",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_03_speed_reset_10x.png"
+    },
+    {
+      "name": "r3_04_3w_slowmo_and_tempo_disclosure",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_04_3w_slowmo_and_tempo_disclosure.png"
+    },
+    {
+      "name": "r3_05_skeleton_hidden",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_05_skeleton_hidden.png"
+    },
+    {
+      "name": "r3_06_top_freeze_alignment",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_06_top_freeze_alignment.png"
+    },
+    {
+      "name": "r3_07_independent_mode_active",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_07_independent_mode_active.png"
+    },
+    {
+      "name": "r3_08_returned_to_sync_mode",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_08_returned_to_sync_mode.png"
+    },
+    {
+      "name": "r3_09_quantitative_posture_table",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_09_quantitative_posture_table.png"
+    },
+    {
+      "name": "r3_10_metric_jump_slowmo_playback",
+      "path": "/Users/mathew/Desktop/Golf_Swing_Lab/docs/screenshots/webkit_r3/r3_10_metric_jump_slowmo_playback.png"
+    }
+  ]
+}

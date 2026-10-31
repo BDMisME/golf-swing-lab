@@ -171,7 +171,10 @@ def test_full_pipeline_report_manual_calibration_and_mp4_exports(tmp_path: Path)
 
 
 @pytest.mark.asyncio
-async def test_llm_coach_adapter_mock_and_anti_hallucination_guard() -> None:
+async def test_llm_coach_adapter_mock_and_anti_hallucination_guard(monkeypatch) -> None:
+    monkeypatch.setenv("GSL_ENABLE_EXTERNAL_LLM", "true")
+    from apps.api.config import get_settings
+    get_settings.cache_clear()
     session_summary = {"session_id": "s-1", "average_overall_score": 88.5}
     swing_evidence = [
         {
@@ -287,7 +290,10 @@ async def test_llm_coach_adapter_mock_and_anti_hallucination_guard() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gemini_38_flash_coach_provider() -> None:
+async def test_gemini_38_flash_coach_provider(monkeypatch) -> None:
+    monkeypatch.setenv("GSL_ENABLE_EXTERNAL_LLM", "true")
+    from apps.api.config import get_settings
+    get_settings.cache_clear()
     session_summary = {"session_id": "s-gemini", "average_overall_score": 85.0}
     swing_evidence = [
         {

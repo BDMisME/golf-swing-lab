@@ -189,9 +189,24 @@ export default function SettingsPage() {
 
         {/* 可插拔教練提供者設定 */}
         <div className="space-y-4 border-t border-gray-800 pt-4">
-          <h2 className="text-sm font-bold text-white">
-            可插拔教練摘要引擎 (Pluggable GolfCoachProvider)
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-white">
+              教練摘要與姿勢分析模式
+            </h2>
+            <span className="rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300 border border-emerald-800/60">
+              🔒 離線量化教練模式
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 p-3 text-xs leading-relaxed text-emerald-200">
+            <p className="font-semibold text-emerald-300">
+              ⚡️ 已啟用 100% 本機離線量化姿勢教練 (GSL_ENABLE_EXTERNAL_LLM=false)
+            </p>
+            <p className="mt-1 text-gray-300">
+              系統在您的 Mac 本機即時運算 2D 骨架關節幾何與運動學指標，不需也不會傳輸任何影片或影格至外部大型語言模型（LLM）。預設完全不需 API Key，保障個人揮桿隱私與高速體驗。
+            </p>
+          </div>
+
           <div>
             <label className="mb-1 block text-xs text-gray-300">
               教練回饋模式
@@ -208,13 +223,13 @@ export default function SettingsPage() {
               className="w-full rounded-xl border border-gray-700 bg-black/40 px-3 py-2 text-sm text-white"
             >
               <option value="none">
-                預設規則式教練 (none — 免外部 API Key，100% 確定性輸出)
+                預設離線量化教練 (none — 100% 本機幾何推算，免外部 API Key，零隱私外洩)
               </option>
               <option value="gemini">
-                Google Gemini 3.8 Flash (推薦 — 速度極快、繁體中文原生理解、結構化輸出)
+                Google Gemini 3.8 Flash (離線防護開啟時將強制於本機安全降級)
               </option>
               <option value="openai-compatible">
-                OpenAI 相容結構化教練 (openai-compatible — 失敗自動降級規則式)
+                OpenAI 相容教練 (離線防護開啟時將強制於本機安全降級)
               </option>
             </select>
           </div>

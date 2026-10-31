@@ -84,8 +84,11 @@ async def test_rule_based_coach_offline_and_honest():
 
 
 @pytest.mark.asyncio
-async def test_openai_compatible_coach_with_mock_vision_and_contract():
-    """驗證多模態教練之結構化通訊協定與 Pydantic 解析。"""
+async def test_openai_compatible_coach_with_mock_vision_and_contract(monkeypatch):
+    """驗證多模態教練之結構化通訊協定與 Pydantic 解析（模擬後台開啟 LLM 時）。"""
+    monkeypatch.setenv("GSL_ENABLE_EXTERNAL_LLM", "true")
+    from apps.api.config import get_settings
+    get_settings.cache_clear()
     mock_llm_response = {
         "summary": "選手站姿穩定度良好，但在下桿轉折點有提早伸展（Early Extension）趨勢，導致手部揮桿路徑偏外。",
         "observations": [
@@ -154,8 +157,11 @@ async def test_openai_compatible_coach_with_mock_vision_and_contract():
 
 
 @pytest.mark.asyncio
-async def test_coach_hallucination_interception():
+async def test_coach_hallucination_interception(monkeypatch):
     """驗證防偽安全網：當外部模型胡亂臆測球速或碼數時，即時攔截並降級回規則式。"""
+    monkeypatch.setenv("GSL_ENABLE_EXTERNAL_LLM", "true")
+    from apps.api.config import get_settings
+    get_settings.cache_clear()
     # 模擬不守規矩的 LLM 回傳捏造的球速與距離
     hallucinated_response = {
         "summary": "選手擊球猛烈，球速達到 150 mph，飛行距離約 275 碼！",
