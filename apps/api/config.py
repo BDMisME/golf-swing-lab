@@ -138,6 +138,13 @@ class Settings(BaseSettings):
     # 若為 true，API 在無獨立 worker 或單一容器架構中自動於背景線程處理任務
     inline_worker_fallback: bool = True
 
+    enable_tracer_studio: bool = Field(
+        default_factory=lambda: (
+            os.environ.get("GSL_ENABLE_TRACER_STUDIO", "true").strip().lower() not in ("false", "0", "no")
+        ),
+        description="是否啟用 R4 Golf Tracer Studio 子系統 (預設啟用，設為 false 時安全停用 R4 路由且完全不影響 R3)",
+    )
+
     @property
     def cors_origins(self) -> list[str]:
         origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

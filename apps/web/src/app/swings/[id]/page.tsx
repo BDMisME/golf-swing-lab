@@ -461,6 +461,13 @@ export default function SwingDetailPage() {
           >
             <span>👥 專業揮桿對照模式 (Comparison Mode)</span>
           </button>
+          <Link
+            href={`/tracer-studio/seg_${swing.id}`}
+            data-testid="btn-open-tracer-studio"
+            className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 font-bold bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white shadow-md transition"
+          >
+            <span>✨ 開啟 Golf Tracer Studio (逐幀特效工作區)</span>
+          </Link>
         </div>
 
         <div className="text-gray-400 text-[11px] flex items-center gap-2">

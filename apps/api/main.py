@@ -49,6 +49,7 @@ from apps.api.models import (
 )
 from apps.api.routers.audit import router as audit_router
 from apps.api.routers.reference_swings import router as reference_swings_router
+from apps.api.routers.tracer_studio import router as tracer_studio_router
 from packages.analysis.posture_comparison import compute_quantitative_posture_comparison
 from apps.api.schemas import (
     CreateExportRequest,
@@ -178,6 +179,7 @@ app.add_middleware(
 
 app.include_router(audit_router)
 app.include_router(reference_swings_router)
+app.include_router(tracer_studio_router)
 
 
 
@@ -934,6 +936,7 @@ def get_video_info(
 def stream_video(
     video_id: str,
     request: Request,
+    source: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -944,7 +947,12 @@ def stream_video(
     verify_owner(db, current_user, video.owner_id, "video", video.id)
 
     storage = get_storage_service()
-    candidates = [k for k in [video.proxy_storage_key, video.storage_key] if k]
+    raw_keys = (
+        [video.storage_key, video.proxy_storage_key]
+        if source == "original"
+        else [video.proxy_storage_key, video.storage_key]
+    )
+    candidates = [k for k in raw_keys if k]
     head = None
     target_key = None
     for k in candidates:

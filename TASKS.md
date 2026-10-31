@@ -4,6 +4,25 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 26: Golf Swing Lab R4 — Golf Tracer Studio 工程整合 (2026-10-31)
+- [x] **Phase 0：現有程式碼、資料庫、儲存與模型權重基準盤點 (`PASS`)**
+  - 完成 PostgreSQL 變更前完整備份 (`~/.golfswinglab/backups/pre_r4_baseline_20261031.dump`)。
+  - 產出 `docs/r4/BASELINE_AUDIT.md` 與 `docs/r4/DEPENDENCY_LICENSES.md`。
+- [x] **Phase 1：時間/座標契約、Copy-on-Write 資料模型、API 與逐幀編輯器 (`Gate 1: PASS`)**
+  - 建立 `source_pts_us` 單一時間權威與 `Normalized Upright Display Space` 單一空間權威。
+  - 完成 Alembic `0003_tracer_studio.py` 8 張 `tracer_*` 表與 `/api/tracer/*` REST 端點（含 401/403 IDOR/503 Feature Flag 驗證）。
+  - 完成 `/tracer-studio/[projectId]` 逐幀微調編輯器，確保 Studio 錨點編輯 100% 不覆寫 R3 `SwingEvent` / `SwingScore`。
+- [!] **Phase 2：Swing Tracer 桿頭與桿身追蹤 (`Gate 2: BLOCKED_SWING_AUTO` / Engine & Fallback `PASS`)**
+  - 完成 `ClubheadDetector`、`shaft_geometry.py`（Canny+CLAHE+HoughLinesP 桿身幾何端點估算）與 `SwingTracerEngine`，0 點使用手腕座標冒充桿頭。
+  - 因 HuggingFace `nishsm/golf-club-detection-swingtrace` 為 `gated: auto` (`HTTP 401 GatedRepo`) 且屬 `AGPL-3.0`，本機缺 `swingtrace-yolo11m.pt` 權重時如實標記 `BLOCKED_SWING_AUTO` / `NEEDS_REVIEW`。
+- [!] **Phase 3：Shot Tracer 高解析原片飛球追蹤 (`Gate 3: NOT_VALIDATED` / Engine & Rejection Gates `PASS`)**
+  - 完成 `BoundedFrameReader`（含長片 HEVC FFmpeg seek 備援與 Proxy/低解析阻擋）、雙向左右飛球 ROI、`ShotTracerEngine`（`golf_ball_yolov8n.pt` + 光流 + PTS `dt` 卡爾曼濾波 + 靜止球/背景固定亮點排除 + 空揮零假球道保證）。
+  - 因本機缺 `>=120fps` 實拍 (`0/3`)、左打者實拍 (`0/4`) 與雙人標註 Ground Truth，實拍自動覆蓋率指標如實標記 `NOT_VALIDATED`。
+- [x] **Phase 4–5：Flight FX、匯出矩陣、多球合輯、macOS 安全打包與全量驗收 (`Gates 4, 5, 6: PASS`)**
+  - 完成 `RenderRecipeV1` 6 種特效風格、6 組單球匯出矩陣 (`original`/`16:9`/`9:16` × `30`/`60fps` × `preserve`/`mute`) 與 2 球合輯匯出，通過 `ffprobe` 與 Parity 檢驗（`<= 0.67px`, `<= 0.50 frame`）。
+  - 升級 `scripts/build_mac_app.sh` 至 v1.4.0（Bundle ID 檢查、自動備份、`--rollback`、Ad-hoc 簽章）；完成原生 `WKWebView` 載入與截圖驗證 (`docs/r4/webkit_tracer_studio.png`)。
+  - 全量測試：`.venv/bin/pytest -q` **157 passed**、前端 Vitest **7 passed**、Next.js 建置 **0 errors**。
+
 ## Round 25: Golf Swing Lab R3 — 最後驗收證據收尾 (2026-10-31) — 全面完成
 - [x] **P0：修正交付報告中的完整 Git SHA 與 GitHub 實際版本不一致**：
   - 在 `scripts/verify_webkit_r3_slowmo_and_coach.py` 與 `scripts/generate_real_api_posture_report.py` 中，明確校準 `source_commit_sha` 與 `commit_sha` 為基準 SHA `e1449fc04f1e298609bb8e656a4367f62d22d912`。

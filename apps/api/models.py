@@ -489,3 +489,231 @@ class ReferenceSwing(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
+
+# ==============================================================================
+# R4 Golf Tracer Studio — Additive Models (完全獨立於 R3 分析主表，不覆寫 R3 記錄)
+# ==============================================================================
+
+
+class TracerProject(Base):
+    """Golf Tracer Studio 專案 (`tracer_projects`)：綁定原始影片與揮桿片段。"""
+
+    __tablename__ = "tracer_projects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    session_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("practice_sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    video_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    segment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("swing_segments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="Golf Tracer Studio Project")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="ready", index=True
+    )  # queued / analyzing / ready / needs_review / source_unavailable / failed
+    swing_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="NEEDS_REVIEW"
+    )  # AUTO_TRACED / NEEDS_REVIEW / MANUAL_ASSISTED / MODEL_UNAVAILABLE / NOT_COMPARABLE
+    shot_mode: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="UNAVAILABLE"
+    )  # AUTO_OBSERVED / AUTO_ASSISTED / MANUAL_ANCHORED / ARTISTIC_EXTENSION / UNAVAILABLE
+    active_swing_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    active_shot_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    active_anchor_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    active_recipe_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_video_sha256: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    coordinate_space_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TracerJob(Base):
+    """Tracer 自動追蹤與重算任務 (`tracer_jobs`)。"""
+
+    __tablename__ = "tracer_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tracer_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    owner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    job_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="auto_trace"
+    )  # auto_trace / recompute_tracks / export_render
+    state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="queued", index=True
+    )  # queued / running / completed / failed
+    progress_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    stage_message: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TracerTrackRevision(Base):
+    """不可變之軌跡修訂版 (`tracer_track_revisions`)：Copy-on-Write 儲存 `club_head` 與 `ball` 軌跡。"""
+
+    __tablename__ = "tracer_track_revisions"
+    __table_args__ = (
+        UniqueConstraint("project_id", "track_type", "revision", name="uq_tracer_track_proj_type_rev"),
+        Index("ix_tracer_track_proj_type", "project_id", "track_type"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tracer_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    track_type: Mapped[str] = mapped_column(String(32), nullable=False)  # club_head / ball
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    parent_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="NEEDS_REVIEW")
+    storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    artifact_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    point_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    points_inline_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    quality_summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(32), nullable=False, default="model")  # model / user
+    note: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TracerManualEdit(Base):
+    """Studio 逐幀手動編輯稽核紀錄 (`tracer_manual_edits`)。"""
+
+    __tablename__ = "tracer_manual_edits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tracer_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    owner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    track_type: Mapped[str] = mapped_column(String(32), nullable=False)  # club_head / ball
+    base_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    operations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    note: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TracerAnchorRevision(Base):
+    """Studio 專案獨立錨點修訂版 (`tracer_anchor_revisions`)：絕不竄改 R3 `swing_events`。"""
+
+    __tablename__ = "tracer_anchor_revisions"
+    __table_args__ = (
+        UniqueConstraint("project_id", "revision", name="uq_tracer_anchor_proj_rev"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tracer_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    address_pts_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    top_pts_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    impact_pts_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    finish_pts_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    launch_pts_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    apex_pts_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    landing_pts_us: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    anchors_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(32), nullable=False, default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TracerRenderRecipe(Base):
+    """Studio 特效渲染配方 (`tracer_render_recipes`)。"""
+
+    __tablename__ = "tracer_render_recipes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tracer_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    owner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    preset_id: Mapped[str] = mapped_column(String(64), nullable=False, default="studio_neon")
+    name: Mapped[str] = mapped_column(String(120), nullable=False, default="Studio Neon")
+    recipe_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TracerExportJob(Base):
+    """Golf Tracer Studio 單球與 1–10 球批次匯出任務 (`tracer_exports`)。"""
+
+    __tablename__ = "tracer_exports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tracer_projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    project_ids_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    segment_ids_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    aspect_ratio: Mapped[str] = mapped_column(String(16), nullable=False, default="original")  # original / 16:9 / 9:16
+    fps: Mapped[int] = mapped_column(Integer, nullable=False, default=60)  # 30 / 60
+    audio_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="preserve")  # preserve / mute
+    state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="queued", index=True
+    )  # queued / running / completed / failed
+    mp4_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    sidecar_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mp4_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sidecar_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_width: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_height: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    has_audio_stream: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    recipe_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    parity_report_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    sidecar_payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class TracerModelRegistry(Base):
+    """CV 偵測與追蹤模型註冊表 (`tracer_model_registry`)：紀錄 SHA256、授權與本機可用狀態。"""
+
+    __tablename__ = "tracer_model_registry"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_role: Mapped[str] = mapped_column(String(32), nullable=False, index=True)  # clubhead_detector / ball_detector / pose_detector
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    weights_path: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    weights_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    license_spdx: Mapped[str] = mapped_column(String(64), nullable=False, default="MIT")
+    availability_status: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="READY"
+    )  # READY / MODEL_UNAVAILABLE / BLOCKED_GATED_WEIGHTS
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+

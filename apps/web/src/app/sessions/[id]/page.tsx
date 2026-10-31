@@ -577,12 +577,19 @@ export default function SessionDetailPage() {
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-gray-800/80 pt-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Link
                       href={`/swings/${sw.id}`}
                       className="rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600 hover:text-white"
                     >
                       單球詳情與軌跡 &rarr;
+                    </Link>
+                    <Link
+                      href={`/tracer-studio/seg_${sw.id}`}
+                      data-testid={`session-open-tracer-${sw.id}`}
+                      className="rounded-lg bg-sky-500/20 border border-sky-500/40 px-2.5 py-1.5 text-xs font-semibold text-sky-300 hover:bg-sky-500 hover:text-white transition"
+                    >
+                      ✨ Tracer Studio
                     </Link>
                     <button
                       type="button"
