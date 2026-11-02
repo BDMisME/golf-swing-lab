@@ -310,3 +310,107 @@ def test_builtin_presets_and_cfr_clock() -> None:
         )
     ) == 2
     assert len(generate_artistic_ballistic_extension([], None, (0.5, 0.5), [])) == 0
+
+
+def test_zero_point_one_point_two_point_manual_shot_workflow_and_artistic_extension() -> None:
+    """P0-4: 驗證 0 點自動失敗軌跡下，支援：
+    1. 0 點 + Launch + Apex + Landing -> MANUAL_ANCHORED 完整曲線
+    2. 0 點 + Launch + Landing (藝術延伸) -> ARTISTIC_EXTENSION 曲線
+    3. 0 點 -> 手動新增 1 點 -> 手動新增第 2 點 -> 自動區間內插
+    """
+    # Case A: 0 點 + Launch + Apex + Landing (artistic_extension_enabled=False -> MANUAL_ANCHORED)
+    anchors_manual = StudioAnchorOverrides(
+        launch_pts_us=500_000,
+        launch_xy_norm=(0.50, 0.78),
+        apex_xy_norm=(0.58, 0.24),
+        landing_pts_us=1_100_000,
+        landing_xy_norm=(0.66, 0.52),
+        artistic_extension_enabled=False,
+        recompute_between_manual_anchors=True,
+    )
+    pts_from_zero = apply_manual_edits_copy_on_write(
+        base_points=[],
+        track_type=TrackType.BALL,
+        track_id="ball_zero_1",
+        segment_id="seg_zero",
+        source_video_id="vid_zero",
+        new_revision=2,
+        edits=[],
+        anchors=anchors_manual,
+    )
+    assert len(pts_from_zero) >= 5
+    assert any(p.source_type == TrackSourceType.MANUALLY_ANNOTATED for p in pts_from_zero)
+    assert any(p.source_type == TrackSourceType.INTERPOLATED for p in pts_from_zero)
+    assert all(p.source_type != TrackSourceType.ARTISTIC_ONLY for p in pts_from_zero)
+    assert pts_from_zero[0].x_norm == pytest.approx(0.50, abs=1e-4)
+    assert pts_from_zero[-1].x_norm == pytest.approx(0.66, abs=1e-4)
+
+    # Case B: 0 點 + Launch + Apex + Landing (artistic_extension_enabled=True -> 含 ARTISTIC_ONLY)
+    anchors_artistic = StudioAnchorOverrides(
+        launch_pts_us=500_000,
+        launch_xy_norm=(0.50, 0.78),
+        apex_xy_norm=(0.60, 0.22),
+        landing_pts_us=1_100_000,
+        landing_xy_norm=(0.70, 0.48),
+        artistic_extension_enabled=True,
+        recompute_between_manual_anchors=True,
+    )
+    pts_artistic_zero = apply_manual_edits_copy_on_write(
+        base_points=[],
+        track_type=TrackType.BALL,
+        track_id="ball_zero_2",
+        segment_id="seg_zero",
+        source_video_id="vid_zero",
+        new_revision=2,
+        edits=[],
+        anchors=anchors_artistic,
+    )
+    assert len(pts_artistic_zero) >= 5
+    assert any(p.source_type == TrackSourceType.ARTISTIC_ONLY for p in pts_artistic_zero)
+
+    # Case C: 0 點 -> 手動新增 1 點 -> 手動新增第 2 點 (recompute_between_manual_anchors)
+    pts_1 = apply_manual_edits_copy_on_write(
+        base_points=[],
+        track_type=TrackType.BALL,
+        track_id="ball_zero_3",
+        segment_id="seg_zero",
+        source_video_id="vid_zero",
+        new_revision=2,
+        edits=[
+            ManualPointEditOp(
+                op="add",
+                source_pts_us=600_000,
+                source_frame_index=18,
+                x_norm=0.48,
+                y_norm=0.76,
+                point_role="manual_anchor",
+            )
+        ],
+        anchors=None,
+    )
+    assert len(pts_1) == 1
+    assert pts_1[0].source_type == TrackSourceType.MANUALLY_ANNOTATED
+
+    pts_2 = apply_manual_edits_copy_on_write(
+        base_points=pts_1,
+        track_type=TrackType.BALL,
+        track_id="ball_zero_3",
+        segment_id="seg_zero",
+        source_video_id="vid_zero",
+        new_revision=3,
+        edits=[
+            ManualPointEditOp(
+                op="add",
+                source_pts_us=700_000,
+                source_frame_index=21,
+                x_norm=0.56,
+                y_norm=0.46,
+                point_role="manual_anchor",
+            )
+        ],
+        anchors=StudioAnchorOverrides(recompute_between_manual_anchors=True),
+    )
+    assert len(pts_2) >= 4
+    assert sum(1 for p in pts_2 if p.source_type == TrackSourceType.MANUALLY_ANNOTATED) == 2
+    assert sum(1 for p in pts_2 if p.source_type == TrackSourceType.INTERPOLATED) >= 2
+

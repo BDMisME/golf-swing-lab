@@ -229,8 +229,8 @@ def export_single_tracer_clip(
                 ):
                     cursor += 1
                 src_frame = decoded_frames[cursor]
-                # 使用真實輸出格點時間與原片影格 PTS 之較大者確保軌跡隨畫面推進
-                render_pts_us = max(out_pts, src_frame.source_pts_us)
+                # 嚴格依據 CFR 輸出格點真實時間 out_pts 渲染特效圖層，確保前後端幀時間 100% 同步
+                render_pts_us = out_pts
                 composed = compose_output_frame(
                     upright_bgr=src_frame.image_bgr,
                     layout=layout,
@@ -260,7 +260,7 @@ def export_single_tracer_clip(
 
         if audio_mode_str == AudioMode.PRESERVE.value and source_has_audio:
             start_sec = max(0.0, actual_start_us / 1_000_000.0)
-            dur_sec = max(0.1, (actual_end_us - actual_start_us) / 1_000_000.0)
+            exact_video_dur_sec = max(0.05, float(len(output_pts_grid)) / float(fps))
             mux_cmd = [
                 "ffmpeg",
                 "-y",
@@ -269,7 +269,7 @@ def export_single_tracer_clip(
                 "-ss",
                 f"{start_sec:.6f}",
                 "-t",
-                f"{dur_sec:.6f}",
+                f"{exact_video_dur_sec:.6f}",
                 "-i",
                 str(spec.source_video_path),
                 "-map",
@@ -278,6 +278,8 @@ def export_single_tracer_clip(
                 "1:a:0?",
                 "-c:v",
                 "copy",
+                "-af",
+                f"atrim=0:{exact_video_dur_sec:.6f},asetpts=PTS-STARTPTS",
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -482,6 +484,9 @@ def export_batch_tracer_compilation(
         concat_lines = [f"file '{p.as_posix()}'" for p in part_paths]
         concat_list.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
 
+        total_frames_expected = sum(a.frame_count for a in part_artifacts)
+        exact_batch_dur_sec = max(0.05, float(total_frames_expected) / float(fps))
+
         concat_cmd = [
             "ffmpeg",
             "-y",
@@ -491,13 +496,37 @@ def export_batch_tracer_compilation(
             "0",
             "-i",
             str(concat_list),
-            "-c",
-            "copy",
-            "-movflags",
-            "+faststart",
-            str(out_mp4),
+            "-vf",
+            f"fps={fps},setpts=PTS-STARTPTS",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            str(int(master_recipe.export_format.crf)),
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            f"{fps}/1",
+            "-fps_mode",
+            "cfr",
         ]
-        subprocess.run(concat_cmd, capture_output=True, text=True, timeout=120, check=True)
+        if audio_mode_str == AudioMode.PRESERVE.value:
+            concat_cmd.extend(
+                [
+                    "-af",
+                    f"aresample=async=1:first_pts=0,atrim=0:{exact_batch_dur_sec:.6f},asetpts=PTS-STARTPTS",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    "-shortest",
+                ]
+            )
+        else:
+            concat_cmd.append("-an")
+        concat_cmd.extend(["-movflags", "+faststart", str(out_mp4)])
+        subprocess.run(concat_cmd, capture_output=True, text=True, timeout=180, check=True)
 
     probe_meta = probe_video_file(out_mp4)
     has_audio_out = _check_source_has_audio(out_mp4)

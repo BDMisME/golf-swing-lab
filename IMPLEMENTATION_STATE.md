@@ -1,6 +1,31 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新里程碑狀態（Round 26: Golf Swing Lab R4 — Golf Tracer Studio 完整工程整合）
+## 最新里程碑狀態（Round 27: Golf Swing Lab R4 — PR #4 獨立審查與全面修復驗收）
+1. **Mac App 隔離與原片串流保證 (`Gate 10 & Gate 7: PASS`)**：
+   - 正式 `/Applications/Golf Swing Lab.app` 維持 `v1.0.0` 零修改；所有測試僅在獨立沙盒 `/tmp/Golf Swing Lab R4 Test.app` (`com.golfswinglab.desktop.r4test`, `v1.4.0-r4test`) 執行。
+   - Studio 介面鎖定無損原片串流 (`/stream?source=original`)，顯示「`Source: ORIGINAL`」綠色徽章，解析度 1080x1920。
+2. **誠實原則貫徹與阻擋狀態明確標記 (`Gate 2 & Gate 3: BLOCKED / NOT_VALIDATED`)**：
+   - 桿頭追蹤因商用模型未授權，實拍 25 支切片全數落入 `NEEDS_REVIEW`（純幾何覆蓋率 35%~50%，P50 不確定度 8.6px~11.7px），系統嚴格標記 `BLOCKED_EXTERNAL_DEPENDENCY`。
+   - 球路追蹤因缺乏 >=120fps 高速快門攝影機與雙重標註資料集，25 支切片全數落入 `UNAVAILABLE`，堅決不以合成飛行動畫冒充。
+3. **0 點球路切片至手動標定完整互動 (`Gate 4: PASS`)**：
+   - 0 點切片提供「`🚀 標定起飛球位`」，支援起飛點 (Launch)、最高點 (Apex) 與落地點 (Landing) 手動標定，自動生成物理拋物線並轉為 `MANUAL_ANCHORED` 模式。
+   - 支援逐幀點選拖曳即時預覽、新增微調點、Undo/Redo 與 F5 重載持久化。
+4. **Studio 擊球時間覆寫與 R3 系統零污染 (`Gate 5: PASS`)**：
+   - 擊球時間覆寫安全存入 `TracerAnchorRevision`，既有 R3 `SwingEvent` 時間戳記 0 修改；歷史 584 場次、740 切片、4,236 事件與 18 示範庫 100% 完整無損。
+5. **24 種匯出配置矩陣與連續合輯 A/V 零漂移 (`Gate 6: PASS`)**：
+   - 24 種配置 (original/16:9/9:16 × 30/60fps × none/swing/shot/both) 全部匯出成功；1/2/3/5/10 連續合輯經重取樣音訊裁切，A/V 音畫漂移全數為 `0.0 ms` ($\le 100\text{ ms}$)。
+6. **WebKit Canvas vs FFmpeg MP4 真實像素級 Parity 檢驗 (`Gate 8: PASS`)**：
+   - 24 個指定 PTS Checkpoints，實體 Canvas PNG 與 FFmpeg 解碼影格之法向量差分質心最大偏移量為 `1.356 px` ($\le 2.0\text{ px}$)，平均偏移量 `0.256 px`，影格差 $\le 0.5\text{ 幀}$，階段分色與虛線特徵 100% 通過（24/24 PASS，`all_passed: true`）。
+7. **交付 5 份獨立審查報告**：
+   - `docs/r4/POST_REVIEW_FIX_LOG.md`
+   - `docs/r4/REAL_MEDIA_GROUND_TRUTH_RESULTS.md`
+   - `docs/r4/ACTUAL_VISUAL_PARITY_REPORT.md`
+   - `docs/r4/END_TO_END_WEBKIT_REPORT.md`
+   - `docs/r4/REVISED_GATE_MATRIX.md`
+- **最後更新時間**：2026-11-02T15:40:00+08:00
+- **當前分支**：`feat/r4-golf-tracer-studio`
+
+## 前期里程碑狀態（Round 26: Golf Swing Lab R4 — Golf Tracer Studio 完整工程整合）
 1. **Phase 0–1：Studio 基礎契約、Copy-on-Write 資料表與逐幀編輯器 (`Gate 1: PASS`)**：
    - 建立單一時間權威 (`source_pts_us`) 與正規化直立座標系 (`Normalized Upright Display Space`) 契約。
    - 新增 Alembic migration `0003_tracer_studio.py`（8 張 `tracer_*` 表，雙向 `upgrade/downgrade` 驗證通過）與 `/api/tracer/*` REST 路由（含 401/403 IDOR/503 功能旗標保護）。

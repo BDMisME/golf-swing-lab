@@ -61,6 +61,15 @@ export default function TracerStudioProjectPage() {
   const [latestExport, setLatestExport] = useState<TracerExportItem | null>(
     null
   );
+  const [videoSourceMode, setVideoSourceMode] = useState<
+    "ORIGINAL" | "PROXY_FALLBACK"
+  >("ORIGINAL");
+  const [undoStack, setUndoStack] = useState<
+    Array<{ trackType: TrackType; fromRev: number; toRev: number }>
+  >([]);
+  const [redoStack, setRedoStack] = useState<
+    Array<{ trackType: TrackType; fromRev: number; toRev: number }>
+  >([]);
 
   const loadWorkspace = useCallback(async () => {
     if (!rawProjectId) return;
@@ -93,6 +102,12 @@ export default function TracerStudioProjectPage() {
       ]);
 
       setProject(projData);
+      if (projData.recipe?.export_format?.aspect_ratio) {
+        setPreviewAspect(projData.recipe.export_format.aspect_ratio);
+      }
+      setVideoSourceMode(
+        projData.original_video_stream_url ? "ORIGINAL" : "PROXY_FALLBACK"
+      );
       setPresets(presetRes.presets || []);
       setModels(modelRes.models || []);
       const defaultPts =
@@ -110,6 +125,14 @@ export default function TracerStudioProjectPage() {
   useEffect(() => {
     loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).__GSL_SET_PREVIEW_ASPECT__ = (aspect: ExportAspectRatio) => {
+        setPreviewAspect(aspect);
+      };
+    }
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -132,7 +155,7 @@ export default function TracerStudioProjectPage() {
         const refreshed = await getTracerProjectDetail(project.id);
         setProject(refreshed);
       }
-      showToast("已完成原始高解析影片雙軌重新掃描");
+      showToast("已完成原始高解析影片雙軌重新掃描（套用當前 Studio 錨點）");
     } catch (err: any) {
       setErrorMsg(err?.message || "重新分析失敗");
     } finally {
@@ -147,6 +170,10 @@ export default function TracerStudioProjectPage() {
     y_norm?: number;
   }) => {
     if (!project) return;
+    const prevRev =
+      activeTrackType === "club_head"
+        ? project.active_swing_revision
+        : project.active_shot_revision;
     setBusy(true);
     setErrorMsg(null);
     try {
@@ -165,6 +192,15 @@ export default function TracerStudioProjectPage() {
         recompute_between_manual_anchors: true,
         note: `Studio ${op.op} point`,
       });
+      const nextRev =
+        activeTrackType === "club_head"
+          ? updated.active_swing_revision
+          : updated.active_shot_revision;
+      setUndoStack((prev) => [
+        ...prev,
+        { trackType: activeTrackType, fromRev: prevRev, toRev: nextRev },
+      ]);
+      setRedoStack([]);
       setProject(updated);
       showToast(
         `已建立 Copy-on-Write 新修訂版 (${
@@ -180,16 +216,67 @@ export default function TracerStudioProjectPage() {
     }
   };
 
+  const handleUndo = async () => {
+    if (!project || undoStack.length === 0) return;
+    const last = undoStack[undoStack.length - 1];
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const updated = await rollbackTracerRevision(
+        project.id,
+        last.trackType,
+        last.fromRev
+      );
+      setUndoStack((prev) => prev.slice(0, -1));
+      setRedoStack((prev) => [...prev, last]);
+      setProject(updated);
+      showToast(
+        `已復原 ${last.trackType} 至修訂版 Rev #${last.fromRev}`
+      );
+    } catch (err: any) {
+      setErrorMsg(err?.message || "復原修訂版失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (!project || redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const updated = await rollbackTracerRevision(
+        project.id,
+        next.trackType,
+        next.toRev
+      );
+      setRedoStack((prev) => prev.slice(0, -1));
+      setUndoStack((prev) => [...prev, next]);
+      setProject(updated);
+      showToast(
+        `已重做 ${next.trackType} 至修訂版 Rev #${next.toRev}`
+      );
+    } catch (err: any) {
+      setErrorMsg(err?.message || "重做修訂版失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSpatialAnchorSet = async (
-    kind: "apex" | "landing",
+    kind: "launch" | "apex" | "landing",
     xyNorm: [number, number]
   ) => {
     if (!project) return;
+    const prevShotRev = project.active_shot_revision;
     setBusy(true);
     setErrorMsg(null);
     try {
       const updated = await updateTracerAnchors(project.id, {
-        ...(kind === "apex"
+        ...(kind === "launch"
+          ? { launch_xy_norm: xyNorm, launch_pts_us: currentPtsUs }
+          : kind === "apex"
           ? { apex_xy_norm: xyNorm, apex_pts_us: currentPtsUs }
           : {
               landing_xy_norm: xyNorm,
@@ -198,15 +285,49 @@ export default function TracerStudioProjectPage() {
             }),
         recompute_tracks: true,
       });
+      if (updated.active_shot_revision !== prevShotRev && prevShotRev >= 1) {
+        setUndoStack((prev) => [
+          ...prev,
+          {
+            trackType: "ball",
+            fromRev: prevShotRev,
+            toRev: updated.active_shot_revision,
+          },
+        ]);
+        setRedoStack([]);
+      }
       setProject(updated);
       setToolMode("inspect");
       showToast(
-        kind === "apex"
+        kind === "launch"
+          ? "已設定起飛球位 (Launch XY) 基準錨點"
+          : kind === "apex"
           ? "已設定彈道最高點 (Apex) 錨點"
           : "已設定落點錨點並啟用虛線藝術延伸段"
       );
     } catch (err: any) {
       setErrorMsg(err?.message || "設定空間錨點失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleClearShotAnchors = async () => {
+    if (!project) return;
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const updated = await updateTracerAnchors(project.id, {
+        clear_launch: true,
+        clear_apex: true,
+        clear_landing: true,
+        artistic_extension_enabled: false,
+        recompute_tracks: true,
+      });
+      setProject(updated);
+      showToast("已清除飛球 Launch / Apex / 落點空間錨點");
+    } catch (err: any) {
+      setErrorMsg(err?.message || "清除飛球空間錨點失敗");
     } finally {
       setBusy(false);
     }
@@ -255,6 +376,7 @@ export default function TracerStudioProjectPage() {
   const handleSelectPreset = async (presetId: string) => {
     if (!project) return;
     setBusy(true);
+    setErrorMsg(null);
     try {
       const updated = await updateTracerRecipe(project.id, {
         preset_id: presetId,
@@ -268,24 +390,32 @@ export default function TracerStudioProjectPage() {
     }
   };
 
+  // P1-3: 移除靜默吞錯，若 PUT /api/tracer/projects/{id}/recipe 失敗立即回滾 UI 狀態並顯示明確錯誤橫幅
   const handleRecipeChange = async (nextRecipe: RenderRecipeV1) => {
     if (!project) return;
+    const previousRecipe = project.recipe;
+    setErrorMsg(null);
     setProject({
       ...project,
       recipe: nextRecipe,
     });
     try {
-      await updateTracerRecipe(project.id, {
+      const updated = await updateTracerRecipe(project.id, {
         recipe: nextRecipe,
       });
-    } catch {
-      // keep optimistic UI update
+      setProject(updated);
+    } catch (err: any) {
+      setProject((cur) => (cur ? { ...cur, recipe: previousRecipe } : cur));
+      setErrorMsg(
+        err?.message || "儲存渲染配方失敗，已自動回滾至前一個配方狀態"
+      );
     }
   };
 
   const handleToggleArtisticExtension = async (enabled: boolean) => {
     if (!project) return;
     setBusy(true);
+    setErrorMsg(null);
     try {
       const existingLanding =
         project.anchors?.anchors_json?.landing_xy_norm || [0.58, 0.42];
@@ -361,7 +491,13 @@ export default function TracerStudioProjectPage() {
 
   const swingPts = project.swing_track?.points || [];
   const shotPts = project.shot_track?.points || [];
-  const streamUrl = buildAuthenticatedMediaUrl(project.video_stream_url);
+  // P0-3: Studio 預覽優先載入 original_video_stream_url (?source=original)，確保與匯出原片完全同源
+  const primaryStreamPath =
+    videoSourceMode === "ORIGINAL" && project.original_video_stream_url
+      ? project.original_video_stream_url
+      : project.video_stream_url;
+  const streamUrl = buildAuthenticatedMediaUrl(primaryStreamPath);
+  const fallbackProxyUrl = buildAuthenticatedMediaUrl(project.video_stream_url);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-16">
@@ -396,6 +532,16 @@ export default function TracerStudioProjectPage() {
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span
+              data-testid="badge-video-source"
+              className={`px-2.5 py-1 rounded-xl font-mono font-semibold border ${
+                videoSourceMode === "ORIGINAL"
+                  ? "bg-indigo-500/20 border-indigo-400/40 text-indigo-200"
+                  : "bg-amber-500/20 border-amber-400/40 text-amber-200"
+              }`}
+            >
+              Source: {videoSourceMode}
+            </span>
+            <span
               data-testid="badge-swing-status"
               className={`px-2.5 py-1 rounded-xl font-mono font-semibold border ${
                 project.swing_status === "AUTO_TRACED" ||
@@ -423,7 +569,10 @@ export default function TracerStudioProjectPage() {
         </div>
 
         {errorMsg && (
-          <div className="bg-rose-950/70 border border-rose-700 text-rose-200 px-4 py-2.5 rounded-xl text-xs">
+          <div
+            data-testid="studio-error-banner"
+            className="bg-rose-950/70 border border-rose-700 text-rose-200 px-4 py-2.5 rounded-xl text-xs"
+          >
             ⚠️ {errorMsg}
           </div>
         )}
@@ -442,6 +591,12 @@ export default function TracerStudioProjectPage() {
           <div className="lg:col-span-7 space-y-3">
             <TracerCanvasEditor
               videoUrl={streamUrl}
+              fallbackVideoUrl={fallbackProxyUrl}
+              onVideoSourceFallback={() => {
+                if (videoSourceMode === "ORIGINAL") {
+                  setVideoSourceMode("PROXY_FALLBACK");
+                }
+              }}
               uprightWidth={project.geometry.upright_width || 1080}
               uprightHeight={project.geometry.upright_height || 1920}
               clipStartPtsUs={project.clip_start_pts_us}
@@ -493,6 +648,19 @@ export default function TracerStudioProjectPage() {
               onShowAnchorPointsChange={setShowAnchorPoints}
               onReanalyze={handleReanalyze}
               onRollbackToRevision1={handleRollbackToRevision1}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              canUndo={undoStack.length > 0}
+              canRedo={redoStack.length > 0}
+              onClearShotAnchors={handleClearShotAnchors}
+              onJumpToPtsUs={(pts) => {
+                setIsPlaying(false);
+                setCurrentPtsUs(pts);
+              }}
+              onDeletePointAtPtsUs={(pts) =>
+                handlePointEdit({ op: "delete", source_pts_us: pts })
+              }
+              currentPtsUs={currentPtsUs}
               isBusy={busy}
             />
 

@@ -52,11 +52,76 @@ class StudioAnchorOverrides:
     launch_pts_us: int | None = None
     apex_pts_us: int | None = None
     landing_pts_us: int | None = None
+    launch_xy_norm: tuple[float, float] | None = None
     apex_xy_norm: tuple[float, float] | None = None
     landing_xy_norm: tuple[float, float] | None = None
     artistic_extension_enabled: bool = False
     recompute_between_manual_anchors: bool = True
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+def _make_manual_anchor_point(
+    *,
+    track_id: str,
+    track_type: TrackType,
+    segment_id: str,
+    source_video_id: str,
+    pts_us: int,
+    frame_index: int,
+    x_norm: float,
+    y_norm: float,
+    phase: str,
+    revision: int,
+    evidence_kind: str = "manual_click",
+    is_artistic: bool = False,
+    evidence_frame_sha256: str | None = None,
+) -> CanonicalTrackPoint:
+    x_val = round(min(1.0, max(0.0, float(x_norm))), 6)
+    y_val = round(min(1.0, max(0.0, float(y_norm))), 6)
+    return CanonicalTrackPoint(
+        track_id=track_id,
+        track_type=track_type,
+        segment_id=segment_id,
+        source_video_id=source_video_id,
+        source_pts_us=int(pts_us),
+        source_frame_index=max(0, int(frame_index)),
+        x_norm=x_val,
+        y_norm=y_val,
+        confidence=0.95 if not is_artistic else 0.25,
+        source_type=(
+            TrackSourceType.ARTISTIC_ONLY
+            if is_artistic
+            else TrackSourceType.MANUALLY_ANNOTATED
+        ),
+        position_role=(
+            PositionRole.ARTISTIC_CONTROL
+            if is_artistic
+            else PositionRole.MANUAL_ANCHOR
+        ),
+        raw_observation={
+            "x_norm": x_val,
+            "y_norm": y_val,
+            "bbox": [
+                max(0.0, x_val - 0.01),
+                max(0.0, y_val - 0.01),
+                min(1.0, x_val + 0.01),
+                min(1.0, y_val + 0.01),
+            ],
+            "uncertainty_px": 1.5,
+            "detector_confidence": 1.0,
+            "evidence_kind": evidence_kind,
+        },
+        phase=phase,
+        model_id="studio_manual_editor_v1",
+        evidence_frame_sha256=evidence_frame_sha256,
+        occlusion_state=(
+            OcclusionState.UNOBSERVABLE if is_artistic else OcclusionState.VISIBLE
+        ),
+        uncertainty_px=1.5 if not is_artistic else 20.0,
+        error_flags=[] if not is_artistic else ["artistic_control_point"],
+        created_by="user" if not is_artistic else "artist",
+        revision=revision,
+    )
 
 
 def apply_manual_edits_copy_on_write(
@@ -72,6 +137,7 @@ def apply_manual_edits_copy_on_write(
 ) -> list[CanonicalTrackPoint]:
     """
     以 Copy-on-Write 模式套用手動點位與錨點編輯，回傳全新 `CanonicalTrackPoint` 列表。
+    支援 P0-4 完整 `0 點 -> Launch -> Apex -> Landing` 手動錨點與藝術延伸生成流程。
     """
     anchor_cfg = anchors or StudioAnchorOverrides()
 
@@ -83,6 +149,10 @@ def apply_manual_edits_copy_on_write(
             continue
         if pt.source_type == TrackSourceType.ARTISTIC_ONLY:
             continue
+        # 若為前次由 StudioAnchorOverrides 合成之控制錨點 (studio_*_anchor)，由本次最新 anchor_cfg 重新合成
+        ev_kind = (pt.raw_observation or {}).get("evidence_kind") if isinstance(pt.raw_observation, dict) else None
+        if ev_kind in ("studio_launch_anchor", "studio_apex_anchor", "studio_landing_anchor"):
+            continue
         pts_map[pt.source_pts_us] = pt.model_copy(deep=True)
 
     # 2. 依序套用 delete / add / move 操作
@@ -91,7 +161,6 @@ def apply_manual_edits_copy_on_write(
         target_pts = int(edit.source_pts_us)
 
         if op == "delete":
-            # 也支援尋找距離 <= 8ms 的最近點刪除
             matched_pts = _find_nearest_pts_key(pts_map, target_pts, tolerance_us=8_500)
             if matched_pts is not None:
                 del pts_map[matched_pts]
@@ -100,8 +169,6 @@ def apply_manual_edits_copy_on_write(
         if op in ("add", "move"):
             if edit.x_norm is None or edit.y_norm is None:
                 raise ValueError(f"手動編輯 {op} 必須提供 x_norm 與 y_norm")
-            x_val = round(min(1.0, max(0.0, float(edit.x_norm))), 6)
-            y_val = round(min(1.0, max(0.0, float(edit.y_norm))), 6)
 
             matched_pts = _find_nearest_pts_key(pts_map, target_pts, tolerance_us=8_500)
             use_pts = matched_pts if (op == "move" and matched_pts is not None) else target_pts
@@ -115,44 +182,103 @@ def apply_manual_edits_copy_on_write(
             is_artistic = edit.point_role == "artistic_control"
             phase_str = _resolve_phase_for_point(track_type, use_pts, anchor_cfg)
 
-            pts_map[use_pts] = CanonicalTrackPoint(
+            pts_map[use_pts] = _make_manual_anchor_point(
                 track_id=track_id,
                 track_type=track_type,
                 segment_id=segment_id,
                 source_video_id=source_video_id,
-                source_pts_us=use_pts,
-                source_frame_index=frame_idx,
-                x_norm=x_val,
-                y_norm=y_val,
-                confidence=0.95 if not is_artistic else 0.25,
-                source_type=(
-                    TrackSourceType.ARTISTIC_ONLY
-                    if is_artistic
-                    else TrackSourceType.MANUALLY_ANNOTATED
-                ),
-                position_role=(
-                    PositionRole.ARTISTIC_CONTROL
-                    if is_artistic
-                    else PositionRole.MANUAL_ANCHOR
-                ),
-                raw_observation={
-                    "x_norm": x_val,
-                    "y_norm": y_val,
-                    "bbox": [max(0.0, x_val - 0.01), max(0.0, y_val - 0.01), min(1.0, x_val + 0.01), min(1.0, y_val + 0.01)],
-                    "uncertainty_px": 1.5,
-                    "detector_confidence": 1.0,
-                    "evidence_kind": "manual_click",
-                },
+                pts_us=use_pts,
+                frame_index=frame_idx,
+                x_norm=float(edit.x_norm),
+                y_norm=float(edit.y_norm),
                 phase=phase_str,
-                model_id="studio_manual_editor_v1",
-                evidence_frame_sha256=existing.evidence_frame_sha256 if existing else None,
-                occlusion_state=(
-                    OcclusionState.UNOBSERVABLE if is_artistic else OcclusionState.VISIBLE
-                ),
-                uncertainty_px=1.5 if not is_artistic else 20.0,
-                error_flags=[] if not is_artistic else ["artistic_control_point"],
-                created_by="user" if not is_artistic else "artist",
                 revision=new_revision,
+                evidence_kind="manual_click",
+                is_artistic=is_artistic,
+                evidence_frame_sha256=existing.evidence_frame_sha256 if existing else None,
+            )
+
+    # 2.5 (P0-4) 針對 BALL 軌跡套用 Studio 空間錨點 (launch_xy_norm / apex_xy_norm / landing_xy_norm)
+    if track_type == TrackType.BALL:
+        base_launch_pts = (
+            anchor_cfg.launch_pts_us
+            if anchor_cfg.launch_pts_us is not None
+            else (
+                anchor_cfg.impact_pts_us
+                if anchor_cfg.impact_pts_us is not None
+                else (min(pts_map.keys()) if pts_map else 0)
+            )
+        )
+        # 若使用者明確設定 launch_xy_norm，或 0 點狀態下設定了 apex/landing，建立起飛基準錨點
+        if anchor_cfg.launch_xy_norm is not None or (
+            not pts_map and (anchor_cfg.apex_xy_norm is not None or anchor_cfg.landing_xy_norm is not None)
+        ):
+            lx, ly = (
+                anchor_cfg.launch_xy_norm
+                if anchor_cfg.launch_xy_norm is not None
+                else (0.48, 0.78)
+            )
+            matched_l = _find_nearest_pts_key(pts_map, base_launch_pts, tolerance_us=12_000)
+            use_l_pts = matched_l if matched_l is not None else base_launch_pts
+            pts_map[use_l_pts] = _make_manual_anchor_point(
+                track_id=track_id,
+                track_type=TrackType.BALL,
+                segment_id=segment_id,
+                source_video_id=source_video_id,
+                pts_us=use_l_pts,
+                frame_index=0,
+                x_norm=lx,
+                y_norm=ly,
+                phase="follow_through",
+                revision=new_revision,
+                evidence_kind="studio_launch_anchor",
+                is_artistic=False,
+            )
+
+        # (P0-4) 若設有 apex_xy_norm / landing_xy_norm，一律將 Apex 與 Landing 作為控制錨點放入 pts_map，
+        # 由 Step 4 產生平滑拋物線插值軌跡，確保幾何位置在實線與藝術模式下 100% 確定性一致
+        last_known_pts = max(pts_map.keys()) if pts_map else base_launch_pts
+        if anchor_cfg.apex_xy_norm is not None:
+            apex_pts = (
+                anchor_cfg.apex_pts_us
+                if (anchor_cfg.apex_pts_us is not None and anchor_cfg.apex_pts_us > last_known_pts)
+                else (last_known_pts + 260_000)
+            )
+            pts_map[apex_pts] = _make_manual_anchor_point(
+                track_id=track_id,
+                track_type=TrackType.BALL,
+                segment_id=segment_id,
+                source_video_id=source_video_id,
+                pts_us=apex_pts,
+                frame_index=max(1, int(round((apex_pts - base_launch_pts) / 16_667.0))),
+                x_norm=anchor_cfg.apex_xy_norm[0],
+                y_norm=anchor_cfg.apex_xy_norm[1],
+                phase="follow_through",
+                revision=new_revision,
+                evidence_kind="studio_apex_anchor",
+                is_artistic=False,
+            )
+            last_known_pts = apex_pts
+
+        if anchor_cfg.landing_xy_norm is not None:
+            landing_pts = (
+                anchor_cfg.landing_pts_us
+                if (anchor_cfg.landing_pts_us is not None and anchor_cfg.landing_pts_us > last_known_pts)
+                else (last_known_pts + 320_000)
+            )
+            pts_map[landing_pts] = _make_manual_anchor_point(
+                track_id=track_id,
+                track_type=TrackType.BALL,
+                segment_id=segment_id,
+                source_video_id=source_video_id,
+                pts_us=landing_pts,
+                frame_index=max(2, int(round((landing_pts - base_launch_pts) / 16_667.0))),
+                x_norm=anchor_cfg.landing_xy_norm[0],
+                y_norm=anchor_cfg.landing_xy_norm[1],
+                phase="follow_through",
+                revision=new_revision,
+                evidence_kind="studio_landing_anchor",
+                is_artistic=False,
             )
 
     # 3. 更新所有點位之 revision 與對應錨點之揮桿階段 (Top / Impact 分色)
@@ -179,43 +305,62 @@ def apply_manual_edits_copy_on_write(
             revision=new_revision,
         )
 
-    # 5. 若為 ball 軌跡且啟用 artistic_extension_enabled + 具備 landing_xy_norm，附加標記為 artistic_only 之延伸段
-    if (
-        track_type == TrackType.BALL
-        and anchor_cfg.artistic_extension_enabled
-        and anchor_cfg.landing_xy_norm is not None
-        and updated_points
-    ):
-        last_obs_pts = updated_points[-1].source_pts_us
-        last_obs_fidx = updated_points[-1].source_frame_index
-        target_end_pts = anchor_cfg.landing_pts_us or (last_obs_pts + 600_000)
-        if target_end_pts <= last_obs_pts:
-            target_end_pts = last_obs_pts + 450_000
+    # 5. 若為 ball 軌跡且啟用 artistic_extension_enabled：
+    # 5a. 若已包含 Apex 與 Landing，將最高點 Apex 之後的下墜段標記為 artistic_only (半透明虛線)
+    # 5b. 若未具備 Landing，則在觀測尾端附加標記為 artistic_only 之延伸段
+    if track_type == TrackType.BALL and anchor_cfg.artistic_extension_enabled and updated_points:
+        if anchor_cfg.landing_xy_norm is not None and anchor_cfg.apex_xy_norm is not None:
+            apex_cutoff_us = anchor_cfg.apex_pts_us or (base_launch_pts + 260_000)
+            artistic_updated: list[CanonicalTrackPoint] = []
+            for p in updated_points:
+                if p.source_pts_us >= apex_cutoff_us:
+                    artistic_updated.append(
+                        p.model_copy(
+                            update={
+                                "source_type": TrackSourceType.ARTISTIC_ONLY,
+                                "uncertainty_px": max(20.0, p.uncertainty_px),
+                                "created_by": "artist",
+                                "occlusion_state": OcclusionState.UNOBSERVABLE,
+                                "position_role": PositionRole.ARTISTIC_CONTROL,
+                                "error_flags": list(set(p.error_flags + ["artistic_control_point"])),
+                            }
+                        )
+                    )
+                else:
+                    artistic_updated.append(p)
+            updated_points = artistic_updated
+        elif anchor_cfg.landing_xy_norm or anchor_cfg.apex_xy_norm:
+            eff_target_xy = anchor_cfg.landing_xy_norm or anchor_cfg.apex_xy_norm
+            last_obs_pts = updated_points[-1].source_pts_us
+            last_obs_fidx = updated_points[-1].source_frame_index
+            target_end_pts = anchor_cfg.landing_pts_us or (last_obs_pts + 600_000)
+            if target_end_pts <= last_obs_pts:
+                target_end_pts = last_obs_pts + 450_000
 
-        ext_timeline: list[tuple[int, int]] = []
-        if frame_pts_timeline:
-            ext_timeline = [
-                (pts, fidx)
-                for pts, fidx in frame_pts_timeline
-                if last_obs_pts < pts <= target_end_pts
-            ]
-        if not ext_timeline:
-            step_us = 16_667
-            cur_pts = last_obs_pts + step_us
-            cur_fidx = last_obs_fidx + 1
-            while cur_pts <= target_end_pts:
-                ext_timeline.append((cur_pts, cur_fidx))
-                cur_pts += step_us
-                cur_fidx += 1
+            ext_timeline: list[tuple[int, int]] = []
+            if frame_pts_timeline:
+                ext_timeline = [
+                    (pts, fidx)
+                    for pts, fidx in frame_pts_timeline
+                    if last_obs_pts < pts <= target_end_pts
+                ]
+            if not ext_timeline:
+                step_us = 16_667
+                cur_pts = last_obs_pts + step_us
+                cur_fidx = last_obs_fidx + 1
+                while cur_pts <= target_end_pts:
+                    ext_timeline.append((cur_pts, cur_fidx))
+                    cur_pts += step_us
+                    cur_fidx += 1
 
-        artistic_pts = generate_artistic_ballistic_extension(
-            observed_points=updated_points,
-            apex_xy_norm=anchor_cfg.apex_xy_norm,
-            landing_xy_norm=anchor_cfg.landing_xy_norm,
-            extension_pts_timeline=ext_timeline,
-            revision=new_revision,
-        )
-        updated_points.extend(artistic_pts)
+            artistic_pts = generate_artistic_ballistic_extension(
+                observed_points=updated_points,
+                apex_xy_norm=anchor_cfg.apex_xy_norm if anchor_cfg.landing_xy_norm is not None else None,
+                landing_xy_norm=eff_target_xy,
+                extension_pts_timeline=ext_timeline,
+                revision=new_revision,
+            )
+            updated_points.extend(artistic_pts)
 
     updated_points.sort(key=lambda p: p.source_pts_us)
     return updated_points
@@ -270,9 +415,10 @@ def _fill_manual_anchor_gaps(
     revision: int,
 ) -> list[CanonicalTrackPoint]:
     """
-    當兩個相鄰點其中至少一個為 `manually_annotated` 且時間間隔介於 24ms ~ 450ms 時，
+    當兩個相鄰點其中至少一個為 `manually_annotated` 且時間間隔介於 24ms ~ 550ms (飛球可至 900ms) 時，
     自動於中間幀進行平滑插值 (`interpolated`)，使手動拉動錨點即刻更新整段平滑曲線。
     """
+    max_gap_us = 900_000 if track_type == TrackType.BALL else 550_000
     result: list[CanonicalTrackPoint] = []
     for i in range(len(points) - 1):
         p_curr = points[i]
@@ -284,7 +430,7 @@ def _fill_manual_anchor_gaps(
             p_curr.source_type == TrackSourceType.MANUALLY_ANNOTATED
             or p_next.source_type == TrackSourceType.MANUALLY_ANNOTATED
         )
-        if not involves_manual or gap_us < 24_000 or gap_us > 550_000:
+        if not involves_manual or gap_us < 24_000 or gap_us > max_gap_us:
             continue
 
         intermediate_frames: list[tuple[int, int, str]] = []

@@ -196,6 +196,7 @@ export interface TracerAnchorRevision {
   landing_pts_us: number | null;
   anchors_json: {
     artistic_extension_enabled?: boolean;
+    launch_xy_norm?: [number, number] | null;
     apex_xy_norm?: [number, number] | null;
     landing_xy_norm?: [number, number] | null;
     [key: string]: any;

@@ -4,6 +4,37 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 27: Golf Swing Lab R4 — PR #4 獨立審查與全面修復驗收 (2026-11-02)
+- [x] **P1-5：回滾正式 Mac App 至 v1.0.0 並建立 `/tmp/Golf Swing Lab R4 Test.app` 獨立沙盒測試 Bundle** (`PASS`)
+  - 正式 `/Applications/Golf Swing Lab.app` 維持 `v1.0.0` 零修改。
+  - `scripts/build_mac_app.sh` 預設建置 `/tmp/Golf Swing Lab R4 Test.app` (`com.golfswinglab.desktop.r4test`, `v1.4.0-r4test`)。
+- [x] **P0-1：清除假時間碼硬編碼（0.48/0.68），嚴格依據真實事件錨點實作** (`PASS`)
+  - `packages/analysis/tracer/segment_context.py` 清除固定比率估算，改由 `top_source` / `impact_source` 嚴格追溯。
+- [x] **P0-3：缺 Impact 錨點時嚴格 Fail-Closed，拒絕外推或生成假球路** (`PASS`)
+  - `packages/analysis/tracer/shot_tracker.py` 與 `swing_tracker.py` 遇缺 Impact 即刻終止並回報 `missing_impact_anchor`。
+- [x] **P0-4：0 點球路切片支援 Studio 三點手動標定 (`MANUAL_ANCHORED`) 與初期物理拋物線生成** (`PASS`)
+  - `packages/analysis/tracer/edit_merge.py` 支援自 0 點切片透過 `launch_xy_norm`、`apex_xy_norm`、`landing_xy_norm` 產生初始手動拋物線。
+- [x] **P1-2：Studio 逐格編輯器手動點位新增/拖曳即時預覽/Undo/Redo/F5 重載持久化** (`PASS`)
+  - `apps/web/src/components/tracer/TracerCanvasEditor.tsx` 與 `TracerInspectorPanel.tsx` 實作拖曳預覽、點位清單與修訂版回溯。
+- [x] **P1-3：Studio 擊球時間覆寫安全存入 `TracerAnchorRevision`，保持 R3 `SwingEvent` 零污染** (`PASS`)
+  - `apps/worker/tracer_tasks.py` 與 `apps/api/routers/tracer_studio.py` 嚴格隔離 Studio 覆寫與底層既有事件。
+- [x] **P1-1：Studio 畫布鎖定無損原片串流，顯示 `Source: ORIGINAL` 徽章，拒絕 720p Proxy** (`PASS`)
+  - 前端正確載入 `/api/videos/{id}/stream?source=original`，解析度為 1080x1920，顯示綠色標章。
+- [x] **P0-5：`requestVideoFrameCallback` + `requestAnimationFrame` 60fps 幀同步迴圈與遙測探針** (`PASS`)
+  - 實作高頻幀回調與 `window.__GSL_FRAME_SYNC_STATS__`，達成 60Hz 零延遲畫布刷新。
+- [x] **P0-2：實作真實像素級 Parity 檢驗（WebKit Canvas PNG vs FFmpeg MP4 差分質心比對）** (`PASS`)
+  - `packages/analysis/tracer/compositor.py` 實作 `verify_actual_visual_pixel_parity()`，24 個指定 PTS Checkpoints 最大中心線偏移量 $\le 2.0\text{ px}$，影格差 $\le 0.5\text{ 幀}$。
+- [x] **P1-4：25 支真實切片全面評估矩陣、拒絕標籤深入分析、24 種單切片匯出矩陣與 1/2/3/5/10 連續合輯 A/V 零漂移** (`PASS`)
+  - 產出 `/tmp/r4_eval_report.json`；單切片與連續合輯 A/V 漂移全數為 `0.0 ms` ($\le 100\text{ ms}$)。
+- [x] **P1-6：R3 既有資產零回歸（584 場次、740 切片、4,236 事件、18 示範庫完整無損）** (`PASS`)
+  - 歷史資料庫 100% 留存，R3 非特效單球與合輯匯出管線正常，Worker 缺檔防護健全。
+- [x] **產出 5 份獨立審查報告** (`PASS`)
+  - `docs/r4/POST_REVIEW_FIX_LOG.md`
+  - `docs/r4/REAL_MEDIA_GROUND_TRUTH_RESULTS.md`
+  - `docs/r4/ACTUAL_VISUAL_PARITY_REPORT.md`
+  - `docs/r4/END_TO_END_WEBKIT_REPORT.md`
+  - `docs/r4/REVISED_GATE_MATRIX.md`
+
 ## Round 26: Golf Swing Lab R4 — Golf Tracer Studio 工程整合 (2026-10-31)
 - [x] **Phase 0：現有程式碼、資料庫、儲存與模型權重基準盤點 (`PASS`)**
   - 完成 PostgreSQL 變更前完整備份 (`~/.golfswinglab/backups/pre_r4_baseline_20261031.dump`)。

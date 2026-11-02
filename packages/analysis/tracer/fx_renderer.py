@@ -274,18 +274,41 @@ def _render_shot_tracer_layer(
                 if cfg.style == TracerStyleName.BEAM:
                     cv2.line(core_layer, p1_i, p2_i, (255, 255, 255), max(1, seg_w // 2), cv2.LINE_AA)
 
-    # 若有藝術延伸段 (`artistic_only`)，強制以半透明虛線繪製
+    # 若有藝術延伸段 (`artistic_only`)，強制以半透明虛線繪製（像素級步進連續相位對齊前端 Canvas setLineDash）
     if artistic_only:
         chain_pts = ([non_artistic[-1]] if non_artistic else []) + artistic_only
         art_xy = [project_track_point_to_output_px(p, layout) for p in chain_pts]
+        art_w = max(1, int(round(base_core_w * 0.65)))
+        dash_len = max(4.0, float(base_core_w * 2.2))
+        gap_len = max(3.0, float(base_core_w * 1.8))
+        step_len = dash_len + gap_len
+
+        total_s = 0.0
         for k in range(len(art_xy) - 1):
-            if k % 2 == 1:
+            p1 = np.array(art_xy[k], dtype=np.float32)
+            p2 = np.array(art_xy[k + 1], dtype=np.float32)
+            seg_dist = float(np.linalg.norm(p2 - p1))
+            if seg_dist < 1e-3:
                 continue
-            p1_i = (int(round(art_xy[k][0])), int(round(art_xy[k][1])))
-            p2_i = (int(round(art_xy[k + 1][0])), int(round(art_xy[k + 1][1])))
-            art_w = max(1, int(round(base_core_w * 0.65)))
-            cv2.line(core_layer, p1_i, p2_i, col_secondary, art_w, cv2.LINE_AA)
-            cv2.line(alpha_layer, p1_i, p2_i, float(cfg.opacity * 0.55), art_w, cv2.LINE_AA)
+
+            u = 0.0
+            while u < seg_dist:
+                phase = (total_s + u) % step_len
+                if phase < dash_len:
+                    rem = dash_len - phase
+                    draw_len = min(seg_dist - u, rem)
+                    pt_a = p1 + (p2 - p1) * (u / seg_dist)
+                    pt_b = p1 + (p2 - p1) * ((u + draw_len) / seg_dist)
+                    p1_i = (int(round(float(pt_a[0]))), int(round(float(pt_a[1]))))
+                    p2_i = (int(round(float(pt_b[0]))), int(round(float(pt_b[1]))))
+                    cv2.line(core_layer, p1_i, p2_i, col_secondary, art_w, cv2.LINE_AA)
+                    cv2.line(alpha_layer, p1_i, p2_i, float(cfg.opacity * 0.55), art_w, cv2.LINE_AA)
+                    u += draw_len
+                else:
+                    gap_rem = step_len - phase
+                    skip_len = min(seg_dist - u, gap_rem)
+                    u += skip_len
+            total_s += seg_dist
 
     # 繪製起飛擊球閃光 (Impact Flash)
     if cfg.show_impact_flash and points:

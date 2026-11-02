@@ -57,9 +57,13 @@ class TracerAnchorUpdateRequest(BaseModel):
     launch_pts_us: int | None = Field(default=None, ge=0)
     apex_pts_us: int | None = Field(default=None, ge=0)
     landing_pts_us: int | None = Field(default=None, ge=0)
+    launch_xy_norm: list[float] | None = Field(default=None, min_length=2, max_length=2)
     apex_xy_norm: list[float] | None = Field(default=None, min_length=2, max_length=2)
     landing_xy_norm: list[float] | None = Field(default=None, min_length=2, max_length=2)
-    artistic_extension_enabled: bool = False
+    clear_launch: bool = False
+    clear_apex: bool = False
+    clear_landing: bool = False
+    artistic_extension_enabled: bool | None = None
     recompute_tracks: bool = True
 
 

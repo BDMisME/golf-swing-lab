@@ -586,6 +586,7 @@ def apply_manual_track_edits(
         )
     )
     anchors_extra = dict(anchor_row.anchors_json or {}) if anchor_row else {}
+    launch_xy = anchors_extra.get("launch_xy_norm")
     apex_xy = anchors_extra.get("apex_xy_norm")
     landing_xy = anchors_extra.get("landing_xy_norm")
 
@@ -597,6 +598,7 @@ def apply_manual_track_edits(
         launch_pts_us=anchor_row.launch_pts_us if anchor_row else None,
         apex_pts_us=anchor_row.apex_pts_us if anchor_row else None,
         landing_pts_us=anchor_row.landing_pts_us if anchor_row else None,
+        launch_xy_norm=(float(launch_xy[0]), float(launch_xy[1])) if launch_xy and len(launch_xy) == 2 else None,
         apex_xy_norm=(float(apex_xy[0]), float(apex_xy[1])) if apex_xy and len(apex_xy) == 2 else None,
         landing_xy_norm=(float(landing_xy[0]), float(landing_xy[1])) if landing_xy and len(landing_xy) == 2 else None,
         artistic_extension_enabled=bool(anchors_extra.get("artistic_extension_enabled", False)),
@@ -739,6 +741,9 @@ def update_project_anchors(
     """
     更新 Studio 專案之時間與空間錨點 (`address`, `top`, `impact`, `finish`, `launch`, `apex`, `landing`)。
     嚴格隔離原則：僅寫入 `tracer_anchor_revisions` 並重算 Tracer 軌跡分段，絕不修改 R3 `swing_events` 或 `swing_scores`。
+    同時支援：
+    - P1-1: `artistic_extension_enabled=None` 時保留既有狀態，不因單純調整 Top/Impact 錨點而重設為 False。
+    - P0-4: 即使自動 Shot Tracer 為 0 點 (`UNAVAILABLE`)，設定 Launch / Apex / Landing 仍可生成 `MANUAL_ANCHORED` 或 `ARTISTIC_EXTENSION` 軌跡。
     """
     project = _get_owned_project(db, project_id, current_user)
     cur_anchor = db.scalar(
@@ -759,13 +764,27 @@ def update_project_anchors(
     top_us = payload.top_pts_us if payload.top_pts_us is not None else (cur_anchor.top_pts_us if cur_anchor else None)
     impact_us = payload.impact_pts_us if payload.impact_pts_us is not None else (cur_anchor.impact_pts_us if cur_anchor else None)
     finish_us = payload.finish_pts_us if payload.finish_pts_us is not None else (cur_anchor.finish_pts_us if cur_anchor else None)
-    launch_us = payload.launch_pts_us if payload.launch_pts_us is not None else (cur_anchor.launch_pts_us if cur_anchor else impact_us)
-    apex_us = payload.apex_pts_us if payload.apex_pts_us is not None else (cur_anchor.apex_pts_us if cur_anchor else None)
-    landing_us = payload.landing_pts_us if payload.landing_pts_us is not None else (cur_anchor.landing_pts_us if cur_anchor else None)
+    launch_us = (
+        payload.launch_pts_us
+        if payload.launch_pts_us is not None
+        else (
+            payload.impact_pts_us
+            if payload.impact_pts_us is not None
+            else (cur_anchor.launch_pts_us if cur_anchor else impact_us)
+        )
+    )
+    apex_us = None if payload.clear_apex else (payload.apex_pts_us if payload.apex_pts_us is not None else (cur_anchor.apex_pts_us if cur_anchor else None))
+    landing_us = None if payload.clear_landing else (payload.landing_pts_us if payload.landing_pts_us is not None else (cur_anchor.landing_pts_us if cur_anchor else None))
 
     prev_json = dict(cur_anchor.anchors_json or {}) if cur_anchor else {}
-    apex_xy = payload.apex_xy_norm if payload.apex_xy_norm is not None else prev_json.get("apex_xy_norm")
-    landing_xy = payload.landing_xy_norm if payload.landing_xy_norm is not None else prev_json.get("landing_xy_norm")
+    eff_artistic_enabled = (
+        payload.artistic_extension_enabled
+        if payload.artistic_extension_enabled is not None
+        else bool(prev_json.get("artistic_extension_enabled", False))
+    )
+    launch_xy = None if payload.clear_launch else (payload.launch_xy_norm if payload.launch_xy_norm is not None else prev_json.get("launch_xy_norm"))
+    apex_xy = None if payload.clear_apex else (payload.apex_xy_norm if payload.apex_xy_norm is not None else prev_json.get("apex_xy_norm"))
+    landing_xy = None if payload.clear_landing else (payload.landing_xy_norm if payload.landing_xy_norm is not None else prev_json.get("landing_xy_norm"))
 
     new_anchor = TracerAnchorRevision(
         project_id=project.id,
@@ -778,7 +797,8 @@ def update_project_anchors(
         apex_pts_us=apex_us,
         landing_pts_us=landing_us,
         anchors_json={
-            "artistic_extension_enabled": payload.artistic_extension_enabled,
+            "artistic_extension_enabled": eff_artistic_enabled,
+            "launch_xy_norm": launch_xy,
             "apex_xy_norm": apex_xy,
             "landing_xy_norm": landing_xy,
         },
@@ -796,9 +816,10 @@ def update_project_anchors(
             launch_pts_us=launch_us,
             apex_pts_us=apex_us,
             landing_pts_us=landing_us,
+            launch_xy_norm=(float(launch_xy[0]), float(launch_xy[1])) if launch_xy and len(launch_xy) == 2 else None,
             apex_xy_norm=(float(apex_xy[0]), float(apex_xy[1])) if apex_xy and len(apex_xy) == 2 else None,
             landing_xy_norm=(float(landing_xy[0]), float(landing_xy[1])) if landing_xy and len(landing_xy) == 2 else None,
-            artistic_extension_enabled=payload.artistic_extension_enabled,
+            artistic_extension_enabled=eff_artistic_enabled,
             recompute_between_manual_anchors=True,
         )
 
@@ -856,11 +877,21 @@ def update_project_anchors(
             project.active_swing_revision = next_s_rev
             project.swing_status = re_swing_q.status
 
-        # 若有開啟藝術延伸或更新飛球落點錨點，同步重算 Shot 軌跡
+        # P0-4: 即使初始 shot_pts 為空 (0 點 UNAVAILABLE)，只要設有 launch/apex/landing 或啟用藝術延伸或執行清除，皆同步重算 Shot 軌跡
         shot_pts, shot_q, _ = load_active_track_points(
             db, project.id, TrackType.BALL.value, project.active_shot_revision
         )
-        if shot_pts and (payload.artistic_extension_enabled or landing_xy is not None):
+        should_recompute_shot = bool(
+            shot_pts
+            or launch_xy is not None
+            or apex_xy is not None
+            or landing_xy is not None
+            or eff_artistic_enabled
+            or payload.clear_launch
+            or payload.clear_apex
+            or payload.clear_landing
+        )
+        if should_recompute_shot:
             all_b_revs = list(
                 db.scalars(
                     select(TracerTrackRevision.revision).where(
@@ -870,10 +901,15 @@ def update_project_anchors(
                 ).all()
             )
             next_b_rev = (max(all_b_revs) + 1) if all_b_revs else 1
+            ball_track_id = (
+                shot_pts[0].track_id
+                if shot_pts
+                else f"ball_{project.segment_id[:12]}_rev{next_b_rev}"
+            )
             re_shot_pts = apply_manual_edits_copy_on_write(
                 base_points=shot_pts,
                 track_type=TrackType.BALL,
-                track_id=shot_pts[0].track_id,
+                track_id=ball_track_id,
                 segment_id=project.segment_id,
                 source_video_id=project.video_id,
                 new_revision=next_b_rev,
@@ -883,7 +919,7 @@ def update_project_anchors(
             re_shot_q = recompute_track_quality_summary(
                 points=re_shot_pts,
                 track_type=TrackType.BALL,
-                total_frames=shot_q.total_frames or len(re_shot_pts),
+                total_frames=shot_q.total_frames or max(30, len(re_shot_pts)),
                 view_angle=shot_q.view_angle,
                 handedness=shot_q.handedness,
                 camera_motion_score=shot_q.camera_motion_score,
@@ -904,7 +940,7 @@ def update_project_anchors(
                     points_inline_json=[p.model_dump(mode="json") for p in re_shot_pts],
                     quality_summary_json=re_shot_q.model_dump(mode="json"),
                     created_by="user",
-                    note="依更新之飛球錨點/藝術延伸重算",
+                    note="依更新之飛球錨點 (Launch/Apex/Landing) 與延伸設定重算",
                 )
             )
             project.active_shot_revision = next_b_rev

@@ -19,6 +19,14 @@ interface TracerInspectorPanelProps {
   onShowAnchorPointsChange: (show: boolean) => void;
   onReanalyze: () => void;
   onRollbackToRevision1: (trackType: TrackType) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onClearShotAnchors?: () => void;
+  onJumpToPtsUs?: (ptsUs: number) => void;
+  onDeletePointAtPtsUs?: (ptsUs: number) => void;
+  currentPtsUs?: number;
   isBusy: boolean;
 }
 
@@ -33,10 +41,22 @@ export default function TracerInspectorPanel({
   onShowAnchorPointsChange,
   onReanalyze,
   onRollbackToRevision1,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  onClearShotAnchors,
+  onJumpToPtsUs,
+  onDeletePointAtPtsUs,
+  currentPtsUs = 0,
   isBusy,
 }: TracerInspectorPanelProps) {
   const swingSummary = project.swing_track?.quality_summary;
   const shotSummary = project.shot_track?.quality_summary;
+  const activePoints =
+    activeTrackType === "club_head"
+      ? project.swing_track?.points || []
+      : project.shot_track?.points || [];
 
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-4 text-xs text-slate-200">
@@ -50,15 +70,41 @@ export default function TracerInspectorPanel({
             Copy-on-Write 修訂版保護 · 絕不覆寫 R3 原始分析與 Revision 1
           </p>
         </div>
-        <button
-          type="button"
-          data-testid="btn-reanalyze-highres"
-          disabled={isBusy}
-          onClick={onReanalyze}
-          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold border border-cyan-500/30 disabled:opacity-50"
-        >
-          {isBusy ? "處理中..." : "↻ 重新掃描高解析原片"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onUndo && (
+            <button
+              type="button"
+              data-testid="btn-undo-edit"
+              disabled={isBusy || !canUndo}
+              onClick={onUndo}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-slate-700 disabled:opacity-40"
+              title="復原上一步修訂"
+            >
+              ↩ 復原
+            </button>
+          )}
+          {onRedo && (
+            <button
+              type="button"
+              data-testid="btn-redo-edit"
+              disabled={isBusy || !canRedo}
+              onClick={onRedo}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold border border-slate-700 disabled:opacity-40"
+              title="重做下一步修訂"
+            >
+              ↪ 重做
+            </button>
+          )}
+          <button
+            type="button"
+            data-testid="btn-reanalyze-highres"
+            disabled={isBusy}
+            onClick={onReanalyze}
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold border border-cyan-500/30 disabled:opacity-50"
+          >
+            {isBusy ? "處理中..." : "↻ 重新掃描高解析原片"}
+          </button>
+        </div>
       </div>
 
       {/* 編輯目標軌道與工具選擇 */}
@@ -114,8 +160,9 @@ export default function TracerInspectorPanel({
           {[
             { id: "inspect", label: "🔍 檢視點位" },
             { id: "add_point", label: "➕ 新增當前幀點" },
-            { id: "move_point", label: "✥ 拖曳移動點" },
-            { id: "delete_point", label: "🗑️ 點擊刪除點" },
+            { id: "move_point", label: "✥ 拖曳當前幀點" },
+            { id: "delete_point", label: "🗑️ 刪除當前幀點" },
+            { id: "set_launch", label: "🚀 標定起飛球位" },
             { id: "set_apex", label: "⛰️ 標定最高點" },
             { id: "set_landing", label: "🎯 標定落點" },
           ].map((tool) => (
@@ -133,7 +180,74 @@ export default function TracerInspectorPanel({
               {tool.label}
             </button>
           ))}
+          {onClearShotAnchors && (
+            <button
+              type="button"
+              data-testid="btn-clear-shot-anchors"
+              disabled={isBusy}
+              onClick={onClearShotAnchors}
+              className="col-span-2 py-1.5 px-2 rounded-lg border border-rose-500/30 bg-rose-950/30 hover:bg-rose-900/40 text-rose-200 text-[11px] font-medium transition disabled:opacity-50"
+            >
+              🧹 清除飛球空間錨點 (Launch/Apex/落點)
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* P1-3: 當前軌道逐幀點位清單 (支援點擊跳幀與刪除) */}
+      <div
+        data-testid="inspector-point-list"
+        className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 space-y-1.5"
+      >
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="font-semibold text-slate-300">
+            軌道點位清單 ({activePoints.length} 點 · 僅當前幀 ±45ms 可直接拖拉)
+          </span>
+          <span className="font-mono text-slate-400">
+            當前 PTS: {currentPtsUs} us
+          </span>
+        </div>
+        {activePoints.length > 0 ? (
+          <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+            {activePoints.slice(0, 40).map((pt) => {
+              const isNear = Math.abs(pt.source_pts_us - currentPtsUs) <= 45_000;
+              return (
+                <div
+                  key={`${pt.source_pts_us}-${pt.revision}`}
+                  className={`flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono ${
+                    isNear
+                      ? "bg-cyan-500/20 border border-cyan-500/40 text-cyan-200"
+                      : "bg-slate-900/80 text-slate-300"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onJumpToPtsUs && onJumpToPtsUs(pt.source_pts_us)}
+                    className="text-left hover:underline"
+                  >
+                    F#{pt.source_frame_index} · {pt.source_pts_us}us · (
+                    {pt.x_norm.toFixed(3)}, {pt.y_norm.toFixed(3)}) [
+                    {pt.source_type}]
+                  </button>
+                  {onDeletePointAtPtsUs && (
+                    <button
+                      type="button"
+                      onClick={() => onDeletePointAtPtsUs(pt.source_pts_us)}
+                      className="text-rose-300 hover:text-rose-200 px-1"
+                      title="刪除此點"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-[11px] text-slate-500">
+            目前軌道為 0 點；可使用「🚀 標定起飛球位 → ⛰️ 標定最高點 → 🎯 標定落點」或「➕ 新增當前幀點」建立人工軌跡。
+          </div>
+        )}
       </div>
 
       {/* Swing Tracer 證據與品質摘要卡 */}

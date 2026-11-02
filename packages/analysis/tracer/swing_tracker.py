@@ -345,6 +345,8 @@ class SwingTracerEngine:
         rejection_reasons: list[str] = []
         if not self.clubhead_detector.is_available:
             rejection_reasons.append("MODEL_UNAVAILABLE:swingtrace-yolo11m")
+        if context.top_pts_us is None or context.impact_pts_us is None:
+            rejection_reasons.append("MISSING_TOP_OR_IMPACT_ANCHOR")
         if unstable_frames > max(3, int(total_f * 0.25)):
             rejection_reasons.append("CAMERA_MOVED")
         if direct_cov < 0.50:
@@ -354,6 +356,8 @@ class SwingTracerEngine:
 
         if (
             self.clubhead_detector.is_available
+            and context.top_pts_us is not None
+            and context.impact_pts_us is not None
             and direct_cov >= 0.50
             and (direct_cov + geom_cov) >= 0.70
             and "CAMERA_MOVED" not in rejection_reasons

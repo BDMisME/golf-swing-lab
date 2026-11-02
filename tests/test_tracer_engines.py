@@ -407,3 +407,36 @@ def test_shot_tracer_bidirectional_airborne_tracking(
     kalman_pts = [p for p in shot_res.points if p.source_type == TrackSourceType.KALMAN_PREDICTED]
     assert len(kalman_pts) >= 1
     assert all(p.raw_observation is None for p in kalman_pts)
+
+
+def test_missing_events_never_fabricates_top_or_impact_ratios(tmp_path: Path) -> None:
+    """P0-1: 當缺少 Top / Impact 事件且無人工錨點時，嚴禁以固定比例 (0.48 / 0.68 / 0.62) 捏造時間點。"""
+    vid = _create_test_video(tmp_path / "hd_no_events.mp4", width=1280, height=720, fps=30, duration_frames=30)
+    ctx = resolve_segment_context(
+        segment_id="seg_no_events",
+        video_id="vid_no_events",
+        source_storage_key=str(vid),
+        source_video_path=vid,
+        start_ms=100,
+        end_ms=1000,
+        events=[],
+        handedness="right",
+        view_angle="DTL",
+    )
+    assert ctx.top_pts_us is None
+    assert ctx.impact_pts_us is None
+    assert ctx.top_source == "missing"
+    assert ctx.impact_source == "missing"
+
+    # SwingTracerEngine 在缺少 Top/Impact 錨點時必須標記 MISSING_TOP_OR_IMPACT_ANCHOR 且不可為 AUTO_TRACED
+    swing_res = SwingTracerEngine().trace_segment(ctx)
+    assert swing_res.status != SwingTrackStatus.AUTO_TRACED
+    assert "MISSING_TOP_OR_IMPACT_ANCHOR" in swing_res.quality_summary.rejection_reasons
+    assert all(p.phase == "unknown" for p in swing_res.points)
+
+    # ShotTracerEngine 在缺少 Impact 與 Launch 錨點時必須直接回傳 UNAVAILABLE (missing_impact_anchor)
+    shot_res = ShotTracerEngine().trace_segment(ctx)
+    assert shot_res.mode == ShotTrackMode.UNAVAILABLE
+    assert len(shot_res.points) == 0
+    assert "missing_impact_anchor" in shot_res.quality_summary.rejection_reasons
+

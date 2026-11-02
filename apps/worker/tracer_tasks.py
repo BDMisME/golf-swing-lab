@@ -163,7 +163,11 @@ def ensure_tracer_model_registry(db: Session) -> list[TracerModelRegistry]:
     return entries
 
 
-def _load_segment_context_from_db(db: Session, segment_id: str) -> tuple[ResolvedSegmentContext, SwingSegment, Video]:
+def _load_segment_context_from_db(
+    db: Session,
+    segment_id: str,
+    project: TracerProject | None = None,
+) -> tuple[ResolvedSegmentContext, SwingSegment, Video]:
     segment = db.get(SwingSegment, segment_id)
     if segment is None:
         raise ValueError(f"找不到揮桿片段: {segment_id}")
@@ -186,6 +190,29 @@ def _load_segment_context_from_db(db: Session, segment_id: str) -> tuple[Resolve
     view_angle = str(q_meta.get("view_angle") or raw_info.get("camera_angle") or "DTL")
     handedness = str(q_meta.get("handedness") or raw_info.get("handedness") or "right")
 
+    # P1-2: 若專案已有作用中之 TracerAnchorRevision，傳入 anchor_override 使重新分析使用 Studio 修正之 Impact/Top/Launch 錨點
+    anchor_override: dict[str, Any] | None = None
+    if project is not None:
+        active_anchor = db.scalar(
+            select(TracerAnchorRevision).where(
+                TracerAnchorRevision.project_id == project.id,
+                TracerAnchorRevision.revision == project.active_anchor_revision,
+            )
+        )
+        if active_anchor is not None:
+            a_json = dict(active_anchor.anchors_json or {})
+            anchor_override = {
+                "id": active_anchor.id,
+                "revision": active_anchor.revision,
+                "created_by": active_anchor.created_by,
+                "address_pts_us": active_anchor.address_pts_us,
+                "top_pts_us": active_anchor.top_pts_us,
+                "impact_pts_us": active_anchor.impact_pts_us,
+                "finish_pts_us": active_anchor.finish_pts_us,
+                "launch_pts_us": active_anchor.launch_pts_us,
+                "launch_xy_norm": a_json.get("launch_xy_norm"),
+            }
+
     ctx = resolve_segment_context(
         segment_id=segment.id,
         video_id=video.id,
@@ -198,6 +225,7 @@ def _load_segment_context_from_db(db: Session, segment_id: str) -> tuple[Resolve
         pose_keyframes=keyframes,
         view_angle=view_angle,
         handedness=handedness,
+        anchor_override=anchor_override,
     )
     return ctx, segment, video
 
@@ -235,7 +263,7 @@ def run_tracer_analysis_job(
         db.commit()
 
         try:
-            ctx, _seg, video = _load_segment_context_from_db(db, project.segment_id)
+            ctx, _seg, video = _load_segment_context_from_db(db, project.segment_id, project=project)
         except SourceUnavailableError as exc:
             project.status = "source_unavailable"
             project.swing_status = SwingTrackStatus.MODEL_UNAVAILABLE.value
@@ -272,17 +300,20 @@ def run_tracer_analysis_job(
             "clip_end_pts_us": ctx.end_pts_us,
             "view_angle": ctx.view_angle,
             "handedness": ctx.handedness,
+            "top_source": ctx.top_source,
+            "impact_source": ctx.impact_source,
+            "anchor_source": ctx.anchor_source,
         }
 
-        # 確保有初始錨點修訂版 (Revision 1)
-        anchor_rev1 = db.scalar(
+        # 確保有初始錨點修訂版 (Revision 1)，但不覆蓋使用者已建立之 Revision > 1
+        active_anchor_row = db.scalar(
             select(TracerAnchorRevision).where(
                 TracerAnchorRevision.project_id == project.id,
-                TracerAnchorRevision.revision == 1,
+                TracerAnchorRevision.revision == project.active_anchor_revision,
             )
         )
-        if anchor_rev1 is None:
-            anchor_rev1 = TracerAnchorRevision(
+        if active_anchor_row is None:
+            active_anchor_row = TracerAnchorRevision(
                 project_id=project.id,
                 revision=1,
                 address_pts_us=ctx.address_pts_us,
@@ -294,12 +325,13 @@ def run_tracer_analysis_job(
                 landing_pts_us=None,
                 anchors_json={
                     "artistic_extension_enabled": False,
+                    "launch_xy_norm": None,
                     "apex_xy_norm": None,
                     "landing_xy_norm": None,
                 },
                 created_by="system",
             )
-            db.add(anchor_rev1)
+            db.add(active_anchor_row)
             project.active_anchor_revision = 1
             db.commit()
 
@@ -381,8 +413,12 @@ def run_tracer_analysis_job(
             db.add(shot_rev_row)
             project.active_shot_revision = next_shot_rev
             project.shot_mode = shot_res.mode.value
-            if shot_res.observed_launch_pts_us is not None and anchor_rev1 is not None:
-                anchor_rev1.launch_pts_us = shot_res.observed_launch_pts_us
+            if (
+                shot_res.observed_launch_pts_us is not None
+                and active_anchor_row is not None
+                and active_anchor_row.created_by == "system"
+            ):
+                active_anchor_row.launch_pts_us = shot_res.observed_launch_pts_us
             db.commit()
 
         # 更新專案與任務最終狀態

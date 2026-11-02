@@ -48,6 +48,7 @@ class ShotTraceResult:
     quality_summary: TrackQualitySummary
     stationary_ball_norm: tuple[float, float] | None
     observed_launch_pts_us: int | None
+    diagnostics: dict[str, Any] | None = None
 
 
 def validate_ball_launch_physics(points: list[CanonicalTrackPoint]) -> tuple[bool, list[str]]:
@@ -100,6 +101,8 @@ class ShotTracerEngine:
     ) -> ShotTraceResult:
         """
         對指定揮桿片段執行擊球前後之小白球追蹤。
+        嚴格誠信原則 (P0-1)：若缺少可信擊球時間錨點 (`impact_pts_us is None`)，
+        絕不以 `0.62 * start + 0.38 * end` 假時間戳冒充擊球時刻，立即回傳 `UNAVAILABLE`。
         """
         track_id = f"shot_{context.segment_id[:12]}_{uuid.uuid4().hex[:8]}"
 
@@ -122,9 +125,19 @@ class ShotTracerEngine:
                 notes=f"小白球偵測模型未就緒 ({self.ball_detector.status})。",
             )
 
-        impact_pts_us = context.impact_pts_us
+        impact_pts_us = (
+            context.launch_pts_us
+            if context.launch_pts_us is not None
+            else context.impact_pts_us
+        )
         if impact_pts_us is None:
-            impact_pts_us = int(round(0.62 * context.start_pts_us + 0.38 * context.end_pts_us))
+            return self._build_empty_result(
+                track_id=track_id,
+                context=context,
+                mode=ShotTrackMode.UNAVAILABLE,
+                reasons=["missing_impact_anchor"],
+                notes="缺少可信的擊球時間錨點 (impact_pts_us)，拒絕以固定比例猜測擊球時刻。請先於 Studio 設定擊球錨點。",
+            )
 
         window_start_us = max(0, impact_pts_us - pre_impact_ms * 1000)
         window_end_us = max(window_start_us + 300_000, impact_pts_us + flight_duration_ms * 1000)
@@ -146,7 +159,7 @@ class ShotTracerEngine:
                 notes="擊球時間窗內無法解碼任何原始影格。",
             )
 
-        # 尋找打擊位置初始參考點 (使用 impact 前後之手腕向下延伸或畫面預設擊球區)
+        # 尋找打擊位置初始參考點 (優先使用 Studio 手動指定之 launch_xy_norm，次之使用 impact 前後手腕延伸)
         wrist_ref = self._resolve_impact_ball_zone_hint(context, impact_pts_us)
 
         # 第一階段：定位擊球前靜止球基準點 (Stationary Ball Anchor) 與靜態背景雜訊點
@@ -155,6 +168,7 @@ class ShotTracerEngine:
             pre_frames = frames[: min(4, len(frames))]
 
         pre_candidates_per_frame: list[tuple[int, list[BallDetectionCandidate]]] = []
+        total_pre_cands = 0
         for pf in pre_frames:
             roi = plan_ball_flight_roi(
                 frame_width=pf.width,
@@ -164,18 +178,24 @@ class ShotTracerEngine:
                 handedness=context.handedness,
             )
             cands = self.ball_detector.detect_candidates_in_roi(pf.image_bgr, roi)
+            total_pre_cands += len(cands)
             pre_candidates_per_frame.append((pf.source_pts_us, cands))
 
         stationary_ball, static_clutter_zones = self._identify_stationary_ball_and_clutter(
             pre_candidates_per_frame,
             default_origin=wrist_ref,
         )
-        ball_origin = stationary_ball if stationary_ball is not None else (wrist_ref or (0.48, 0.76))
+        ball_origin = (
+            context.launch_xy_norm
+            if context.launch_xy_norm is not None
+            else (stationary_ball if stationary_ball is not None else (wrist_ref or (0.48, 0.76)))
+        )
 
         # 第二階段：擊球後雙向擴張 ROI 掃描與軌跡關聯
         cam_tracker = CameraMotionTracker()
         cam_scores: list[float] = []
         raw_detections: list[dict[str, Any]] = []
+        total_post_cands = 0
 
         for f in frames:
             cam_est = cam_tracker.update(f.image_bgr)
@@ -198,6 +218,7 @@ class ShotTracerEngine:
             filtered_cands = [
                 c for c in cands if not self._is_in_static_clutter(c.x_norm, c.y_norm, static_clutter_zones)
             ]
+            total_post_cands += len(filtered_cands)
             raw_detections.append(
                 {
                     "frame": f,
@@ -210,11 +231,23 @@ class ShotTracerEngine:
         launch_verified, launch_pts_us, airborne_chain, rejection_reasons = self._extract_verified_airborne_chain(
             raw_detections=raw_detections,
             ball_origin=ball_origin,
-             stationary_ball=stationary_ball,
+            stationary_ball=stationary_ball,
             impact_pts_us=impact_pts_us,
         )
 
         mean_cam_motion = round(1.0 - float(np.mean(cam_scores)) if cam_scores else 0.0, 4)
+        diag_info = {
+            "impact_pts_us": impact_pts_us,
+            "impact_source": getattr(context, "impact_source", "unknown"),
+            "window_start_us": window_start_us,
+            "window_end_us": window_end_us,
+            "decoded_frames": len(frames),
+            "pre_impact_candidates": total_pre_cands,
+            "post_impact_candidates": total_post_cands,
+            "stationary_ball_norm": stationary_ball,
+            "ball_origin_norm": ball_origin,
+            "airborne_chain_len": len(airborne_chain),
+        }
 
         if not launch_verified or not airborne_chain:
             return ShotTraceResult(
@@ -235,9 +268,10 @@ class ShotTracerEngine:
                 ),
                 stationary_ball_norm=stationary_ball,
                 observed_launch_pts_us=None,
+                diagnostics=diag_info,
             )
 
-        # 第四階段：建立包含光流補幀與 PTS-Kalman 濾波之完整飛行點序列
+        # 第四階段：建立包含光流補幀與 PTS-Kalman 預測之完整飛行點序列
         points = self._build_flight_track_points(
             track_id=track_id,
             context=context,
@@ -266,6 +300,7 @@ class ShotTracerEngine:
                 ),
                 stationary_ball_norm=stationary_ball,
                 observed_launch_pts_us=None,
+                diagnostics=diag_info,
             )
 
         summary = self._compute_shot_quality_summary(
@@ -282,6 +317,7 @@ class ShotTracerEngine:
             quality_summary=summary,
             stationary_ball_norm=stationary_ball,
             observed_launch_pts_us=launch_pts_us,
+            diagnostics=diag_info,
         )
 
     def _resolve_impact_ball_zone_hint(
@@ -289,6 +325,8 @@ class ShotTracerEngine:
         context: ResolvedSegmentContext,
         impact_pts_us: int,
     ) -> tuple[float, float] | None:
+        if getattr(context, "launch_xy_norm", None) is not None:
+            return context.launch_xy_norm
         wrist = context.lookup_wrist_norm_at_pts(impact_pts_us, max_delta_us=180_000)
         if wrist is None:
             wrist = context.lookup_wrist_norm_at_pts(context.start_pts_us + 200_000, max_delta_us=350_000)

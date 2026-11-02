@@ -7,6 +7,7 @@
 import { API_BASE_URL, apiFetch, getAuthToken } from "../api";
 import type {
   AudioMode,
+  CanonicalTrackPoint,
   ExportAspectRatio,
   RenderRecipeV1,
   TrackType,
@@ -270,6 +271,37 @@ export async function rollbackTracerRevision(
   );
 }
 
+export function findFrameScopedNearestPoint(
+  points: CanonicalTrackPoint[],
+  xNorm: number,
+  yNorm: number,
+  currentPtsUs: number,
+  maxDistNorm: number = 0.045,
+  temporalWindowUs: number = 45_000
+): CanonicalTrackPoint | null {
+  /**
+   * P1-3 時間窗限定選點：
+   * 僅在 |pt.source_pts_us - currentPtsUs| <= temporalWindowUs (約 ±1~2 幀) 範圍內搜尋最近點，
+   * 避免上桿與下桿路徑在畫面空間重疊時誤選到其他階段的歷史點。
+   */
+  let best: CanonicalTrackPoint | null = null;
+  let bestScore = Infinity;
+  for (const p of points) {
+    const dtUs = Math.abs(p.source_pts_us - currentPtsUs);
+    if (dtUs > temporalWindowUs) continue;
+    const d = Math.hypot(p.x_norm - xNorm, p.y_norm - yNorm);
+    if (d <= maxDistNorm) {
+      // 同樣距離內優先選擇時間最接近當前幀的點
+      const score = d + (dtUs / Math.max(1, temporalWindowUs)) * 0.008;
+      if (score < bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+  }
+  return best;
+}
+
 export async function updateTracerAnchors(
   projectId: string,
   params: {
@@ -280,8 +312,12 @@ export async function updateTracerAnchors(
     launch_pts_us?: number | null;
     apex_pts_us?: number | null;
     landing_pts_us?: number | null;
+    launch_xy_norm?: [number, number] | null;
     apex_xy_norm?: [number, number] | null;
     landing_xy_norm?: [number, number] | null;
+    clear_launch?: boolean;
+    clear_apex?: boolean;
+    clear_landing?: boolean;
     artistic_extension_enabled?: boolean;
     recompute_tracks?: boolean;
   }

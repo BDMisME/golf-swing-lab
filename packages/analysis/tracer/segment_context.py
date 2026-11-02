@@ -41,10 +41,14 @@ class ResolvedSegmentContext:
     segment_start_pts_us: int
     segment_end_pts_us: int
     takeaway_pts_us: int
-    top_pts_us: int
-    impact_pts_us: int
+    top_pts_us: int | None
+    impact_pts_us: int | None
     finish_pts_us: int
-    anchor_source: str  # "r3_events" | "tracer_anchor_override"
+    anchor_source: str  # "r3_events" | "tracer_anchor_override" | "missing_events"
+    top_source: str = "missing"  # "observed" | "r3_estimated" | "user_manual" | "missing"
+    impact_source: str = "missing"  # "observed" | "r3_estimated" | "user_manual" | "missing"
+    launch_pts_us: int | None = None
+    launch_xy_norm: tuple[float, float] | None = None
     anchor_revision_id: str | None = None
     rounding_errors_us: dict[str, int] = field(default_factory=dict)
     wrist_hints_by_ms: dict[int, tuple[float, float]] = field(default_factory=dict)
@@ -160,8 +164,11 @@ def resolve_segment_context(
 ) -> ResolvedSegmentContext:
     """
     將 R3 SwingSegment 與 SwingEvent 解析為微秒級 `source_pts_us` 錨點；
-    若提供 `anchor_override`（來自 `tracer_anchor_revisions`），僅在 Studio 上下文中覆蓋 Top/Impact，
-    不修改傳入之 `events` 列表或任何 R3 資料表。
+    嚴格誠信原則 (P0-1)：
+    - 禁止在缺少事件時使用 `start + 0.48 * span` 或 `start + 0.68 * span` 等固定比例假時間戳冒充 Top / Impact。
+    - 明確標註 `top_source` 與 `impact_source` (`observed` / `r3_estimated` / `user_manual` / `missing`)。
+    - 若提供 `anchor_override`（來自 `tracer_anchor_revisions`），僅在 Studio 上下文中覆蓋錨點，
+      不修改傳入之 `events` 列表或任何 R3 資料表。
     """
     _ = proxy_storage_key  # 嚴禁退回使用 proxy_storage_key！
     if not source_storage_key or not str(source_storage_key).strip():
@@ -194,12 +201,10 @@ def resolve_segment_context(
             pts_snapping_fn = tl.snap_ms_to_pts_us
     except SourceUnavailableError:
         if pts_snapping_fn is None and source_video_path is None:
-            # 若呼叫者需要讀檔（未傳自訂 pts_snapping_fn 且檔案真不存在），檢查是否為純記憶體驗證
             if "/" in str(source_storage_key) or str(source_storage_key).endswith((".mp4", ".mov", ".MOV", ".MP4")):
                 try:
                     _resolve_local_video_path(str(source_storage_key), video_id=video_id)
                 except SourceUnavailableError:
-                    # 僅當 storage_key 指向實際遺失之儲存鍵且未給自訂 snapping 時拋出
                     raise
     except Exception:
         pass
@@ -235,37 +240,72 @@ def resolve_segment_context(
     seg_end_us = max(seg_start_us + 100_000, _to_pts(end_ms, "segment_end"))
 
     ev_map: dict[str, int] = {}
+    ev_conf: dict[str, float] = {}
     for ev in events or []:
         ename = str(ev.get("event_name") or "").lower()
         tms = ev.get("time_ms")
         if ename and tms is not None:
             ev_map[ename] = int(tms)
+            ev_conf[ename] = float(ev.get("confidence") if ev.get("confidence") is not None else 0.7)
 
-    span_ms = max(500, end_ms - start_ms)
-    takeaway_ms = ev_map.get("takeaway") or ev_map.get("address") or (start_ms + int(span_ms * 0.12))
-    top_ms = ev_map.get("top") or (start_ms + int(span_ms * 0.48))
-    impact_ms = ev_map.get("impact_estimated") or ev_map.get("impact") or (start_ms + int(span_ms * 0.68))
-    finish_ms = ev_map.get("finish") or ev_map.get("follow_through") or (end_ms - int(span_ms * 0.08))
-
+    takeaway_ms = ev_map.get("takeaway") if "takeaway" in ev_map else ev_map.get("address", start_ms)
+    finish_ms = ev_map.get("finish") if "finish" in ev_map else ev_map.get("follow_through", end_ms)
     takeaway_us = _to_pts(takeaway_ms, "takeaway")
-    top_us = _to_pts(top_ms, "top")
-    impact_us = _to_pts(impact_ms, "impact")
     finish_us = _to_pts(finish_ms, "finish")
 
-    anchor_source = "r3_events"
+    top_us: int | None = None
+    top_source = "missing"
+    if "top" in ev_map:
+        top_us = _to_pts(ev_map["top"], "top")
+        top_source = "observed" if ev_conf.get("top", 0.7) >= 0.8 else "r3_estimated"
+
+    impact_us: int | None = None
+    impact_source = "missing"
+    if "impact" in ev_map:
+        impact_us = _to_pts(ev_map["impact"], "impact")
+        impact_source = "observed"
+    elif "impact_estimated" in ev_map:
+        impact_us = _to_pts(ev_map["impact_estimated"], "impact")
+        impact_source = "r3_estimated"
+
+    launch_us: int | None = impact_us
+    launch_xy: tuple[float, float] | None = None
+
+    anchor_source = "r3_events" if (top_us is not None or impact_us is not None) else "missing_events"
     anchor_rev_id: str | None = None
     if anchor_override:
+        if anchor_override.get("address_pts_us") is not None:
+            takeaway_us = int(anchor_override["address_pts_us"])
         if anchor_override.get("top_pts_us") is not None:
             top_us = int(anchor_override["top_pts_us"])
-            anchor_source = "tracer_anchor_override"
+            if anchor_override.get("created_by") == "user" or anchor_override.get("revision", 1) > 1 or "id" not in anchor_override:
+                top_source = "user_manual"
+                anchor_source = "tracer_anchor_override"
+            elif top_source == "missing":
+                top_source = "r3_estimated"
         if anchor_override.get("impact_pts_us") is not None:
             impact_us = int(anchor_override["impact_pts_us"])
-            anchor_source = "tracer_anchor_override"
+            if anchor_override.get("created_by") == "user" or anchor_override.get("revision", 1) > 1 or "id" not in anchor_override:
+                impact_source = "user_manual"
+                anchor_source = "tracer_anchor_override"
+            elif impact_source == "missing":
+                impact_source = "r3_estimated"
+        if anchor_override.get("finish_pts_us") is not None:
+            finish_us = int(anchor_override["finish_pts_us"])
+        if anchor_override.get("launch_pts_us") is not None:
+            launch_us = int(anchor_override["launch_pts_us"])
+        elif impact_us is not None:
+            launch_us = impact_us
+        raw_lxy = anchor_override.get("launch_xy_norm")
+        if isinstance(raw_lxy, (list, tuple)) and len(raw_lxy) == 2:
+            launch_xy = (float(raw_lxy[0]), float(raw_lxy[1]))
         anchor_rev_id = anchor_override.get("id")
 
-    # 確保順序單調合理 (top < impact)
-    if impact_us <= top_us:
+    # 僅當 top 與 impact 皆實際存在時確保順序單調合理 (top < impact)
+    if top_us is not None and impact_us is not None and impact_us <= top_us:
         impact_us = top_us + 150_000
+        if launch_us is None or launch_us < impact_us:
+            launch_us = impact_us
 
     # 提取手腕位置僅供 ROI 搜尋視窗約束（嚴禁直接當作桿頭點！）
     wrist_hints: dict[int, tuple[float, float]] = {}
@@ -296,6 +336,10 @@ def resolve_segment_context(
         impact_pts_us=impact_us,
         finish_pts_us=finish_us,
         anchor_source=anchor_source,
+        top_source=top_source,
+        impact_source=impact_source,
+        launch_pts_us=launch_us,
+        launch_xy_norm=launch_xy,
         anchor_revision_id=anchor_rev_id,
         rounding_errors_us=rounding_errors,
         wrist_hints_by_ms=wrist_hints,
@@ -315,7 +359,9 @@ def classify_swing_phase_at_pts(
     *,
     address_pts_us: int | None = None,
 ) -> str:
-    """依據權威 source_pts_us 切分揮桿階段：backswing / downswing / follow_through。"""
+    """依據權威 source_pts_us 切分揮桿階段：backswing / downswing / follow_through / unknown。"""
+    if top_pts_us is None and impact_pts_us is None:
+        return "unknown"
     eff_takeaway = takeaway_pts_us if takeaway_pts_us is not None else address_pts_us
     if eff_takeaway is not None and pts_us < eff_takeaway:
         return "address"

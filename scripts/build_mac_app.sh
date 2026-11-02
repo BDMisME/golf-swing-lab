@@ -37,6 +37,83 @@ if [ "${1:-}" = "--rollback" ]; then
     exit 0
 fi
 
+INSTALL_MODE="test"
+if [ "${1:-}" = "--install-production" ]; then
+    if [ "${GSL_ALLOW_PRODUCTION_APP_INSTALL:-0}" != "1" ]; then
+        echo "❌ 安全攔截：正式版 /Applications/$APP_NAME 需於全部 Gate 驗收完成並設定 GSL_ALLOW_PRODUCTION_APP_INSTALL=1 後才允許覆寫。" >&2
+        echo "   請使用預設隔離測試建置：bash scripts/build_mac_app.sh --test-bundle" >&2
+        exit 1
+    fi
+    INSTALL_MODE="production"
+elif [ "${1:-}" = "--test-bundle" ] || [ -z "${1:-}" ]; then
+    INSTALL_MODE="test"
+else
+    echo "用法: $0 [--test-bundle | --install-production | --rollback]" >&2
+    exit 1
+fi
+
+if [ "$INSTALL_MODE" = "test" ]; then
+    TEST_APP_NAME="Golf Swing Lab R4 Test.app"
+    TEST_BUNDLE_ID="com.golfswinglab.desktop.r4test"
+    TEST_TARGET_APP="${GSL_TEST_APP_PATH:-/tmp/$TEST_APP_NAME}"
+    echo "=== [1/4] 準備隔離測試 App Bundle ($TEST_TARGET_APP) ==="
+    rm -rf "$TEST_TARGET_APP"
+    mkdir -p "$TEST_TARGET_APP/Contents/MacOS" "$TEST_TARGET_APP/Contents/Resources"
+
+    echo "=== [2/4] 編譯動態可定位 arm64 Mach-O 原生 Launcher ==="
+    clang -O2 -target arm64-apple-macos11.0 \
+        "$REPO_ROOT/launcher.c" \
+        -o "$TEST_TARGET_APP/Contents/MacOS/GolfSwingLab"
+    chmod +x "$TEST_TARGET_APP/Contents/MacOS/GolfSwingLab"
+
+    echo "=== [3/4] 建立隔離測試 Info.plist ($TEST_BUNDLE_ID, v1.4.0-r4test) ==="
+    cat << EOF > "$TEST_TARGET_APP/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>GolfSwingLab</string>
+    <key>CFBundleIdentifier</key>
+    <string>${TEST_BUNDLE_ID}</string>
+    <key>CFBundleName</key>
+    <string>Golf Swing Lab R4 Test</string>
+    <key>CFBundleDisplayName</key>
+    <string>Golf Swing Lab R4 Test</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.4.0-r4test</string>
+    <key>CFBundleVersion</key>
+    <string>4</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+</dict>
+</plist>
+EOF
+
+    if [ -f "$REPO_ROOT/assets/AppIcon.icns" ]; then
+        cp "$REPO_ROOT/assets/AppIcon.icns" "$TEST_TARGET_APP/Contents/Resources/AppIcon.icns"
+    elif [ -f "$TARGET_APP/Contents/Resources/AppIcon.icns" ]; then
+        cp "$TARGET_APP/Contents/Resources/AppIcon.icns" "$TEST_TARGET_APP/Contents/Resources/AppIcon.icns"
+    fi
+
+    echo "=== [4/4] 執行 macOS 本地 Ad-hoc 程式碼簽名與驗證 ==="
+    codesign -s - --force --deep "$TEST_TARGET_APP"
+    codesign --verify --deep --strict "$TEST_TARGET_APP"
+
+    echo "✅ Golf Swing Lab R4 隔離測試版 Mac App 建置完成！"
+    echo "   - 隔離測試路徑: $TEST_TARGET_APP (CFBundleIdentifier=$TEST_BUNDLE_ID)"
+    echo "   - 正式版 /Applications/$APP_NAME 保持未變動"
+    exit 0
+fi
+
 echo "=== [1/6] 準備乾淨建置暫存區 ($DIST_DIR) ==="
 rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
@@ -101,7 +178,6 @@ if [ -d "$TARGET_APP" ]; then
         fi
     fi
     BACKUP_PATH="$BACKUP_ROOT/Golf_Swing_Lab_$(date +%Y%m%d_%H%M%S).app"
-    rm -rf "$BACKUP_ROOT"/Golf_Swing_Lab_*.app
     cp -R "$TARGET_APP" "$BACKUP_PATH"
     echo "   - 已備份既有 App Bundle 至: $BACKUP_PATH"
 fi

@@ -457,3 +457,109 @@ def test_tracer_full_lifecycle_idor_isolation_r3_non_interference_and_exports(tm
     assert exp_batch["fps"] == 30
     assert exp_batch["has_audio_stream"] is True
     assert exp_batch["parity_report"]["coordinate_parity_passed"] is True
+
+
+def test_tracer_zero_point_anchors_preserve_flags_and_reanalyze_with_studio_overrides(tmp_path: Path) -> None:
+    """驗證 P0-4 (0 點 Shot 完整手動錨點建立)、P1-1 (修改 Top/Impact 不意外重置 artistic_extension_enabled，且支援 clear_*)、
+    以及 P1-2 (修改 Studio Impact 後重新執行 POST /analyze 實際採用新錨點且不污染 R3)。"""
+    admin_id, admin_headers = _get_admin_user_and_headers()
+    _, seg1_id, _ = _seed_session_video_and_two_segments(admin_id, tmp_path)
+
+    # 1. 建立不自動分析之空專案 (模擬 0-point UNAVAILABLE 狀態)
+    r_create = client.post(
+        "/api/tracer/projects",
+        headers=admin_headers,
+        json={"segment_id": seg1_id, "preset_id": "studio_neon", "auto_analyze": False},
+    )
+    assert r_create.status_code == 200
+    proj = r_create.json()
+    pid = proj["id"]
+    assert proj["shot_mode"] == "UNAVAILABLE"
+
+    # 2. P0-4: 在 0 點狀態下直接設定 Launch + Apex + Landing -> 產生 MANUAL_ANCHORED 軌跡
+    r_zero_manual = client.put(
+        f"/api/tracer/projects/{pid}/anchors",
+        headers=admin_headers,
+        json={
+            "launch_pts_us": 610_000,
+            "launch_xy_norm": [0.51, 0.77],
+            "apex_xy_norm": [0.60, 0.25],
+            "landing_pts_us": 1_120_000,
+            "landing_xy_norm": [0.70, 0.50],
+            "artistic_extension_enabled": False,
+            "recompute_tracks": True,
+        },
+    )
+    assert r_zero_manual.status_code == 200, r_zero_manual.text
+    p_manual = r_zero_manual.json()
+    assert p_manual["shot_mode"] == "MANUAL_ANCHORED"
+    assert p_manual["shot_track"]["point_count"] >= 5
+    assert p_manual["anchors"]["anchors_json"]["launch_xy_norm"] == [0.51, 0.77]
+
+    # 3. 開啟 artistic_extension_enabled=True -> 切換為 ARTISTIC_EXTENSION
+    r_artistic_on = client.put(
+        f"/api/tracer/projects/{pid}/anchors",
+        headers=admin_headers,
+        json={"artistic_extension_enabled": True, "recompute_tracks": True},
+    )
+    assert r_artistic_on.status_code == 200
+    assert r_artistic_on.json()["anchors"]["anchors_json"]["artistic_extension_enabled"] is True
+    assert r_artistic_on.json()["shot_mode"] == "ARTISTIC_EXTENSION"
+
+    # 4. P1-1: 單獨更新 top_pts_us / impact_pts_us (不傳 artistic_extension_enabled)，既有 True 與空間錨點必須保留！
+    r_update_time_only = client.put(
+        f"/api/tracer/projects/{pid}/anchors",
+        headers=admin_headers,
+        json={"top_pts_us": 460_000, "impact_pts_us": 640_000, "recompute_tracks": True},
+    )
+    assert r_update_time_only.status_code == 200
+    p_preserved = r_update_time_only.json()
+    assert p_preserved["anchors"]["top_pts_us"] == 460_000
+    assert p_preserved["anchors"]["impact_pts_us"] == 640_000
+    assert p_preserved["anchors"]["anchors_json"]["artistic_extension_enabled"] is True
+    assert p_preserved["anchors"]["anchors_json"]["apex_xy_norm"] == [0.60, 0.25]
+    assert p_preserved["anchors"]["anchors_json"]["landing_xy_norm"] == [0.70, 0.50]
+
+    # 5. P1-1: 測試 clear_apex 與 clear_landing 明確清除空間錨點
+    r_clear = client.put(
+        f"/api/tracer/projects/{pid}/anchors",
+        headers=admin_headers,
+        json={
+            "clear_apex": True,
+            "clear_landing": True,
+            "artistic_extension_enabled": False,
+            "recompute_tracks": False,
+        },
+    )
+    assert r_clear.status_code == 200
+    p_cleared = r_clear.json()
+    assert p_cleared["anchors"]["anchors_json"].get("apex_xy_norm") is None
+    assert p_cleared["anchors"]["anchors_json"].get("landing_xy_norm") is None
+    assert p_cleared["anchors"]["anchors_json"]["artistic_extension_enabled"] is False
+
+    # 6. P1-2: 呼叫 POST /api/tracer/projects/{id}/analyze，確認重算保留並使用 Studio 覆寫之 460_000 / 640_000，且 R3 SwingEvent 仍為 420 / 600ms
+    r_reanalyze = client.post(
+        f"/api/tracer/projects/{pid}/analyze",
+        headers=admin_headers,
+        json={"run_sync": True},
+    )
+    assert r_reanalyze.status_code == 200, r_reanalyze.text
+    p_reanalyzed = r_reanalyze.json()["project"]
+    assert p_reanalyzed["anchors"]["top_pts_us"] == 460_000
+    assert p_reanalyzed["anchors"]["impact_pts_us"] == 640_000
+    assert p_reanalyzed["swing_track"] is not None
+    # 檢查 Swing 軌跡中位於 430_000us (介於原始 420ms 與新 460ms 之間) 的點必須被歸類為 backswing 而非 downswing
+    for pt in p_reanalyzed["swing_track"]["points"]:
+        if 425_000 <= pt["source_pts_us"] < 460_000:
+            assert pt["phase"] == "backswing"
+        elif 460_000 <= pt["source_pts_us"] < 640_000:
+            assert pt["phase"] == "downswing"
+
+    with SessionLocal() as db:
+        r3_evs = {
+            ev.event_name: ev.time_ms
+            for ev in db.scalars(select(SwingEvent).where(SwingEvent.segment_id == seg1_id)).all()
+        }
+        assert r3_evs["top"] == 420
+        assert r3_evs["impact_estimated"] == 600
+
