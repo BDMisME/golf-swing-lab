@@ -12,14 +12,18 @@ from __future__ import annotations
 import argparse
 import base64
 from dataclasses import asdict
+import hashlib
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import time
 from typing import Any
 import urllib.request
+
+import httpx
 
 # 確保根目錄在 sys.path 中
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -143,12 +147,50 @@ def _decode_mp4_frame_at_index(mp4_path: Path, frame_index: int) -> np.ndarray:
         cap.release()
 
 
+def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    """安全檢測特定 loopback port 是否正被任何連線或程序佔用。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex((host, port)) == 0
+
+
+def compute_production_app_checksums() -> dict[str, Any]:
+    """計算正式版 /Applications/Golf Swing Lab.app 之真實 SHA256 checksums。"""
+    prod_app = Path("/Applications/Golf Swing Lab.app")
+    if not prod_app.exists():
+        return {"exists": False, "status": "NOT_FOUND"}
+    plist_path = prod_app / "Contents" / "Info.plist"
+    binary_path = prod_app / "Contents" / "MacOS" / "GolfSwingLab"
+    plist_sha = hashlib.sha256(plist_path.read_bytes()).hexdigest() if plist_path.exists() else "missing"
+    binary_sha = hashlib.sha256(binary_path.read_bytes()).hexdigest() if binary_path.exists() else "missing"
+    return {
+        "exists": True,
+        "path": str(prod_app),
+        "plist_sha256": plist_sha,
+        "binary_sha256": binary_sha,
+    }
+
+
+def fetch_project_detail_api(project_id: str, token: str, port: int = 28000) -> dict[str, Any]:
+    """透過後端 API 取得 TracerProject 完整詳情、雙軌點位與 anchors。"""
+    url = f"http://127.0.0.1:{port}/api/tracer/projects/{project_id}"
+    resp = httpx.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
+    assert resp.status_code == 200, f"Failed to fetch project detail: {resp.status_code} {resp.text}"
+    return resp.json()
+
+
 def run_verification(sabotage: str = "none") -> dict[str, Any]:
     project_id, token = prepare_e2e_project()
     print(f"=== Prepared E2E TracerProject: {project_id} (Sabotage mode: {sabotage}) ===")
 
-    subprocess.run("lsof -ti :28000 -ti :23000 | xargs kill -9 2>/dev/null || true", shell=True)
-    time.sleep(0.5)
+    # P0-A: 紀錄正式版 /Applications/Golf Swing Lab.app 測試前 checksum
+    prod_checksums_before = compute_production_app_checksums()
+
+    # P0-B: 安全契約——嚴禁使用 lsof | kill-9 暴力殺 Port。若已被佔用則明確退出並拒絕傷害外部程序
+    if is_port_in_use(28000):
+        raise RuntimeError("BLOCKED_PORT_IN_USE: Port 28000 is occupied by an external process. Refusing to forcefully kill external processes.")
+    if is_port_in_use(23000):
+        raise RuntimeError("BLOCKED_PORT_IN_USE: Port 23000 is occupied by an external process. Refusing to forcefully kill external processes.")
 
     env = os.environ.copy()
     env["PYTHONPATH"] = "."
@@ -258,12 +300,48 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         step1_info = json.loads(str(eval_js_sync(webview, pause_js)))
         print("Step 1 info:", json.dumps(step1_info, ensure_ascii=False))
 
+        # P0-C Step 1 嚴格校驗：HTTP X-GSL-Media-Source 原片標頭、解析度與 PTS 單調性
+        video_src = step1_info.get("videoSrc", "")
+        if video_src.startswith("/"):
+            video_full_url = f"http://127.0.0.1:28000{video_src}" if "/api/" in video_src else f"http://127.0.0.1:23000{video_src}"
+        else:
+            video_full_url = video_src
+
+        header_source_value = None
+        try:
+            head_resp = httpx.get(
+                video_full_url,
+                headers={"Authorization": f"Bearer {token}", "Range": "bytes=0-1024"},
+                timeout=5.0,
+            )
+            header_source_value = head_resp.headers.get("x-gsl-media-source")
+        except Exception as e:
+            print(f"Warning: could not probe video response header: {e}")
+
+        sync_stats = step1_info.get("frameSyncStats") or {}
+        callback_count = sync_stats.get("callbackCount", 0)
+        recent_pts = sync_stats.get("recentMediaTimesUs") or []
+        pts_advanced = False
+        if len(recent_pts) >= 2:
+            pts_advanced = recent_pts[-1] > recent_pts[0]
+        elif callback_count > 0:
+            pts_advanced = True
+
         step1_passed = (
             step1_info.get("readyState", 0) >= 2
+            and "source=original" in video_src
+            and header_source_value == "original"
+            and step1_info.get("videoWidth", 0) > 0
+            and step1_info.get("videoHeight", 0) > 0
             and step1_info.get("sourceBadgePresent", False)
+            and callback_count > 0
+            and pts_advanced
             and len(step1_info.get("jsErrors", [])) == 0
         )
         step1_status = "PASS" if step1_passed else "FAIL"
+        step1_info["header_x_gsl_media_source"] = header_source_value
+        step1_info["pts_advanced"] = pts_advanced
+        step1_info["step1_passed"] = step1_passed
 
         # -------------------------------------------------------------
         # STEP 2: Native WKWebView Real DOM & Canvas MouseEvent E2E Interaction
@@ -322,6 +400,10 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
 
         e2e_results: dict[str, Any] = {}
 
+        # 取得基準專案詳情
+        proj_base = fetch_project_detail_api(project_id, token)
+        rev_base = proj_base.get("active_shot_revision") or 0
+
         # 2a. Set Launch Anchor via DOM Button + Canvas Click
         eval_js_sync(webview, "window.__GSL_UI_E2E__.seekVideoSec(3.80);")
         pump_runloop(0.4)
@@ -330,10 +412,15 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         m_launch = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.dispatchCanvasMouse('mousedown', 0.52, 0.78));")))
         pump_runloop(1.5)
         st_launch = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_launch = fetch_project_detail_api(project_id, token)
+        anchors_launch = (proj_launch.get("anchors") or {}).get("anchors_json") or (proj_launch.get("anchors") or {})
+        launch_xy = anchors_launch.get("launch_xy_norm") or []
+        assert len(launch_xy) == 2, f"Expected 2D launch coordinates, got: {launch_xy}"
         e2e_results["launch_anchor"] = {
             "click_btn": c_launch,
             "mouse_down": m_launch,
             "state_after": st_launch,
+            "api_launch_xy": launch_xy,
         }
 
         # 2b. Set Apex Anchor via DOM Button + Canvas Click
@@ -344,10 +431,15 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         m_apex = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.dispatchCanvasMouse('mousedown', 0.47, 0.22));")))
         pump_runloop(1.5)
         st_apex = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_apex = fetch_project_detail_api(project_id, token)
+        anchors_apex = (proj_apex.get("anchors") or {}).get("anchors_json") or (proj_apex.get("anchors") or {})
+        apex_xy = anchors_apex.get("apex_xy_norm") or []
+        assert len(apex_xy) == 2, f"Expected 2D apex coordinates, got: {apex_xy}"
         e2e_results["apex_anchor"] = {
             "click_btn": c_apex,
             "mouse_down": m_apex,
             "state_after": st_apex,
+            "api_apex_xy": apex_xy,
         }
 
         # 2c. Set Landing Anchor via DOM Button + Canvas Click
@@ -358,13 +450,27 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         m_landing = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.dispatchCanvasMouse('mousedown', 0.44, 0.58));")))
         pump_runloop(1.8)
         st_landing = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_landing = fetch_project_detail_api(project_id, token)
+        anchors_landing = (proj_landing.get("anchors") or {}).get("anchors_json") or (proj_landing.get("anchors") or {})
+        landing_xy = anchors_landing.get("landing_xy_norm") or []
+        assert len(landing_xy) == 2, f"Expected 2D landing coordinates, got: {landing_xy}"
+        pts_landing = proj_landing.get("shot_track", {}).get("points") or []
+        rev_landing = proj_landing.get("active_shot_revision") or 0
+        assert proj_landing.get("shot_mode") in ("MANUAL_ANCHORED", "ARTISTIC_EXTENSION"), f"Expected shot_mode MANUAL_ANCHORED or ARTISTIC_EXTENSION, got {proj_landing.get('shot_mode')}"
+        assert len(pts_landing) > 0, "Expected non-empty points array after landing anchor"
+        assert rev_landing > rev_base, f"Expected revision > {rev_base}, got {rev_landing}"
         e2e_results["landing_anchor"] = {
             "click_btn": c_landing,
             "mouse_down": m_landing,
             "state_after": st_landing,
+            "api_landing_xy": landing_xy,
+            "api_points_count": len(pts_landing),
+            "api_shot_rev": rev_landing,
         }
 
-        # 2d. Add Point via DOM Button + Canvas Click
+        # 2d. Add Point via DOM Button + Canvas Click (先切換至 Shot 飛球軌跡)
+        eval_js_sync(webview, "window.__GSL_UI_E2E__.clickElement('[data-testid=\"select-track-ball\"]');")
+        pump_runloop(0.3)
         eval_js_sync(webview, "window.__GSL_UI_E2E__.seekVideoSec(4.05);")
         pump_runloop(0.4)
         c_add = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.clickElement('[data-testid=\"tool-add_point\"]'));")))
@@ -372,12 +478,19 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         m_add = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.dispatchCanvasMouse('mousedown', 0.495, 0.48));")))
         pump_runloop(1.8)
         st_add = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_add = fetch_project_detail_api(project_id, token)
+        pts_add = proj_add.get("shot_track", {}).get("points") or []
+        rev_add = proj_add.get("active_shot_revision") or 0
+        assert rev_add > rev_landing, f"Revision did not increase: {rev_add} <= {rev_landing}"
+        assert len(pts_add) > 0, "Points array is empty after add_point"
+        assert any(p.get("source_type") == "manual" for p in pts_add) or (rev_add > rev_landing)
         e2e_results["add_point"] = {
             "click_btn": c_add,
             "mouse_down": m_add,
             "state_after": st_add,
+            "api_points_count": len(pts_add),
+            "api_shot_rev": rev_add,
         }
-        rev_after_add = st_add.get("shotRev")
 
         # 2e. Move Point via DOM Button + Canvas Mouse Drag
         c_move = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.clickElement('[data-testid=\"tool-move_point\"]'));")))
@@ -389,30 +502,49 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         eval_js_sync(webview, "window.__GSL_UI_E2E__.dispatchCanvasMouse('mouseup', 0.490, 0.46);")
         pump_runloop(1.8)
         st_move = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_move = fetch_project_detail_api(project_id, token)
+        pts_move = proj_move.get("shot_track", {}).get("points") or []
+        rev_move = proj_move.get("active_shot_revision") or 0
+        assert rev_move > rev_add, f"Revision did not increase after move: {rev_move} <= {rev_add}"
+        coord_changed = any(
+            abs(float(p1.get("x_norm", 0)) - float(p2.get("x_norm", 0))) > 0.0001
+            or abs(float(p1.get("y_norm", 0)) - float(p2.get("y_norm", 0))) > 0.0001
+            for p1, p2 in zip(pts_add, pts_move)
+        )
+        assert coord_changed, "Point coordinates did not change after drag operation"
         e2e_results["move_point"] = {
             "click_btn": c_move,
             "state_after": st_move,
+            "api_shot_rev": rev_move,
+            "coord_delta_verified": coord_changed,
         }
-        rev_after_move = st_move.get("shotRev")
 
         # 2f. Undo via DOM Button
         c_undo = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.clickElement('[data-testid=\"btn-undo-edit\"]'));")))
         pump_runloop(1.8)
         st_undo = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_undo = fetch_project_detail_api(project_id, token)
+        rev_undo = proj_undo.get("active_shot_revision") or 0
+        assert rev_undo < rev_move, f"Revision did not rollback after undo: {rev_undo} >= {rev_move}"
         e2e_results["undo"] = {
             "click_btn": c_undo,
             "state_after": st_undo,
             "undone_to_rev": st_undo.get("shotRev"),
+            "api_shot_rev": rev_undo,
         }
 
         # 2g. Redo via DOM Button
         c_redo = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.clickElement('[data-testid=\"btn-redo-edit\"]'));")))
         pump_runloop(1.8)
         st_redo = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_redo = fetch_project_detail_api(project_id, token)
+        rev_redo = proj_redo.get("active_shot_revision") or 0
+        assert rev_redo == rev_move, f"Revision did not restore after redo: {rev_redo} != {rev_move}"
         e2e_results["redo"] = {
             "click_btn": c_redo,
             "state_after": st_redo,
             "redone_to_rev": st_redo.get("shotRev"),
+            "api_shot_rev": rev_redo,
         }
 
         # 2h. Full Page Reload to verify persistence
@@ -420,9 +552,16 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         pump_runloop(4.8)
         eval_js_sync(webview, helper_js)
         st_reloaded = json.loads(str(eval_js_sync(webview, "JSON.stringify(window.__GSL_UI_E2E__.getStudioState());")))
+        proj_reloaded = fetch_project_detail_api(project_id, token)
+        rev_reloaded = proj_reloaded.get("active_shot_revision") or 0
+        pts_reloaded = proj_reloaded.get("shot_track", {}).get("points") or []
+        assert rev_reloaded == rev_redo, f"Persisted revision mismatch: {rev_reloaded} != {rev_redo}"
+        assert len(pts_reloaded) == len(pts_move), f"Persisted point count mismatch: {len(pts_reloaded)} != {len(pts_move)}"
         e2e_results["reload_persistence"] = {
             "state_after_reload": st_reloaded,
             "persisted_rev": st_reloaded.get("shotRev"),
+            "api_persisted_rev": rev_reloaded,
+            "api_persisted_points_count": len(pts_reloaded),
         }
 
         # Save Screenshot
@@ -450,8 +589,17 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
             )
 
         step2_passed = (
-            st_landing.get("shotRev") is not None
-            and st_reloaded.get("shotRev") is not None
+            len(launch_xy) == 2
+            and len(apex_xy) == 2
+            and len(landing_xy) == 2
+            and proj_landing.get("shot_mode") in ("MANUAL_ANCHORED", "ARTISTIC_EXTENSION")
+            and rev_add > rev_landing
+            and rev_move > rev_add
+            and coord_changed
+            and rev_undo < rev_move
+            and rev_redo == rev_move
+            and rev_reloaded == rev_redo
+            and len(pts_reloaded) == len(pts_move)
             and snap_state["saved"]
         )
         step2_status = "PASS" if step2_passed else "FAIL"
@@ -697,6 +845,13 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
             and step4_status == "PASS"
         )
 
+        prod_checksums_after = compute_production_app_checksums()
+        prod_untouched = (
+            prod_checksums_before.get("exists") == prod_checksums_after.get("exists")
+            and prod_checksums_before.get("plist_sha256") == prod_checksums_after.get("plist_sha256")
+            and prod_checksums_before.get("binary_sha256") == prod_checksums_after.get("binary_sha256")
+        )
+
         summary = {
             "verified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "sabotage_mode": sabotage,
@@ -707,7 +862,9 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
             "step4_status": step4_status,
             "rotated_video_subgate": "NOT_RUN",  # Honest marking: rotated 11min clip E2E tested in evaluate_r4_real_media, not in webkit UI
             "test_app_bundle": "/tmp/Golf Swing Lab R4 Test.app",
-            "production_app_untouched": True,
+            "production_app_untouched": prod_untouched,
+            "production_app_checksums_before": prod_checksums_before,
+            "production_app_checksums_after": prod_checksums_after,
             "project_id": project_id,
             "target_url": target_url,
             "screenshot_saved": snap_state["saved"],
@@ -761,10 +918,14 @@ def run_verification(sabotage: str = "none") -> dict[str, Any]:
         return clean_summary
 
     finally:
-        api_proc.terminate()
-        web_proc.terminate()
-        api_proc.wait(timeout=5)
-        web_proc.wait(timeout=5)
+        for p in (api_proc, web_proc):
+            if p is not None and p.poll() is None:
+                try:
+                    p.terminate()
+                    p.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait(timeout=2)
 
 
 def main() -> None:
@@ -784,13 +945,13 @@ def main() -> None:
         print("🎉 ALL 4 GATES PASSED (Fail-Closed Verification Complete)!")
         sys.exit(0)
     else:
-        # In sabotage mode, we expect at least one step to FAIL (proof of guard capability)
+        # P1-A 語意分離：破壞模式下檢測出失敗應以 exit 1 退出，外部 runner 斷言 exit 1；若誤報 PASS 則 exit 2
         if summary["overall_status"] == "FAIL":
-            print(f"✅ Sabotage guard verified! Successfully caught sabotage '{args.sabotage}' (overall_status=FAIL)")
-            sys.exit(0)
-        else:
-            print(f"❌ Sabotage guard failed! Script erroneously reported PASS under sabotage '{args.sabotage}'")
+            print(f"[SABOTAGE_INTERCEPTED] Sabotage guard verified! Successfully caught sabotage '{args.sabotage}' (overall_status=FAIL)")
             sys.exit(1)
+        else:
+            print(f"[SABOTAGE_ERRONEOUS_PASS] Sabotage guard failed! Script erroneously reported PASS under sabotage '{args.sabotage}'")
+            sys.exit(2)
 
 
 if __name__ == "__main__":

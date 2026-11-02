@@ -8,8 +8,13 @@ from dataclasses import asdict
 import json
 from pathlib import Path
 import subprocess
+import sys
 import time
 from typing import Any
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from sqlalchemy import func, select
 
@@ -259,17 +264,30 @@ def _probe_stream_interval_alignment_ms(mp4_path: Path, expect_audio: bool = Tru
             a_start = st_time
 
     if a_dur is None:
+        if expect_audio:
+            return {
+                "source_has_audio": True,
+                "output_has_audio": False,
+                "video_duration_s": round(v_dur, 4) if v_dur is not None else None,
+                "audio_duration_s": None,
+                "stream_interval_alignment_ms": None,
+                "av_drift_ms": None,  # Backward compatibility
+                "container_alignment_within_100ms": False,
+                "perceptual_sync_status": "FAIL_AUDIO_STREAM_MISSING",
+                "alignment_status": "FAIL_AUDIO_STREAM_MISSING",
+                "notes": "預期保留音訊串流 (expect_audio=True)，但在匯出檔案中未檢測到有效音軌，判定為 FAIL。",
+            }
         return {
-            "source_has_audio": expect_audio,
+            "source_has_audio": False,
             "output_has_audio": False,
             "video_duration_s": round(v_dur, 4) if v_dur is not None else None,
             "audio_duration_s": None,
             "stream_interval_alignment_ms": None,
             "av_drift_ms": None,  # Backward compatibility
-            "container_alignment_within_100ms": True,
+            "container_alignment_within_100ms": "NOT_APPLICABLE",
             "perceptual_sync_status": "NOT_APPLICABLE_NO_AUDIO",
             "alignment_status": "NOT_APPLICABLE_NO_AUDIO",
-            "notes": "音軌不存在或已選靜音 (Mute)，不計算容器聲畫長度偏差。",
+            "notes": "無原始音軌或已指定靜音模式 (Mute)，不適用容器聲畫長度對齊檢測。",
         }
 
     delta_s = abs((v_dur - v_start) - (a_dur - a_start)) if (v_dur is not None and a_dur is not None) else 0.0
@@ -290,8 +308,8 @@ def _probe_stream_interval_alignment_ms(mp4_path: Path, expect_audio: bool = Tru
     }
 
 
-def _probe_stream_durations_and_av_drift_ms(mp4_path: Path) -> dict[str, Any]:
-    return _probe_stream_interval_alignment_ms(mp4_path)
+def _probe_stream_durations_and_av_drift_ms(mp4_path: Path, expect_audio: bool = True) -> dict[str, Any]:
+    return _probe_stream_interval_alignment_ms(mp4_path, expect_audio=expect_audio)
 
 
 def main() -> None:
@@ -565,7 +583,7 @@ def main() -> None:
                 )
                 exp_ms = round((time.perf_counter() - t_exp) * 1000.0, 1)
                 probe_info = probe_video_file(mp4_path)
-                av_check = _probe_stream_durations_and_av_drift_ms(mp4_path)
+                av_check = _probe_stream_durations_and_av_drift_ms(mp4_path, expect_audio=(audio_mode == "preserve"))
 
                 export_matrix_results.append(
                     {

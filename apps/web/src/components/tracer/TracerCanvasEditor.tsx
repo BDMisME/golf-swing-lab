@@ -581,6 +581,7 @@ export default function TracerCanvasEditor({
         rvfcSupported: typeof v.requestVideoFrameCallback === "function",
         callbackCount: 0,
         lastMediaTimeUs: currentPtsRef.current,
+        recentMediaTimesUs: [] as number[],
         frameIntervalsMs: [] as number[],
         meanIntervalMs: 0,
         estimatedFps: 0,
@@ -594,6 +595,11 @@ export default function TracerCanvasEditor({
         if (stats) {
           stats.callbackCount += 1;
           stats.lastMediaTimeUs = nowUs;
+          stats.recentMediaTimesUs = stats.recentMediaTimesUs || [];
+          stats.recentMediaTimesUs.push(nowUs);
+          if (stats.recentMediaTimesUs.length > 60) {
+            stats.recentMediaTimesUs.shift();
+          }
           if (lastCallbackPerfMs !== null) {
             const dtMs = perfNow - lastCallbackPerfMs;
             if (dtMs > 2 && dtMs < 250) {

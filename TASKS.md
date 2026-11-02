@@ -4,7 +4,37 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 29: Golf Swing Lab R4 — PR #4 第三輪獨立審查暨 Beta 發行前最後驗收 (2026-11-02)
+- [x] **P0-A：獨立測試版 Mac App Bundle 實機運行驗收** (`PASS`)
+  - 新增 `scripts/verify_r4_mac_bundle.py`，以 Mach-O 二進位檔實機啟動 `/tmp/Golf Swing Lab R4 Test.app/Contents/MacOS/GolfSwingLab` (PID 74137)。
+  - 記錄系統特徵：Bundle ID `com.golfswinglab.desktop.r4test`、版本 `1.4.0-r4test`，架構屬性誠實記錄為 `repo-dependent developer Mac app`。
+  - 實機驗證 Studio 路由 HTTP 200、手動設定拋物線 70 點位、MP4 匯出成功、退出後 Sidecar 子程序清理無孤兒進程。
+  - 驗證正式版 `/Applications/Golf Swing Lab.app` v1.0.0 測試前後 SHA256 100% 恆等（Untouched）。
+- [x] **P0-B：驗收工具徹底移除暴力殺 Port 邏輯** (`PASS`)
+  - `scripts/verify_r4_webkit.py` 徹底拔除 `lsof -ti :28000 | xargs kill -9`。
+  - 新增 `is_port_in_use(port)` loopback 探測，被佔用時安全退出 `BLOCKED_PORT_IN_USE`。
+  - 僅對本次由 `Popen` 啟動之 PID 進行生命週期管理與安全清理。
+  - 撰寫負面測試 `tests/test_no_port_kill_guards.py`，2 項測試全數通過 (2.45s)。
+- [x] **P0-C：Step 1 & Step 2 真實狀態變更校驗** (`PASS`)
+  - Step 1: 驗證 `videoSrc` 包含 `source=original`、HTTP 響應頭 `x-gsl-media-source: original`、影片寬高 1080x1920、`Source: ORIGINAL` 徽章存在、`requestVideoFrameCallback` 計數 > 0 且 PTS 序列嚴格單調遞增。
+  - Step 2: 驗證 Launch/Apex/Landing 坐標落庫、切換 track 至 ball 後新增手動點（`rev_add > rev_landing` 且帶 `manual` 屬性）、拖曳坐標變更（$\Delta > 0$ 且 `rev_move > rev_add`）、Undo 回退、Redo 恢復、Reload 持久化（Rev 193、70 點位）。
+  - `scripts/verify_r4_webkit.py` 24/24 Checkpoints 100% 通過（最大中心線偏移 `1.312 px <= 2.0 px`，平均 `0.401 px`，影格時間差 `0.0 幀`）。
+- [x] **P1-A：破壞模式（Sabotage）返回碼語意分離** (`PASS`)
+  - CLI sabotage 觸發 fail-closed 退出碼為 1，正常通過退出碼為 0。
+  - `tests/test_parity_sabotage_and_guards.py` 新增 CLI 返回碼語意分離測試，6 項測試全數通過 (1.04s)。
+- [x] **P1-B：聲畫同步嚴格區分「保留音訊」與「原片無音訊」** (`PASS`)
+  - `scripts/evaluate_r4_real_media.py` 在 `audio_mode == "preserve"` 且無音訊時標記 `FAIL_AUDIO_STREAM_MISSING`；原片無音訊或靜音時標記 `NOT_APPLICABLE`；知覺同步標記 `NOT_VALIDATED_PERCEPTUAL_SYNC`。
+  - 24 組 Export Profiles 矩陣與 1/2/3/5/10 批次合輯全數驗證通過，容器對齊漂移 0.0ms。
+- [x] **P1-C：全量回歸與沙盒安全驗收** (`PASS`)
+  - 後端全套 pytest：**167 passed, 1 skipped (0 failed)** in 225.94s。
+  - 前端 Vitest：**8 passed (8)** in 427ms。
+  - Next.js 正式建置：**10 / 10 靜態/動態路由編譯無誤 (0 錯誤)**。
+  - 素材庫評估：`scripts/evaluate_r4_real_media.py` 25 桿切片、24 組匯出矩陣、5 組合輯全數通過（exit code 0）。
+  - 資料庫完整性：620 場次、797 切片、4,480 事件、18 示範庫 100% 完好無損。
+- [x] **終局判定核定**：`MANUAL_STUDIO_BETA_READY`（Gate 2/3 誠實維持 `BLOCKED / NOT_VALIDATED`，嚴格禁止宣告 `R4_FULL_PASS`）
+
 ## Round 28: Golf Swing Lab R4 — PR #4 第二輪獨立審查暨嚴格修復驗收 (2026-11-02)
+
 - [x] **P0-A：驗收腳本 Fail-Closed 保護與非零退出碼守衛** (`PASS`)
   - `scripts/verify_r4_webkit.py` 對全部 checkpoint 數量、個別 passed、最少有效匹配點、藝術虛線、色彩、DOM 操作、資料保存與音訊流硬性 assert。
   - 明確輸出 `step1_status`, `step2_status`, `step3_status`, `step4_status` 為 `"PASS" | "FAIL"`，任一失敗立即退出非零代碼並輸出 FAIL JSON。

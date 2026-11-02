@@ -272,3 +272,27 @@ def test_audio_preserve_strict_fail_closed_on_mux_error(tmp_path):
                     with pytest.raises(RuntimeError, match="音訊保留模式.*FFmpeg 音軌合成失敗"):
                         export_single_tracer_clip(spec=spec, output_mp4_path=out_mp4, sidecar_json_path=out_sidecar)
     patch.stopall()
+
+
+def test_verify_r4_webkit_cli_sabotage_exit_semantics(monkeypatch):
+    """P1-A: 驗證破壞模式下的 CLI 返回碼語意分離——當驗收檢測出 FAIL 時，CLI 自身必須 exit 1，外部 runner 攔截 exit 1 後判定通過。"""
+    import sys
+    from unittest.mock import patch
+    import scripts.verify_r4_webkit as v_webkit
+
+    # 模擬 run_verification 在 sabotage 模式下檢測出 FAIL
+    fake_fail_summary = {
+        "overall_status": "FAIL",
+        "step1_status": "PASS",
+        "step2_status": "PASS",
+        "step3_status": "FAIL",
+        "step4_status": "PASS",
+    }
+
+    with patch.object(v_webkit, "run_verification", return_value=fake_fail_summary):
+        monkeypatch.setattr(sys, "argv", ["verify_r4_webkit.py", "--sabotage", "5px"])
+        with pytest.raises(SystemExit) as excinfo:
+            v_webkit.main()
+        # 核心斷言：CLI 本身必須 exit 1 (Fail-Closed 語意)，而非 exit 0
+        assert excinfo.value.code == 1, f"Expected exit code 1 under sabotage FAIL, got {excinfo.value.code}"
+
