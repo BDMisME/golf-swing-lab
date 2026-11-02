@@ -49,6 +49,7 @@ from apps.api.models import (
 )
 from apps.api.routers.audit import router as audit_router
 from apps.api.routers.reference_swings import router as reference_swings_router
+from apps.api.routers.tracer_studio import router as tracer_studio_router
 from packages.analysis.posture_comparison import compute_quantitative_posture_comparison
 from apps.api.schemas import (
     CreateExportRequest,
@@ -178,6 +179,7 @@ app.add_middleware(
 
 app.include_router(audit_router)
 app.include_router(reference_swings_router)
+app.include_router(tracer_studio_router)
 
 
 
@@ -934,6 +936,7 @@ def get_video_info(
 def stream_video(
     video_id: str,
     request: Request,
+    source: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -944,7 +947,15 @@ def stream_video(
     verify_owner(db, current_user, video.owner_id, "video", video.id)
 
     storage = get_storage_service()
-    candidates = [k for k in [video.proxy_storage_key, video.storage_key] if k]
+    if source == "original":
+        # P1-C: Studio 專用 source=original 嚴格 original-only，絕不自動 fallback 到 proxy
+        candidates = [video.storage_key] if video.storage_key else []
+    elif source == "proxy":
+        candidates = [video.proxy_storage_key] if video.proxy_storage_key else []
+    else:
+        # 預設播放器優先讀取 proxy，fallback 到原片
+        candidates = [k for k in [video.proxy_storage_key, video.storage_key] if k]
+
     head = None
     target_key = None
     for k in candidates:
@@ -956,7 +967,17 @@ def stream_video(
             continue
 
     if not head or not target_key:
+        if source == "original":
+            raise APIError(404, "ORIGINAL_VIDEO_NOT_FOUND", "找不到高解析原始影片檔案，無法提供原片串流")
         raise APIError(404, "STORAGE_OBJECT_NOT_FOUND", "物件儲存中找不到影片檔案，可能伺服器重新啟動中")
+
+    actual_media_source = "original" if target_key == video.storage_key else "proxy"
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=300",
+        "X-GSL-Media-Source": actual_media_source,
+        "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, X-GSL-Media-Source",
+    }
 
     total_size = int(head["size_bytes"])
     range_header = request.headers.get("range") or request.headers.get("Range")
@@ -970,7 +991,7 @@ def stream_video(
         if start_byte >= total_size or start_byte > end_byte:
             return Response(
                 status_code=416,
-                headers={"Content-Range": f"bytes */{total_size}"},
+                headers={"Content-Range": f"bytes */{total_size}", **common_headers},
             )
         obj = storage.get_object_range(target_key, start_byte, end_byte)
         chunk_len = end_byte - start_byte + 1
@@ -980,9 +1001,8 @@ def stream_video(
             media_type="video/mp4",
             headers={
                 "Content-Range": f"bytes {start_byte}-{end_byte}/{total_size}",
-                "Accept-Ranges": "bytes",
                 "Content-Length": str(chunk_len),
-                "Cache-Control": "private, max-age=300",
+                **common_headers,
             },
         )
 
@@ -992,9 +1012,8 @@ def stream_video(
         status_code=200,
         media_type="video/mp4",
         headers={
-            "Accept-Ranges": "bytes",
             "Content-Length": str(total_size),
-            "Cache-Control": "private, max-age=300",
+            **common_headers,
         },
     )
 

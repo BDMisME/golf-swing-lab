@@ -34,6 +34,19 @@ def _cleanup_spawned_processes() -> None:
 atexit.register(_cleanup_spawned_processes)
 
 
+def _handle_sigterm(signum, frame):
+    logger.info("收到終止信號 (SIGTERM/SIGINT)，正在清理 Sidecar 子程序並安全退出...")
+    _cleanup_spawned_processes()
+    sys.exit(0)
+
+
+try:
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+    signal.signal(signal.SIGINT, _handle_sigterm)
+except Exception:
+    pass
+
+
 def ensure_environment() -> None:
     """確保 Mac 本機目錄與模型權重快取目錄就緒。"""
     SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -150,6 +163,15 @@ def ensure_services_running() -> None:
 
 def launch_desktop_window() -> None:
     """使用 macOS 原生 WebKit 視窗加載 Golf Swing Lab 介面。"""
+    if os.environ.get("GSL_DESKTOP_HEADLESS") == "1":
+        logger.info("檢測到 GSL_DESKTOP_HEADLESS=1，保持背景 Sidecar 服務運行以供自動化測試。")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        return
+
     import webview
 
     url = "http://localhost:23000"

@@ -1,6 +1,79 @@
 # IMPLEMENTATION_STATE.md — 專案實作狀態與中斷恢復紀錄
 
-## 最新修復狀態（Round 25: Golf Swing Lab R3 — 最後驗收證據收尾）
+## 最新里程碑狀態（Round 29: Golf Swing Lab R4 — PR #4 第三輪獨立審查暨 Beta 發行前最後驗收）
+1. **P0-A 獨立測試版 Mac App Bundle 實機運行驗收 (`Gate 7: PASS`)**：
+   - 新增 `scripts/verify_r4_mac_bundle.py`，透過 Mach-O 二進位檔實機啟動 `/tmp/Golf Swing Lab R4 Test.app/Contents/MacOS/GolfSwingLab`（啟動 PID 74137）。
+   - 捕捉系統特徵：Bundle ID `com.golfswinglab.desktop.r4test`、版本 `1.4.0-r4test`，屬性誠實記錄為 `repo-dependent developer Mac app`，不宣稱為 standalone。
+   - 實機驗證 Studio 路由 `GET http://127.0.0.1:23000/tracer-studio/{id}` HTTP 200，手動設定 Launch/Apex/Landing 生成 70 個拋物線點位（`Rev #179`），立即匯出 9.27MB MP4 短片。
+   - 退出後 Sidecar 子程序安全清理無孤兒進程；正式版 `/Applications/Golf Swing Lab.app` v1.0.0 測試前後 Info.plist 與 binary 之 SHA256 100% 恆等（Untouched）。
+2. **P0-B 驗收工具徹底移除暴力殺 Port 邏輯 (`Gate 10: PASS`)**：
+   - 徹底拔除 `lsof -ti :28000 | xargs kill -9`。改用 `is_port_in_use(port)` loopback 探測，被佔用時安全退出 `BLOCKED_PORT_IN_USE`。
+   - 僅對本次由 `Popen` 啟動之 PID 進行 `terminate()` 清理（超時才 `kill()`）。
+   - 負面測試 `tests/test_no_port_kill_guards.py` 驗證在 28000 端口放置 dummy server 時驗收程序拒絕誤殺，dummy server 依然存活（2 passed in 2.45s）。
+3. **P0-C Step 1 & Step 2 真實狀態變更校驗 (`Gate 7 & Gate 4: PASS`)**：
+   - Step 1: 驗證 `videoSrc` 包含 `source=original`、HTTP 響應頭 `x-gsl-media-source: original`、影片寬高 1080x1920、`Source: ORIGINAL` 徽章存在、`requestVideoFrameCallback` 計數 > 0 且 PTS 序列嚴格單調遞增。
+   - Step 2: 驗證 Launch/Apex/Landing 坐標落庫、切換 track 至 ball 後新增手動點（`rev_add > rev_landing` 且帶 `manual` 屬性）、拖曳坐標變更（$\Delta > 0$ 且 `rev_move > rev_add`）、Undo 回退、Redo 恢復、Reload 持久化（Rev 193、70 點位）。
+   - 24/24 Checkpoints 100% 通過！最大中心線偏移：`1.312 px`（$\le 2.0\text{ px}$ 門檻），平均偏移：`0.401 px`，影格時間差：`0.0 幀`。
+4. **P1-A 破壞模式（Sabotage）返回碼語意分離 (`Gate 8: PASS`)**：
+   - CLI sabotage 觸發 fail-closed 退出碼為 1，正常通過退出碼為 0；專項測試 `tests/test_parity_sabotage_and_guards.py` 6 passed (1.04s)。
+5. **P1-B 聲畫同步嚴格區分「保留音訊」與「原片無音訊」(`Gate 6: PASS`)**：
+   - `scripts/evaluate_r4_real_media.py` 在 `audio_mode == "preserve"` 且無音訊時標記 `FAIL_AUDIO_STREAM_MISSING`；原片無音訊或靜音時標記 `NOT_APPLICABLE`；知覺同步標記 `NOT_VALIDATED_PERCEPTUAL_SYNC`。
+   - 24 組 Export Profiles 矩陣與 1/2/3/5/10 批次合輯全部完成驗收，A/V 容器對齊漂移全數為 0.0ms。
+6. **P1-C 全量回歸與沙盒安全驗收 (`Gates 1, 4, 5, 6, 7, 8, 9, 10: PASS`)**：
+   - 後端全套 pytest：**167 passed, 1 skipped (0 failed)** in 225.94s。
+   - 前端 Vitest：**8 passed (8)** in 427ms。
+   - Next.js 正式建置：**10 / 10 靜態/動態路由編譯無誤 (0 錯誤)**。
+   - 素材庫評估：`scripts/evaluate_r4_real_media.py` 25 桿切片、24 組匯出矩陣、5 組合輯全數通過（exit code 0）。
+   - 資料庫完整性：620 場次、797 切片、4,480 事件、18 示範庫 100% 完好無損。
+- **最後更新時間**：2026-11-02T21:10:00+08:00
+- **當前分支**：`feat/r4-golf-tracer-studio`
+- **正式判定**：**`MANUAL_STUDIO_BETA_READY`**（Gate 2/3 誠實維持 `BLOCKED / NOT_VALIDATED`，嚴禁宣告 `R4_FULL_PASS`）
+
+## 前期里程碑狀態（Round 28: Golf Swing Lab R4 — PR #4 第二輪獨立審查暨嚴格修復驗收）
+
+1. **Mac App 隔離與原片串流保證 (`Gate 10 & Gate 7: PASS`)**：
+   - 正式 `/Applications/Golf Swing Lab.app` 維持 `v1.0.0` 零修改；所有測試僅在獨立沙盒 `/tmp/Golf Swing Lab R4 Test.app` (`com.golfswinglab.desktop.r4test`, `v1.4.0-r4test`) 執行。
+   - Studio 介面鎖定無損原片串流 (`/stream?source=original`)，顯示「`Source: ORIGINAL`」綠色徽章，解析度 1080x1920。
+2. **誠實原則貫徹與阻擋狀態明確標記 (`Gate 2 & Gate 3: BLOCKED / NOT_VALIDATED`)**：
+   - 桿頭追蹤因商用模型未授權，實拍 25 支切片全數落入 `NEEDS_REVIEW`（純幾何覆蓋率 35%~50%，P50 不確定度 8.6px~11.7px），系統嚴格標記 `BLOCKED_EXTERNAL_DEPENDENCY`。
+   - 球路追蹤因缺乏 >=120fps 高速快門攝影機與雙重標註資料集，25 支切片全數落入 `UNAVAILABLE`，堅決不以合成飛行動畫冒充。
+3. **0 點球路切片至手動標定完整互動 (`Gate 4: PASS`)**：
+   - 0 點切片提供「`🚀 標定起飛球位`」，支援起飛點 (Launch)、最高點 (Apex) 與落地點 (Landing) 手動標定，自動生成物理拋物線並轉為 `MANUAL_ANCHORED` 模式。
+   - 支援逐幀點選拖曳即時預覽、新增微調點、Undo/Redo 與 F5 重載持久化。
+4. **Studio 擊球時間覆寫與 R3 系統零污染 (`Gate 5: PASS`)**：
+   - 擊球時間覆寫安全存入 `TracerAnchorRevision`，既有 R3 `SwingEvent` 時間戳記 0 修改；歷史 584 場次、740 切片、4,236 事件與 18 示範庫 100% 完整無損。
+5. **24 種匯出配置矩陣與連續合輯 A/V 零漂移 (`Gate 6: PASS`)**：
+   - 24 種配置 (original/16:9/9:16 × 30/60fps × none/swing/shot/both) 全部匯出成功；1/2/3/5/10 連續合輯經重取樣音訊裁切，A/V 音畫漂移全數為 `0.0 ms` ($\le 100\text{ ms}$)。
+6. **WebKit Canvas vs FFmpeg MP4 真實像素級 Parity 檢驗 (`Gate 8: PASS`)**：
+   - 24 個指定 PTS Checkpoints，實體 Canvas PNG 與 FFmpeg 解碼影格之法向量差分質心最大偏移量為 `1.356 px` ($\le 2.0\text{ px}$)，平均偏移量 `0.256 px`，影格差 $\le 0.5\text{ 幀}$，階段分色與虛線特徵 100% 通過（24/24 PASS，`all_passed: true`）。
+7. **交付 5 份獨立審查報告**：
+   - `docs/r4/POST_REVIEW_FIX_LOG.md`
+   - `docs/r4/REAL_MEDIA_GROUND_TRUTH_RESULTS.md`
+   - `docs/r4/ACTUAL_VISUAL_PARITY_REPORT.md`
+   - `docs/r4/END_TO_END_WEBKIT_REPORT.md`
+   - `docs/r4/REVISED_GATE_MATRIX.md`
+- **最後更新時間**：2026-11-02T15:40:00+08:00
+- **當前分支**：`feat/r4-golf-tracer-studio`
+
+## 前期里程碑狀態（Round 26: Golf Swing Lab R4 — Golf Tracer Studio 完整工程整合）
+1. **Phase 0–1：Studio 基礎契約、Copy-on-Write 資料表與逐幀編輯器 (`Gate 1: PASS`)**：
+   - 建立單一時間權威 (`source_pts_us`) 與正規化直立座標系 (`Normalized Upright Display Space`) 契約。
+   - 新增 Alembic migration `0003_tracer_studio.py`（8 張 `tracer_*` 表，雙向 `upgrade/downgrade` 驗證通過）與 `/api/tracer/*` REST 路由（含 401/403 IDOR/503 功能旗標保護）。
+   - 實作 `/tracer-studio/[projectId]` 獨立路由與 5 大前端元件（`TracerCanvasEditor`, `TracerTimeline`, `TracerInspectorPanel`, `TracerStylePanel`, `TracerExportPanel`），支援逐幀微調、Copy-on-Write 修訂版與 R3 資料 100% 零干擾。
+2. **Phase 2：Swing Tracer 桿頭/桿身幾何追蹤 (`Gate 2: BLOCKED_SWING_AUTO` / Engine & Fallback `PASS`)**：
+   - 實作 `ClubheadDetector`、`shaft_geometry.py`（Canny+CLAHE+HoughLinesP 桿身幾何端點估算）與 `SwingTracerEngine`，嚴格禁止以手腕座標冒充桿頭 (`created_by != 'wrist'`)。
+   - 由於 HuggingFace `nishsm/golf-club-detection-swingtrace` 為 `gated: auto` (`HTTP 401 GatedRepo`) 且屬 `AGPL-3.0`，本機缺 `swingtrace-yolo11m.pt` 權重時如實標記 `BLOCKED_SWING_AUTO` / `NEEDS_REVIEW`，於實拍影片達 `39.7%–41.5%` 桿身幾何覆蓋率。
+3. **Phase 3：Shot Tracer 高解析原片飛球追蹤 (`Gate 3: NOT_VALIDATED` / Engine & Rejection Gates `PASS`)**：
+   - 實作 `BoundedFrameReader`（含長片 HEVC FFmpeg seek 備援與 Proxy/低解析阻擋）、雙向左右飛球 ROI、`ShotTracerEngine`（`golf_ball_yolov8n.pt` + 光流 + PTS `dt` 卡爾曼濾波 + 靜止球/背景固定亮點排除 + 空揮零假球道保證）。
+   - 本機缺 `>=120fps` 實拍 (`0/3`)、左打者實拍 (`0/4`) 與雙人標註 Ground Truth，依誠信原則標記實拍自動覆蓋率為 `NOT_VALIDATED`。
+4. **Phase 4–5：Flight FX、匯出矩陣、多球合輯、macOS 安全打包與全量驗收 (`Gates 4, 5, 6: PASS`)**：
+   - 6 種特效風格 (`clean`, `neon`, `beam`, `gradient`, `tail`, `pulse`)、6 組單球匯出矩陣 (`original`/`16:9`/`9:16` × `30`/`60fps` × `preserve`/`mute`) 與 2 球合輯匯出 100% 通過 `ffprobe` 與 Parity 檢驗（最大座標誤差 `0.6647px <= 2.0px`，最大時間差 `0.50F <= 1.0F`）。
+   - `scripts/build_mac_app.sh` 升級至 v1.4.0（移除危險刪除、Bundle ID 檢查、自動備份與 `--rollback`）；原生 `WKWebView` 載入 `/tracer-studio/[projectId]` 實測通過（`docs/r4/webkit_tracer_studio.png`, `jsErrors=[]`）。
+   - 全量測試：`.venv/bin/pytest -q` **157 passed**、前端 Vitest **7 passed**、Next.js 建置 **0 errors**。
+- **最後更新時間**：2026-10-31T18:00:00+08:00
+- **當前分支**：`feat/r4-golf-tracer-studio`
+
+## 前期里程碑狀態（Round 25: Golf Swing Lab R3 — 最後驗收證據收尾）
 1. **P0：修正交付報告中的 Git SHA 追溯性與一致性**：`PASS`
    - 在 `scripts/verify_webkit_r3_slowmo_and_coach.py` 與 `scripts/generate_real_api_posture_report.py` 中，明確校準 `source_commit_sha` 與 `commit_sha`。
    - 產出之 `docs/reports/real_api_posture_comparison_report.json` 與 `docs/reports/swing_comparison_r3_report.json` 明確標明測試時所用之基準 SHA `e1449fc04f1e298609bb8e656a4367f62d22d912`、工作樹狀態與真實測試時間戳記，不要求包含報告的最終 commit SHA 與報告內的來源 SHA 自我相等。

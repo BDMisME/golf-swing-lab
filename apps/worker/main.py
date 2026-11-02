@@ -11,6 +11,7 @@ def main() -> None:
     queues = [
         Queue("gsl-analysis", connection=redis_conn),
         Queue("gsl-exports", connection=redis_conn),
+        Queue("gsl-tracer", connection=redis_conn),
     ]
     worker = SimpleWorker(queues, connection=redis_conn)
     worker.work(with_scheduler=False)
