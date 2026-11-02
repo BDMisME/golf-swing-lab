@@ -4,6 +4,34 @@
 > - `[x]` 已完成並通過實測驗證 (`PASS`)
 > - `[!]` 外部條件阻擋 (`EXTERNAL_BLOCKER`) 或需外部獨立盲測真值驗證 (`NOT_VALIDATED`)
 
+## Round 28: Golf Swing Lab R4 — PR #4 第二輪獨立審查暨嚴格修復驗收 (2026-11-02)
+- [x] **P0-A：驗收腳本 Fail-Closed 保護與非零退出碼守衛** (`PASS`)
+  - `scripts/verify_r4_webkit.py` 對全部 checkpoint 數量、個別 passed、最少有效匹配點、藝術虛線、色彩、DOM 操作、資料保存與音訊流硬性 assert。
+  - 明確輸出 `step1_status`, `step2_status`, `step3_status`, `step4_status` 為 `"PASS" | "FAIL"`，任一失敗立即退出非零代碼並輸出 FAIL JSON。
+  - 新增 CLI `--sabotage [none|5px|color|no_track|no_audio]` 模式，故意注入 5px 偏移時實證被 100% 攔截並 exit 非零。
+- [x] **P0-B：Pixel Parity 比對演算法校正與 Sabotage 負面測試** (`PASS`)
+  - `packages/analysis/tracer/compositor.py` 修正前景色彩取樣，以 `c_mask` 直接提取 `exported_mp4_bgr` 真實像素，徹底杜絕差分圖受草地背景干擾。
+  - 修正藝術虛線交替驗證，僅在當前時間點達到藝術段（`len(expected_art_pts) >= 2`）時執行交替檢查；檢查點 PTS 精準對齊 30/60fps 最小公倍數（0.1s 整數影格），`frame_delta` 歸零。
+  - 24/24 Checkpoints 100% 通過（最大中心線偏移 `1.9989 px <= 2.0 px`，平均 `0.467 px`，影格差 `0.0 幀`）。
+  - 新增 `tests/test_parity_sabotage_and_guards.py` 5/5 PASSED，涵蓋 5px 偏移、錯相位顏色、移除軌跡、實線假冒虛線、音訊 mux 失敗攔截。
+- [x] **P0-C：WebKit 原生 UI 端到端真實互動 (DOM 按鈕與 Canvas MouseEvent)** (`PASS`)
+  - `scripts/verify_r4_webkit.py` 實作 Native WKWebView DOM 點擊與 `<canvas>` MouseEvent（`mousedown`, `mousemove`, `mouseup`）。
+  - 完整涵蓋「標定起飛球位」、「標定最高點」、「標定落點」、「新增當前幀點」、「拖曳手動點」、「復原 (Undo)」、「重做 (Redo)」、「立即匯出」與「全頁面 F5 重新載入驗證持久化」。
+- [x] **P1-A：音訊 Preserve 失敗嚴格 Fail-Closed，拒絕靜默退回無聲影片** (`PASS`)
+  - `packages/analysis/tracer/studio_exporter.py` 單段與批次合輯於原片明確有音訊且 `audio_mode == "preserve"` 時，若 FFmpeg mux 失敗或輸出無有效音軌，立即拋出 `RuntimeError`，徹底杜絕靜默退回無聲影片；無音訊時明確標記 `source_has_audio=False`。
+- [x] **P1-B：A/V Drift 探針口徑更名與聲畫知覺同步誠實標記** (`PASS (Container) / NOT_VALIDATED (Perceptual)`)
+  - `scripts/evaluate_r4_real_media.py` 探針函式更名為 `_probe_stream_interval_alignment_ms`，明確區分容器對齊與真實知覺聲畫同步，標記為 `NOT_VALIDATED_PERCEPTUAL_SYNC`。
+- [x] **P1-C：Studio 原片串流嚴格 Original-Only，拒絕靜默 fallback** (`PASS`)
+  - `apps/api/main.py` 與 `apps/api/routers/tracer_studio.py` 中 `source=original` 原片缺失時拋出 404，不自動 fallback 至 proxy，並注入 `X-GSL-Media-Source: original | proxy` header。
+- [x] **P1-D：全量 R1–R4 regression 執行證據** (`PASS`)
+  - 全套 pytest：163 passed, 2 skipped, 0 failed in 226s。
+  - 前端 Vitest：8 passed (8)。
+  - Next.js 正式建置：10/10 靜態/動態路由編譯無誤 (0 錯誤)。
+- [x] **P1-E：實拍素材母體統計嚴格拆解與誠實阻擋狀態維持** (`Gate 2 & Gate 3: BLOCKED / NOT_VALIDATED`)
+  - `docs/r4/REAL_MEDIA_GROUND_TRUTH_RESULTS.md` 嚴格拆解 6 支獨立原片（3 支 iPhone 實拍原片 + 3 支示範影片）、25 桿切片、4 場次、P50 為模型估計不確定度，Gate 2 (Swing) 與 Gate 3 (Shot) 誠實維持 `BLOCKED` / `NOT_VALIDATED`。
+- [x] **P1-F：串流記憶體滑動視窗隊列保護** (`PASS`)
+  - `packages/analysis/tracer/studio_exporter.py` 實作滑動視窗隊列 (deque) 機制，常駐影格數 $\le 3$ 張，支援長影片無 RAM 峰值風險匯出。
+
 ## Round 27: Golf Swing Lab R4 — PR #4 獨立審查與全面修復驗收 (2026-11-02)
 - [x] **P1-5：回滾正式 Mac App 至 v1.0.0 並建立 `/tmp/Golf Swing Lab R4 Test.app` 獨立沙盒測試 Bundle** (`PASS`)
   - 正式 `/Applications/Golf Swing Lab.app` 維持 `v1.0.0` 零修改。

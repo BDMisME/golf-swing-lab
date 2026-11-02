@@ -181,6 +181,22 @@ def _build_project_detail_response(
             "is_vfr": bool(video.is_vfr),
         }
 
+    storage = get_storage_service()
+    orig_exists = False
+    if video and video.storage_key:
+        try:
+            storage.head_object(video.storage_key)
+            orig_exists = True
+        except Exception:
+            orig_exists = False
+
+    meta["original_video_exists"] = orig_exists
+    orig_stream_url = (
+        f"/api/videos/{project.video_id}/stream?source=original"
+        if orig_exists
+        else None
+    )
+
     clip_start_us = int(meta.get("clip_start_pts_us") or ((segment.start_ms if segment else 0) * 1000))
     clip_end_us = int(meta.get("clip_end_pts_us") or ((segment.end_ms if segment else 3000) * 1000))
 
@@ -201,7 +217,7 @@ def _build_project_detail_response(
         source_video_sha256=project.source_video_sha256,
         coordinate_space_version=project.coordinate_space_version,
         video_stream_url=f"/api/videos/{project.video_id}/stream",
-        original_video_stream_url=f"/api/videos/{project.video_id}/stream?source=original",
+        original_video_stream_url=orig_stream_url,
         clip_start_pts_us=clip_start_us,
         clip_end_pts_us=clip_end_us,
         geometry=geom,

@@ -15,14 +15,17 @@
 
 ### 關鍵驗收結論：
 1. **正式生產 App 零污染 (P1-5)**：`/Applications/Golf Swing Lab.app` 保持原始 `v1.0.0`，所有 R4 Studio 新增功能與驗證僅於 `/tmp/Golf Swing Lab R4 Test.app` 與獨立本機測試伺服器執行。
-2. **高畫質原片無損串流 (P1-1)**：Studio 介面正確載入 `/api/videos/{id}/stream?source=original`，畫布解析度為 `1080x1920`（而非 720p 低畫質 Proxy），UI 頂端明確顯示「`Source: ORIGINAL`」綠色徽章，全流程 `0` 個 JavaScript 拋錯。
+2. **高畫質原片無損串流 (P1-1 & P1-C)**：Studio 介面正確載入 `/api/videos/{id}/stream?source=original`，畫布解析度為 `1080x1920`（原片缺失時嚴格 404 拒絕，不靜默 fallback 至 720p Proxy），UI 頂端明確顯示「`Source: ORIGINAL`」綠色徽章，全流程 `0` 個 JavaScript 拋錯。
 3. **高頻 60fps 幀同步迴圈 (P0-5)**：WKWebView 成功啟用 `requestVideoFrameCallback`，回報 `rvfcSupported: true`，回調時間間隔與視訊 PTS 嚴格鎖定，拖拉時間軸時實現零延遲 60Hz 即時重繪。
-4. **0 點球路切片至手動標定完整互動 (P0-4 & P1-2)**：
-   - 初始狀態為 0 點、`UNAVAILABLE` 模式的球路切片。
-   - 使用者透過 Studio 點擊「`🚀 標定起飛球位`」並在畫布上標定起飛點 (Launch)、最高點 (Apex) 與落地點 (Landing) 後，系統無縫轉為 `MANUAL_ANCHORED` 模式並自動生成符合高爾夫物理運動學之初期球路軌跡點。
-   - 點擊軌跡點進行拖拉移動 (Move Point)、新增微調點 (Add Point)，狀態持久化至後端 Copy-on-Write 修訂版本表 (`TracerPointRevision`)。
-   - 測試 Undo / Redo 操作，頁面完整重載 (F5 Reload) 後，手動標定錨點與編輯軌跡點 100% 正確還原。
-5. **Studio 擊球時間覆寫與 R3 資料庫隔離 (P1-3)**：
+4. **原生 WKWebView DOM 點擊與 Canvas MouseEvent 完整互動 (P0-C & P1-2)**：
+   - 實機由 Cocoa RunLoop 觸發原生 DOM 按鈕點擊與 `<canvas>` MouseEvent（`mousedown`, `mousemove`, `mouseup`）。
+   - 完整執行「標定起飛球位」、「標定最高點」、「標定落點」、「新增當前幀點」、「拖曳手動點」、「復原 (Undo)」、「重做 (Redo)」、「立即匯出」與「全頁面 F5 重新載入驗證持久化」。
+5. **嚴格 Fail-Closed 保護與非零退出碼守衛 (P0-A)**：
+   - 驗收腳本對 Step 1~4 全面實作頂層 hard assert 與非零 exit code，任何步驟失敗即刻退出。
+   - 支援 CLI `--sabotage [none|5px|color|no_track|no_audio]` 模式，5px 偏移破壞實測可被 100% 攔截並 exit 非零。
+6. **音訊 Preserve 失敗嚴格 Fail-Closed (P1-A)**：
+   - 原片明確有聲音且使用者選擇 `preserve` 時，若 FFmpeg mux 失敗或無有效音軌，立即拋出 `RuntimeError`，嚴格杜絕靜默退回無聲影片。
+7. **Studio 擊球時間覆寫與 R3 資料庫隔離 (P1-3)**：
    - 使用者在 Studio 調整 `impact_pts_us` 覆寫值並觸發重新分析，覆寫記錄安全存入 `TracerAnchorRevision`。
    - 資料庫底層之既有 R3 `SwingEvent` 時間戳記完全不被竄改，達成嚴格之讀寫隔離與向前相容性。
 

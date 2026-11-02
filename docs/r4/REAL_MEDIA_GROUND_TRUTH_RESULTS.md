@@ -10,24 +10,42 @@
 
 ## 1. 執行摘要 (Executive Summary)
 
-本報告依照《R4 PR #4 獨立審查與修復指令》要求，針對本機真實素材庫執行全面性的自動追蹤評估、匯出矩陣驗證、影音漂移檢測與 R3 迴歸稽核。
+本報告依照《Golf Swing Lab R4 — PR #4 第二輪獨立審查暨 Gemini 4 Argon 嚴格修復指令》要求，針對本機真實素材庫執行全面性的自動追蹤評估、匯出矩陣驗證、影音容器對齊檢測與 R3 迴歸稽核。
+
+### 素材母體維度嚴格拆解：
+- **`unique_original_video_count`（真實原片總數）**：**6 支**（包含 3 支 iPhone 實拍原片 + 3 支專業示範影片）。
+  1. `11s_iphone.mov`：60.04fps VFR, DTL, 1080x1920 (未旋轉)
+  2. `video_2min.mov`：29.97fps CFR, DTL, 1080x1920 (練習場 2 分鐘連續錄製)
+  3. `IMG_0995.mov`：59.94fps VFR, DTL, 1920x1080 (旋轉 metadata 90°/270°, 11 分鐘長片)
+  4. `Reference #1 (Rory)`：示範片段 (720p)
+  5. `Reference #2 (Tiger)`：示範片段 (720p)
+  6. `Reference #3 (Adam)`：示範片段 (720p)
+- **`evaluated_clip_count`（評估切片總數）**：**25 桿切片**。
+  - `11s_iphone.mov`：1 桿（Seg #1）
+  - `video_2min.mov`：8 桿（Seg #1 ~ #8）
+  - `IMG_0995.mov`：13 桿（Seg #1 ~ #13，包含 2 桿空揮/無球 practice_swing 與 11 桿擊球）
+  - 專業示範片：3 桿（各 1 桿）
+- **`unique_capture_sessions`（採集場次）**：4 場次。
+- **`fps_categories`**：涵蓋 30fps、60fps；缺少 >= 120fps 高速攝影素材。
 
 ### 核心結論：
-1. **25 支真實切片全面檢驗**：涵蓋 `11s_iphone.mov` (60.04fps VFR)、`video_2min.mov` (8 桿)、`IMG_0995.mov` (11 分鐘旋轉 90 度長片 13 桿) 及 3 支高畫質參考素材。
-2. **誠實原則貫徹 (Truthfulness & Anti-Hallucination)**：
-   - **Swing Tracer (Gate 2)**：25 支切片全數落入 `NEEDS_REVIEW`（主因為未取得商業授權之 `swingtrace-yolo11m.pt` 權重模型，觸發 `MODEL_UNAVAILABLE:swingtrace-yolo11m`，且直接桿頭觀測覆蓋率為 0.00）。純幾何估計覆蓋率介於 0.00 ~ 0.54，無法保證 1080p 下 <= 5px 的高精度。因此維持 **`BLOCKED` / `NOT_VALIDATED`**。
-   - **Shot Tracer (Gate 3)**：25 支切片全數判定為 `UNAVAILABLE` 或因無擊球/空揮被嚴格拒絕（拒絕原因包括 `missing_impact_anchor`、`insufficient_upward_elevation`、`insufficient_total_displacement`）。由於缺少 >= 120fps 高速快門攝影機與雙重標註球路資料集，本系統堅決不以擬真飛行動畫冒充自動追蹤，因此維持 **`BLOCKED` / `NOT_VALIDATED`**。
-3. **24 種匯出配置矩陣 100% 通過 (Gate 4 & Gate 6)**：
+1. **Gate 2 (Swing Tracer) 與 Gate 3 (Shot Tracer) 在 25 桿切片中全數未達自動追蹤驗收標準**：
+   - **Swing Tracer (Gate 2)**：25 支切片全數落入 `NEEDS_REVIEW`（主因為未取得商業授權之 `swingtrace-yolo11m.pt` 權重模型，觸發 `MODEL_UNAVAILABLE:swingtrace-yolo11m`，且直接桿頭觀測覆蓋率為 0.00）。幾何推算桿身線的平均預測模型估計不確定度（Model Uncertainty Estimate）為 8.5px ~ 12.0px，非真值殘差，無法保證 1080p 下 <= 5.0px 精度。因此維持 **`BLOCKED` / `NOT_VALIDATED`**。
+   - **Shot Tracer (Gate 3)**：25 支切片全數判定為 `UNAVAILABLE` 或因無擊球/空揮被嚴格拒絕（拒絕原因包括 `missing_impact_anchor`、`insufficient_upward_elevation`、`insufficient_total_displacement`）。由於缺少 >= 120fps 高速快門攝影機與雙重標註球路真值資料集，本系統堅決不以擬真飛行動畫冒充自動追蹤，因此維持 **`BLOCKED` / `NOT_VALIDATED`**。
+2. **24 種匯出配置矩陣 100% 通過 (Gate 4 & Gate 6)**：
    - 3 種比例 (`original`, `16:9`, `9:16`) × 2 種 FPS (`30`, `60`) × 4 種特效組合 (`no_fx`, `swing_only`, `shot_only`, `both`) 共 24 支 MP4 全部成功匯出。
-   - 單切片與 1/2/3/5/10 連續合輯經由 FFmpeg 重取樣 (`aresample=async=1` + `atrim`)，實測 A/V 音畫漂移全數為 **`0.0 ms`**（嚴格小於 100ms 驗收上限）。
-4. **R3 零回歸與資料完整性保證 (Gate 5 & Gate 10)**：
+   - 容器串流區間長度對齊度（`stream_interval_alignment_ms`）在 FFmpeg 精準重取樣 (`aresample=async=1` + `atrim`) 下全數為 **`0.0 ms`**（小於 100ms 門檻）。
+   - **聲畫知覺同步聲明**：容器時間戳對齊不等於擊球瞬間之知覺聲畫同步（perceptual impact sound sync）；缺少光學聲學同步真值設備時，標記為 **`NOT_VALIDATED_PERCEPTUAL_SYNC`**。
+3. **R3 零回歸與資料完整性保證 (Gate 5 & Gate 10)**：
    - 既有 584 場次、740 個切片、4,236 個 SwingEvent 與 18 個 Reference Swings 完全無損。
    - 既有 R3 非特效單球與合輯匯出管線正常運行。
    - Worker 缺檔隔離機制正常攔截，回報 `SOURCE_UNAVAILABLE`，拒絕降級使用低畫質 Proxy。
 
 ---
 
-## 2. 25 支真實切片評估明細表 (Per-Clip Ground Truth Matrix)
+## 2. 25 桿切片評估明細表 (Per-Clip Ground Truth Matrix)
+
+> **注意**：下表共 25 個受測切片（來自 6 支原片），展示各切片的自動追蹤拒絕原因與物理指標。
 
 | # | 影片來源 | 類別 / 特徵 | 狀態機判定 | 桿頭 (Swing) 狀態 | 桿頭點數 (幾何/補間) | 球路 (Shot) 狀態 | 球路拒絕 / 終止原因 |
 |---|---|---|---|---|---|---|---|
@@ -64,7 +82,7 @@
 ### 3.1 桿頭軌跡 (Swing Tracer) 拒絕分析
 - **主要拒絕標籤**：`MODEL_UNAVAILABLE:swingtrace-yolo11m`（100% 發生）。
 - **次要拒絕標籤**：`LOW_DIRECT_OBSERVATION_COVERAGE:0.00`、`LARGE_OCCLUSION_GAP`（下桿超高速揮動造成的 motion blur 與桿身遮擋）。
-- **幾何輔助覆蓋率**：本系統實作之 `shaft_geometry_estimated` 演算法能自 2D 骨架手腕頂點向桿身外推推算出 130~180 個點（佔揮桿區間的 35%~50%），但平均不確定度介於 8.5px ~ 12.0px，無法達到 1080p 下 <= 5.0px 的全自動合格標準。
+- **幾何輔助覆蓋率**：本系統實作之 `shaft_geometry_estimated` 演算法能自 2D 骨架手腕頂點向桿身外推推算出 130~180 個點（佔揮桿區間的 35%~50%），但其數值為演算法內部之「預測模型估計不確定度（uncertainty estimate）」，平均值約 8.5px ~ 12.0px，並非實測真值殘差（ground truth residual），無法滿足 1080p 下 <= 5.0px 之高精度驗收標準。
 - **結論**：系統依規範 fail-closed 將所有軌跡標記為 `NEEDS_REVIEW`，指引使用者開啟 Studio 逐格編輯器手動調整，絕無編造虛假的高信心度分數。
 
 ### 3.2 球路追蹤 (Shot Tracer) 拒絕分析

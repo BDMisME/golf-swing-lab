@@ -223,8 +223,13 @@ REFERENCE_HIGH_RES_CLIPS: list[dict[str, Any]] = [
 ]
 
 
-def _probe_stream_durations_and_av_drift_ms(mp4_path: Path) -> dict[str, Any]:
-    """Use ffprobe to measure exact video stream duration vs audio stream duration (A/V drift in ms)."""
+def _probe_stream_interval_alignment_ms(mp4_path: Path, expect_audio: bool = True) -> dict[str, Any]:
+    """Use ffprobe to measure exact container stream duration alignment (video vs audio).
+    
+    IMPORTANT: This metric measures container stream duration & start PTS alignment in the MP4 file.
+    It does NOT prove perceptual impact sound synchronization (知覺聲畫擊球同步).
+    Perceptual synchronization requires dedicated high-speed optical+acoustic capture rigs and is marked NOT_VALIDATED_PERCEPTUAL_SYNC.
+    """
     cmd = [
         "ffprobe",
         "-v",
@@ -252,15 +257,41 @@ def _probe_stream_durations_and_av_drift_ms(mp4_path: Path) -> dict[str, Any]:
         elif ctype == "audio":
             a_dur = dur
             a_start = st_time
-    av_drift_ms = None
-    if v_dur is not None and a_dur is not None:
-        av_drift_ms = round(abs((v_dur - v_start) - (a_dur - a_start)) * 1000.0, 2)
+
+    if a_dur is None:
+        return {
+            "source_has_audio": expect_audio,
+            "output_has_audio": False,
+            "video_duration_s": round(v_dur, 4) if v_dur is not None else None,
+            "audio_duration_s": None,
+            "stream_interval_alignment_ms": None,
+            "av_drift_ms": None,  # Backward compatibility
+            "container_alignment_within_100ms": True,
+            "perceptual_sync_status": "NOT_APPLICABLE_NO_AUDIO",
+            "alignment_status": "NOT_APPLICABLE_NO_AUDIO",
+            "notes": "音軌不存在或已選靜音 (Mute)，不計算容器聲畫長度偏差。",
+        }
+
+    delta_s = abs((v_dur - v_start) - (a_dur - a_start)) if (v_dur is not None and a_dur is not None) else 0.0
+    alignment_ms = round(delta_s * 1000.0, 2)
     return {
+        "source_has_audio": True,
+        "output_has_audio": True,
         "video_duration_s": round(v_dur, 4) if v_dur is not None else None,
         "audio_duration_s": round(a_dur, 4) if a_dur is not None else None,
-        "av_drift_ms": av_drift_ms,
-        "av_drift_within_100ms": (av_drift_ms <= 100.0) if av_drift_ms is not None else True,
+        "video_start_time_s": round(v_start, 4),
+        "audio_start_time_s": round(a_start, 4),
+        "stream_interval_alignment_ms": alignment_ms,
+        "av_drift_ms": alignment_ms,  # Backward compatibility
+        "container_alignment_within_100ms": (alignment_ms <= 100.0),
+        "perceptual_sync_status": "NOT_VALIDATED_PERCEPTUAL_SYNC",
+        "alignment_status": "CONTAINER_STREAMS_ALIGNED" if alignment_ms <= 100.0 else "CONTAINER_STREAMS_MISALIGNED",
+        "notes": "此數值為容器串流區間長度對齊度，非實際球桿擊球知覺聲畫同步（perceptual impact sound synchronization）。",
     }
+
+
+def _probe_stream_durations_and_av_drift_ms(mp4_path: Path) -> dict[str, Any]:
+    return _probe_stream_interval_alignment_ms(mp4_path)
 
 
 def main() -> None:

@@ -83,6 +83,7 @@ class StudioExportArtifact:
     aspect_ratio: str
     audio_mode: str
     has_audio_in_output: bool
+    source_has_audio: bool
     duration_ms: int
     frame_count: int
     parity_report: ParityCheckReport
@@ -152,16 +153,20 @@ def export_single_tracer_clip(
     reader_start_us = min([spec.start_pts_us] + [p.source_pts_us for p in all_track_pts])
     reader_end_us = max([spec.end_pts_us] + [p.source_pts_us for p in all_track_pts])
 
-    decoded_frames: list[DecodedUprightFrame] = list(
-        reader.iter_frames(start_pts_us=reader_start_us, end_pts_us=reader_end_us)
-    )
-    if not decoded_frames:
+    # P1-F 記憶體保護：改採串流滑動隊列 (Streaming Window Buffer)，避免一次性把 600+ 影格 (數 GB) 載入 RAM
+    frame_iter = iter(reader.iter_frames(start_pts_us=reader_start_us, end_pts_us=reader_end_us))
+    try:
+        first_frame = next(frame_iter)
+    except StopIteration:
         raise RuntimeError(
             f"無法從原片解碼區間 [{spec.start_pts_us}, {spec.end_pts_us}] us 之任何影格: {spec.source_video_path}"
         )
 
-    actual_start_us = min(reader_start_us, decoded_frames[0].source_pts_us)
-    actual_end_us = max(reader_end_us, decoded_frames[-1].source_pts_us)
+    from collections import deque
+    frame_buffer: deque[DecodedUprightFrame] = deque([first_frame])
+
+    actual_start_us = min(reader_start_us, first_frame.source_pts_us)
+    actual_end_us = max(reader_end_us, spec.end_pts_us)
     if actual_end_us <= actual_start_us:
         actual_end_us = actual_start_us + int(round(1_000_000.0 / fps))
 
@@ -216,19 +221,35 @@ def export_single_tracer_clip(
         )
         assert proc.stdin is not None
 
-        # 建立快速最近鄰影格索引
-        frame_pts_arr = [f.source_pts_us for f in decoded_frames]
-        cursor = 0
-        n_decoded = len(decoded_frames)
-
+        iter_exhausted = False
         try:
             for out_pts in output_pts_grid:
-                while (
-                    cursor + 1 < n_decoded
-                    and abs(frame_pts_arr[cursor + 1] - out_pts) <= abs(frame_pts_arr[cursor] - out_pts)
-                ):
-                    cursor += 1
-                src_frame = decoded_frames[cursor]
+                # 串流拉取：確保隊列包含當前或未來的影格
+                while not iter_exhausted and frame_buffer[-1].source_pts_us < out_pts:
+                    try:
+                        next_f = next(frame_iter)
+                        frame_buffer.append(next_f)
+                    except StopIteration:
+                        iter_exhausted = True
+                        break
+
+                # 在目前隊列中找到最接近 out_pts 的影格
+                best_idx = 0
+                min_diff = abs(frame_buffer[0].source_pts_us - out_pts)
+                for i in range(1, len(frame_buffer)):
+                    diff = abs(frame_buffer[i].source_pts_us - out_pts)
+                    if diff <= min_diff:
+                        min_diff = diff
+                        best_idx = i
+                    else:
+                        break
+
+                src_frame = frame_buffer[best_idx]
+
+                # 及時釋放所有早於 best_idx 的過期影格，隊列大小恆定保持在極低水平（通常 1~3 張）
+                for _ in range(best_idx):
+                    frame_buffer.popleft()
+
                 # 嚴格依據 CFR 輸出格點真實時間 out_pts 渲染特效圖層，確保前後端幀時間 100% 同步
                 render_pts_us = out_pts
                 composed = compose_output_frame(
@@ -244,6 +265,7 @@ def export_single_tracer_clip(
                 proc.stdin.write(composed.tobytes())
         finally:
             proc.stdin.close()
+            frame_buffer.clear()
 
         stderr_bytes = proc.stderr.read() if proc.stderr else b""
         if proc.stdout:
@@ -258,6 +280,7 @@ def export_single_tracer_clip(
         source_has_audio = spec.has_audio_stream and _check_source_has_audio(spec.source_video_path)
         has_audio_in_output = False
 
+        # P1-A 嚴格保護音訊：原片有音訊且使用者選 preserve 時，合成失敗必須 FAIL，絕不靜默無聲降級
         if audio_mode_str == AudioMode.PRESERVE.value and source_has_audio:
             start_sec = max(0.0, actual_start_us / 1_000_000.0)
             exact_video_dur_sec = max(0.05, float(len(output_pts_grid)) / float(fps))
@@ -290,12 +313,17 @@ def export_single_tracer_clip(
                 str(out_mp4),
             ]
             mux_res = subprocess.run(mux_cmd, capture_output=True, text=True, timeout=60, check=False)
-            if mux_res.returncode == 0 and out_mp4.exists() and out_mp4.stat().st_size > 1024:
-                has_audio_in_output = _check_source_has_audio(out_mp4)
+            if mux_res.returncode == 0 and out_mp4.exists() and out_mp4.stat().st_size > 1024 and _check_source_has_audio(out_mp4):
+                has_audio_in_output = True
             else:
-                shutil.copy2(video_only_mp4, out_mp4)
+                err_detail = mux_res.stderr[-500:] if mux_res.stderr else "輸出影片無有效音軌"
+                raise RuntimeError(
+                    f"音訊保留模式 (audio_mode=preserve) 失敗：原片明確含有音軌，但 FFmpeg 音軌合成失敗 (exit={mux_res.returncode}): {err_detail}。嚴格保護原片聲音，絕不靜默降級為無聲影片。"
+                )
         else:
+            # 原片本來就無音訊，或是明確選擇 mute 靜音模式
             shutil.copy2(video_only_mp4, out_mp4)
+            has_audio_in_output = False
 
     # 驗證輸出 MP4 與計算 Preview/Export Parity
     probe_meta = probe_video_file(out_mp4)
@@ -357,6 +385,7 @@ def export_single_tracer_clip(
         aspect_ratio=aspect_str,
         audio_mode=audio_mode_str,
         has_audio_in_output=has_audio_in_output,
+        source_has_audio=source_has_audio,
         duration_ms=probe_meta.duration_ms,
         frame_count=len(output_pts_grid),
         parity_report=parity,
@@ -577,6 +606,12 @@ def export_batch_tracer_compilation(
     out_sidecar.write_bytes(sidecar_bytes)
     sidecar_sha256 = hashlib.sha256(sidecar_bytes).hexdigest()
 
+    any_source_has_audio = any(a.source_has_audio for a in part_artifacts)
+    if audio_mode_str == AudioMode.PRESERVE.value and any_source_has_audio and not has_audio_out:
+        raise RuntimeError(
+            "音訊保留模式 (audio_mode=preserve) 批次匯出失敗：來源片段含有音軌，但合輯輸出無有效音軌。嚴格保護原片聲音，絕不靜默降級為無聲影片。"
+        )
+
     return StudioExportArtifact(
         output_mp4_path=out_mp4,
         sidecar_json_path=out_sidecar,
@@ -589,6 +624,7 @@ def export_batch_tracer_compilation(
         aspect_ratio=aspect_str,
         audio_mode=audio_mode_str,
         has_audio_in_output=has_audio_out,
+        source_has_audio=any_source_has_audio,
         duration_ms=probe_meta.duration_ms,
         frame_count=total_frames,
         parity_report=agg_parity,

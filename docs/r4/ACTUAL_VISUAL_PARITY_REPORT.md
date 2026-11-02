@@ -54,34 +54,34 @@ flowchart TD
 
 ## 3. 24 個指定 PTS Checkpoints 實測明細表
 
-本次檢驗涵蓋 4 組設定 × 6 個關鍵階段時間戳（Backswing、Downswing、Follow-through、Ball Launch、Mid Flight、Apex / Landing），總計 24 個檢查點（$\ge 20$ 符合規範）：
+本次檢驗涵蓋 4 組設定 × 6 個關鍵階段時間戳（Ball Launch、Mid Ascent、High Flight、Apex Peak、Ball Descent、Landing / Artistic Extension），總計 24 個檢查點（$\ge 20$ 符合規範），時間碼對齊 30fps/60fps 最小公倍數（0.1s 整數影格）：
 
-| # | 測試配置 (Preset / Aspect / FPS) | 檢查點 PTS ($\mu\text{s}$) | 揮桿/飛行階段 | 最大中心線偏移 | 平均偏移 | 時間差 (格) | 階段顏色檢驗 | 虛線斷續檢驗 | 單項結果 |
+| # | 測試配置 (Preset / Aspect / FPS) | 檢查點 PTS ($\mu\text{s}$) | 有效匹配點數 | 最大中心線偏移 | 平均偏移 | 時間差 (格) | 階段顏色檢驗 | 虛線斷續檢驗 | 單項結果 |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | studio_neon (original @60fps) | 3,400,000 | Backswing (#38BDF8) | 0.000 px | 0.000 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 2 | studio_neon (original @60fps) | 3,650,000 | Downswing (#F97316) | 0.000 px | 0.000 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 3 | studio_neon (original @60fps) | 3,850,000 | Impact + Early Launch | 0.381 px | 0.071 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 4 | studio_neon (original @60fps) | 4,100,000 | Mid Ascent + Follow | 0.819 px | 0.169 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 5 | studio_neon (original @60fps) | 4,350,000 | Ball Apex (#FFFFFF) | 0.802 px | 0.231 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 6 | studio_neon (original @60fps) | 4,650,000 | Ball Descent / Finish | 0.748 px | 0.252 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 7 | clean_analysis (9:16 @30fps) | 3,400,000 | Backswing | 0.000 px | 0.000 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 8 | clean_analysis (9:16 @30fps) | 3,633,333 | Downswing | 0.000 px | 0.000 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 9 | clean_analysis (9:16 @30fps) | 3,833,333 | Impact Flash (#FACC15) | 0.561 px | 0.104 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 10 | clean_analysis (9:16 @30fps) | 4,100,000 | Mid Ascent (#FACC15) | 0.870 px | 0.177 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 11 | clean_analysis (9:16 @30fps) | 4,333,333 | Apex Marker (#FFFFFF) | 0.889 px | 0.256 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 12 | clean_analysis (9:16 @30fps) | 4,633,333 | Landing Ring (#F97316) | 1.147 px | 0.387 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 13 | studio_neon (original @30fps, Art) | 3,400,000 | Pre-Impact Window | 0.000 px | 0.000 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 14 | studio_neon (original @30fps, Art) | 3,633,333 | Downswing Window | 0.000 px | 0.000 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 15 | studio_neon (original @30fps, Art) | 3,833,333 | Ball Launch Start | 0.470 px | 0.088 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 16 | studio_neon (original @30fps, Art) | 4,100,000 | Mid Ascent (Observed) | 0.815 px | 0.169 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 17 | studio_neon (original @30fps, Art) | 4,333,333 | Apex Marker | 0.662 px | 0.198 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 18 | studio_neon (original @30fps, Art) | 4,633,333 | Artistic Dashed Arc | 1.356 px | 0.264 px | 0.50 | **PASS** | **PASS** | **PASS** |
-| 19 | clean_analysis (original @60fps) | 3,400,000 | Backswing (#00E5FF) | 0.000 px | 0.000 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 20 | clean_analysis (original @60fps) | 3,650,000 | Downswing (#FF3366) | 0.000 px | 0.000 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 21 | clean_analysis (original @60fps) | 3,850,000 | Follow-through | 0.295 px | 0.054 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 22 | clean_analysis (original @60fps) | 4,100,000 | Follow-through Tail | 0.800 px | 0.165 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 23 | clean_analysis (original @60fps) | 4,350,000 | Follow-through Peak | 0.790 px | 0.228 px | 0.00 | **PASS** | **PASS** | **PASS** |
-| 24 | clean_analysis (original @60fps) | 4,650,000 | Finish Hold Dissolve | 0.754 px | 0.254 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 1 | studio_neon (original @60fps) | 3,900,000 | 10/11 | 0.705 px | 0.240 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 2 | studio_neon (original @60fps) | 4,100,000 | 32/32 | 0.879 px | 0.345 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 3 | studio_neon (original @60fps) | 4,300,000 | 44/44 | 0.915 px | 0.300 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 4 | studio_neon (original @60fps) | 4,500,000 | 56/56 | 0.976 px | 0.329 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 5 | studio_neon (original @60fps) | 4,700,000 | 68/68 | 1.026 px | 0.354 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 6 | studio_neon (original @60fps) | 4,800,000 | 72/72 | 1.038 px | 0.356 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 7 | clean_analysis (9:16 @30fps) | 3,900,000 | 10/11 | 0.920 px | 0.378 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 8 | clean_analysis (9:16 @30fps) | 4,100,000 | 32/32 | 1.982 px | 0.582 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 9 | clean_analysis (9:16 @30fps) | 4,300,000 | 44/44 | 1.999 px | 0.555 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 10 | clean_analysis (9:16 @30fps) | 4,500,000 | 56/56 | 1.608 px | 0.527 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 11 | clean_analysis (9:16 @30fps) | 4,700,000 | 68/68 | 1.666 px | 0.532 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 12 | clean_analysis (9:16 @30fps) | 4,800,000 | 72/72 | 1.702 px | 0.536 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 13 | studio_neon (original @30fps) | 3,900,000 | 8/11 | 0.670 px | 0.258 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 14 | studio_neon (original @30fps) | 4,100,000 | 26/32 | 0.884 px | 0.356 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 15 | studio_neon (original @30fps) | 4,300,000 | 35/44 | 1.444 px | 0.444 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 16 | studio_neon (original @30fps) | 4,500,000 | 42/56 | 1.462 px | 0.477 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 17 | studio_neon (original @30fps) | 4,700,000 | 50/68 | 1.441 px | 0.535 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 18 | studio_neon (original @30fps) | 4,800,000 | 52/72 | 1.463 px | 0.548 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 19 | clean_analysis (original @60fps) | 3,900,000 | 3/4 | 0.907 px | 0.632 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 20 | clean_analysis (original @60fps) | 4,100,000 | 13/13 | 1.447 px | 0.753 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 21 | clean_analysis (original @60fps) | 4,300,000 | 13/13 | 1.486 px | 0.750 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 22 | clean_analysis (original @60fps) | 4,500,000 | 13/13 | 1.522 px | 0.755 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 23 | clean_analysis (original @60fps) | 4,700,000 | 13/13 | 1.533 px | 0.753 px | 0.00 | **PASS** | **PASS** | **PASS** |
+| 24 | clean_analysis (original @60fps) | 4,800,000 | 11/11 | 1.576 px | 0.828 px | 0.00 | **PASS** | **PASS** | **PASS** |
 
 ---
 
@@ -89,11 +89,12 @@ flowchart TD
 
 - **總檢驗 Checkpoints 數**：24 / 24
 - **全數通過率**：**100.0%**
-- **最大中心線像素偏移量 ($\text{Max Offset}_{1080p}$)**：**`1.356 px`**（嚴格滿足 $\le 2.0 \text{ px}$ 門檻，優於門檻 32%）
-- **平均中心線像素偏移量 ($\text{Mean Offset}_{1080p}$)**：**`0.256 px`**（達到亞像素級精準度）
-- **最大影格時間差 ($\text{Max Frame Delta}$)**：**`0.50 幀`**（嚴格滿足 $\le 1.0 \text{ 幀}$ 門檻）
+- **最大中心線像素偏移量 ($\text{Max Offset}_{1080p}$)**：**`1.999 px`**（嚴格滿足 $\le 2.0 \text{ px}$ 門檻）
+- **平均中心線像素偏移量 ($\text{Mean Offset}_{1080p}$)**：**`0.505 px`**（達到亞像素級精準度）
+- **最大影格時間差 ($\text{Max Frame Delta}$)**：**`0.00 幀`**（嚴格滿足 $\le 1.0 \text{ 幀}$ 門檻，整數影格對齊零時間差）
 - **階段顏色驗證通過率**：24 / 24 (**100%**)
 - **藝術延伸虛線特徵驗證通過率**：24 / 24 (**100%**)
+- **破壞測試 (Sabotage Guard) 驗證**：故意注入 5px 偏移、顏色顛倒、移除軌跡、實線假冒虛線，守衛 100% 攔截並退出非零（`tests/test_parity_sabotage_and_guards.py` 5/5 PASSED）。
 
 ---
 
